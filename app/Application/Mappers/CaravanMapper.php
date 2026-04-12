@@ -18,11 +18,14 @@ class CaravanMapper
     {
         return new CaravanEntity(
             $model->id,
-            new CaravanNumber((int) $model->identification),
+            new CaravanNumber((string) $model->identification),
             $model->category,
             (int) $model->teeth,
             $model->entry_weight ? (float) $model->entry_weight : null,
-            $model->exit_weight ? (float) $model->exit_weight : null
+            $model->exit_weight ? (float) $model->exit_weight : null,
+            $model->breed,
+            $model->sex,
+            $model->entry_date?->format('Y-m-d'),
         );
     }
 
@@ -40,6 +43,9 @@ class CaravanMapper
         $model->teeth = $entity->getTeeth();
         $model->entry_weight = $entity->getEntryWeight();
         $model->exit_weight = $entity->getExitWeight();
+        $model->breed = $entity->getBreed();
+        $model->sex = $entity->getSex();
+        $model->entry_date = $entity->getEntryDate();
 
         return $model;
     }

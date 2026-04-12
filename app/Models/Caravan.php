@@ -18,16 +18,20 @@ class Caravan extends Model
         'teeth',
         'entry_weight',
         'exit_weight',
+        'breed',
+        'sex',
+        'entry_date',
     ];
 
     /**
      * @var array<string, string>
      */
     protected $casts = [
-        'identification' => 'integer',
+        'identification' => 'string',
         'category' => AnimalCategory::class,
         'teeth' => 'integer',
         'entry_weight' => 'decimal:2',
         'exit_weight' => 'decimal:2',
+        'entry_date' => 'date:Y-m-d',
     ];
 }

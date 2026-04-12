@@ -7,10 +7,13 @@ namespace App\Application\DTOs;
 final readonly class RegisterCaravanDTO
 {
     public function __construct(
-        public int $identification,
-        public string $category,
-        public int $teeth,
+        public string $identification,
+        public ?string $category = null,
+        public int $teeth = 0,
         public ?float $entryWeight = null,
+        public ?string $breed = null,
+        public ?string $sex = null,
+        public ?string $entryDate = null,
     ) {
     }
 
@@ -21,10 +24,13 @@ final readonly class RegisterCaravanDTO
     public static function fromArray(array $data): self
     {
         return new self(
-            (int) $data['identification'],
-            (string) $data['category'],
-            (int) $data['teeth'],
-            isset($data['entry_weight']) ? (float) $data['entry_weight'] : null
+            (string) ($data['identification'] ?? ''),
+            isset($data['category']) ? (string) $data['category'] : null,
+            (int) ($data['teeth'] ?? 0),
+            isset($data['entry_weight']) ? (float) $data['entry_weight'] : null,
+            isset($data['breed']) ? (string) $data['breed'] : null,
+            isset($data['sex']) ? (string) $data['sex'] : null,
+            isset($data['entry_date']) ? (string) $data['entry_date'] : null,
         );
     }
 }

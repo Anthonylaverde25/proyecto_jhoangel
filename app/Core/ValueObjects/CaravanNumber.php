@@ -11,14 +11,14 @@ final readonly class CaravanNumber
     /**
      * @throws DomainException
      */
-    public function __construct(private int $value)
+    public function __construct(private string $value)
     {
-        if ($this->value <= 0) {
-            throw new DomainException("El número de caravana debe ser un entero positivo.");
+        if (trim($this->value) === '') {
+            throw new DomainException("El número de caravana no puede estar vacío.");
         }
     }
 
-    public function getValue(): int
+    public function getValue(): string
     {
         return $this->value;
     }

@@ -14,7 +14,7 @@ class EloquentCaravanRepository implements ICaravanRepository
 {
     public function save(CaravanEntity $caravan): CaravanEntity
     {
-        $model = Caravan::find($caravan->getId());
+        $model = $caravan->getId() !== null ? Caravan::find($caravan->getId()) : null;
         $model = CaravanMapper::toModel($caravan, $model);
         $model->save();
 
