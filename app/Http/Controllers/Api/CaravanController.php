@@ -9,12 +9,27 @@ use App\Application\UseCases\UpsertCaravanUseCase;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Application\UseCases\ListCaravansUseCase;
+use App\Http\Resources\CaravanResource;
 
 class CaravanController extends Controller
 {
     public function __construct(
-        private readonly UpsertCaravanUseCase $upsertUseCase
+        private readonly UpsertCaravanUseCase $upsertUseCase,
+        private readonly ListCaravansUseCase $listUseCase
     ) {
+    }
+
+    /**
+     * Lista todas las caravanas registradas.
+     */
+    public function index(): JsonResponse
+    {
+        $entities = ($this->listUseCase)();
+        
+        return response()->json(
+            CaravanResource::collection($entities)
+        );
     }
 
     /**
@@ -30,7 +45,6 @@ class CaravanController extends Controller
             'entry_weight'   => 'nullable|numeric',
             'breed'          => 'nullable|string',
             'sex'            => 'nullable|string',
-            'entry_date'     => 'nullable|date_format:Y-m-d',
         ]);
 
         $dto = new RegisterCaravanDTO(
@@ -39,8 +53,7 @@ class CaravanController extends Controller
             teeth: (int) $validated['teeth'],
             entryWeight: isset($validated['entry_weight']) ? (float) $validated['entry_weight'] : null,
             breed: $validated['breed'] ?? null,
-            sex: $validated['sex'] ?? null,
-            entryDate: $validated['entry_date'] ?? null
+            sex: $validated['sex'] ?? null
         );
 
         $result = ($this->upsertUseCase)($dto);

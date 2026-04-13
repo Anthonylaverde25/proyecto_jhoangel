@@ -28,6 +28,7 @@ class ImportCaravansController extends Controller
         $validated = $request->validate([
             'rows'                  => 'required|array|min:1',
             'rows.*.identification' => 'required|string',
+            'rows.*.category'       => 'nullable|string',
             'rows.*.teeth'          => 'nullable|string',
             'rows.*.entry_weight'   => 'nullable|string',
             'rows.*.exit_weight'    => 'nullable|string',

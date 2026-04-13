@@ -42,43 +42,57 @@ final class ImportCaravansUseCase
                 $identification = new CaravanNumber($identificationRaw);
                 $existingEntity = $this->repository->findByIdentification($identification);
 
-                // Parse OCR values through CaravanValueParser
-                $teeth = CaravanValueParser::parseTeeth($row['teeth'] ?? '0');
-                $entryWeight = isset($row['entry_weight']) && $row['entry_weight'] !== ''
-                    ? CaravanValueParser::parseWeight($row['entry_weight'])
-                    : null;
-                $exitWeight = isset($row['exit_weight']) && $row['exit_weight'] !== ''
-                    ? CaravanValueParser::parseWeight($row['exit_weight'])
-                    : null;
-                $entryDate = isset($row['entry_date']) && $row['entry_date'] !== ''
-                    ? CaravanValueParser::parseDate($row['entry_date'])
-                    : null;
-
                 if ($existingEntity !== null) {
-                    // Actualización (Upsert)
-                    $existingEntity->updateDetails(
-                        null, // category no viene en el row usualmente, o mantener null
-                        $teeth,
-                        $entryWeight,
-                        $exitWeight,
-                        $row['breed'] ?? null,
-                        $row['sex'] ?? null
-                    );
+                    // ESTRATEGIA DE PRESERVACIÓN (Merge): Solo actualizar si la columna está presente
+                    $category = array_key_exists('category', $row) && $row['category'] !== ''
+                        ? CaravanValueParser::parseCategory($row['category'])
+                        : $existingEntity->getCategory();
+
+                    $teeth = array_key_exists('teeth', $row)
+                        ? CaravanValueParser::parseTeeth($row['teeth'] ?? '0')
+                        : $existingEntity->getTeeth();
+
+                    $entryWeight = array_key_exists('entry_weight', $row) && $row['entry_weight'] !== ''
+                        ? CaravanValueParser::parseWeight($row['entry_weight'])
+                        : $existingEntity->getEntryWeight();
+
+                    $exitWeight = array_key_exists('exit_weight', $row) && $row['exit_weight'] !== ''
+                        ? CaravanValueParser::parseWeight($row['exit_weight'])
+                        : $existingEntity->getExitWeight();
+
+                    $breed = array_key_exists('breed', $row) 
+                        ? ($row['breed'] ?: null) 
+                        : $existingEntity->getBreed();
+
+                    $sex = array_key_exists('sex', $row)
+                        ? ($row['sex'] ?: null)
+                        : $existingEntity->getSex();
+
+                    $existingEntity->updateDetails($category, $teeth, $entryWeight, $exitWeight, $breed, $sex);
                     $this->repository->save($existingEntity);
                     $imported++;
                     continue;
                 }
 
+                // Lógica de CREACIÓN (Original con parseo estándar)
+                $category = isset($row['category']) && $row['category'] !== ''
+                    ? CaravanValueParser::parseCategory($row['category'])
+                    : null;
+                $teeth = CaravanValueParser::parseTeeth($row['teeth'] ?? '0');
+                $entryWeight = isset($row['entry_weight']) && $row['entry_weight'] !== ''
+                    ? CaravanValueParser::parseWeight($row['entry_weight'])
+                    : null;
+
                 $entity = new CaravanEntity(
                     id: null,
                     identification: $identification,
-                    category: null,
+                    category: $category,
                     teeth: $teeth,
                     entryWeight: $entryWeight,
                     exitWeight: null,
                     breed: $row['breed'] ?? null,
                     sex: $row['sex'] ?? null,
-                    entryDate: $entryDate,
+                    createdAt: null, // Automanaged by Laravel/Infrastructure
                 );
 
                 $this->repository->save($entity);

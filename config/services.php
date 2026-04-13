@@ -45,4 +45,14 @@ return [
         'endpoint' => env('AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT'),
     ],
 
+    'google' => [
+        'project_id' => env('GOOGLE_CLOUD_PROJECT_ID'),
+        'location' => env('GOOGLE_CLOUD_LOCATION', 'us'),
+        'processor_id' => env('GOOGLE_DOCUMENT_AI_PROCESSOR_ID'),
+        'credentials' => env('GOOGLE_APPLICATION_CREDENTIALS'),
+    ],
+
+    'ocr' => [
+        'driver' => env('OCR_DRIVER', 'azure'),
+    ],
 ];

@@ -62,11 +62,14 @@ class CaravanFieldMappingSeeder extends Seeder
             ['alias_name' => 'Raza', 'target_field' => 'breed', 'target_model' => 'caravans'],
             ['alias_name' => 'raza_animal', 'target_field' => 'breed', 'target_model' => 'caravans'],
             ['alias_name' => 'Baza', 'target_field' => 'breed', 'target_model' => 'caravans'],
+            ['alias_name' => 'Raza/Cruce', 'target_field' => 'breed', 'target_model' => 'caravans'],
+            ['alias_name' => 'Hered', 'target_field' => 'breed', 'target_model' => 'caravans'],
 
             // sex
             ['alias_name' => 'sex', 'target_field' => 'sex', 'target_model' => 'caravans'],
             ['alias_name' => 'sexo', 'target_field' => 'sex', 'target_model' => 'caravans'],
             ['alias_name' => 'genero', 'target_field' => 'sex', 'target_model' => 'caravans'],
+            ['alias_name' => 'H/M', 'target_field' => 'sex', 'target_model' => 'caravans'],
 
             // entry_date
             ['alias_name' => 'entry_date', 'target_field' => 'entry_date', 'target_model' => 'caravans'],

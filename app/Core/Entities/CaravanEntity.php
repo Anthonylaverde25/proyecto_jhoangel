@@ -19,7 +19,7 @@ final class CaravanEntity
         private ?float $exitWeight = null,
         private ?string $breed = null,
         private ?string $sex = null,
-        private ?string $entryDate = null,
+        private ?\DateTimeInterface $createdAt = null,
     ) {
         $this->validateTeeth($teeth);
     }
@@ -74,9 +74,9 @@ final class CaravanEntity
         return $this->sex;
     }
 
-    public function getEntryDate(): ?string
+    public function getCreatedAt(): ?\DateTimeInterface
     {
-        return $this->entryDate;
+        return $this->createdAt;
     }
 
     public function updateCategory(AnimalCategory $category): void

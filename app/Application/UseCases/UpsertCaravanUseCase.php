@@ -51,7 +51,7 @@ final class UpsertCaravanUseCase
             null,
             $dto->breed,
             $dto->sex,
-            $dto->entryDate
+            null // Automanaged by Laravel/Infrastructure (createdAt)
         );
 
         $savedEntity = $this->caravanRepository->save($newEntity);

@@ -12,5 +12,6 @@ enum AnimalCategory: string
     case VACA = 'vaca';
     case VACA_VACIA = 'vaca_vacia';
     case TERNERO = 'ternero';
+    case TERNERA = 'ternera';
     case TORO = 'toro';
 }

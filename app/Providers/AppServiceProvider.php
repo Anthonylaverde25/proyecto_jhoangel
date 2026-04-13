@@ -17,6 +17,15 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->bind(ICaravanRepository::class, EloquentCaravanRepository::class);
         $this->app->bind(IFieldMappingResolver::class, EloquentFieldMappingResolver::class);
+
+        $this->app->bind(\App\Core\Interfaces\IOCRProvider::class, function ($app) {
+            $driver = config('services.ocr.driver');
+
+            return match ($driver) {
+                // 'google' => $app->make(\App\Infrastructure\OCR\GoogleOCRProvider::class),
+                default  => $app->make(\App\Infrastructure\OCR\AzureOCRProvider::class),
+            };
+        });
     }
 
     /**

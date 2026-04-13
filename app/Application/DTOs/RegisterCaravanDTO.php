@@ -13,7 +13,6 @@ final readonly class RegisterCaravanDTO
         public ?float $entryWeight = null,
         public ?string $breed = null,
         public ?string $sex = null,
-        public ?string $entryDate = null,
     ) {
     }
 
@@ -30,7 +29,6 @@ final readonly class RegisterCaravanDTO
             isset($data['entry_weight']) ? (float) $data['entry_weight'] : null,
             isset($data['breed']) ? (string) $data['breed'] : null,
             isset($data['sex']) ? (string) $data['sex'] : null,
-            isset($data['entry_date']) ? (string) $data['entry_date'] : null,
         );
     }
 }

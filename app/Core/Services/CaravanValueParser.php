@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Core\Services;
 
+use App\Core\Enums\AnimalCategory;
+
 /**
  * Pure PHP service to transform raw OCR string values into domain types.
  * Zero framework dependencies.
@@ -146,5 +148,29 @@ final class CaravanValueParser
         }
 
         return null;
+    }
+
+    /**
+     * Parse a raw category string from OCR into AnimalCategory Enum.
+     *
+     * Handles:
+     *  - "Novillo"    → AnimalCategory::NOVILLO
+     *  - "TERNERA"    → AnimalCategory::TERNERA
+     *  - "vaca_vacia" → AnimalCategory::VACA_VACIA
+     *  - "Vaca"       → AnimalCategory::VACA
+     *
+     * @param string $raw
+     * @return AnimalCategory|null
+     */
+    public static function parseCategory(string $raw): ?AnimalCategory
+    {
+        $normalized = mb_strtolower(trim($raw));
+
+        if ($normalized === '') {
+            return null;
+        }
+
+        // Try direct matching first
+        return AnimalCategory::tryFrom($normalized);
     }
 }
