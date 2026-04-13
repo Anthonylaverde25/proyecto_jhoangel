@@ -31,7 +31,7 @@ final class UpsertCaravanUseCase
                 $category,
                 (int) $dto->teeth,
                 $dto->entryWeight !== null ? (float) $dto->entryWeight : null,
-                null, // exitWeight no viene en el RegisterCaravanDTO inicial generalmente, o se asume null si no se envía
+                null, 
                 $dto->breed,
                 $dto->sex
             );
@@ -41,7 +41,11 @@ final class UpsertCaravanUseCase
             return new UpsertCaravanResultDTO('updated', $existingEntity->getId());
         }
 
-        // Lógica de INSERT
+        // Lógica de INSERT: Validar campo excluyente
+        if ($dto->sex === null || trim($dto->sex) === '') {
+            throw new \App\Core\Exceptions\DomainException("El campo 'sexo' es obligatorio para registrar una nueva caravana.");
+        }
+
         $newEntity = new CaravanEntity(
             null,
             $identification,
@@ -51,7 +55,7 @@ final class UpsertCaravanUseCase
             null,
             $dto->breed,
             $dto->sex,
-            null // Automanaged by Laravel/Infrastructure (createdAt)
+            null
         );
 
         $savedEntity = $this->caravanRepository->save($newEntity);

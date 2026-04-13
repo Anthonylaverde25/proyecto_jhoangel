@@ -18,7 +18,8 @@ final class CaravanEntity
         private ?float $entryWeight = null,
         private ?float $exitWeight = null,
         private ?string $breed = null,
-        private ?string $sex = null,
+        private string $sex,
+        private ?\DateTimeInterface $entryDate = null,
         private ?\DateTimeInterface $createdAt = null,
     ) {
         $this->validateTeeth($teeth);
@@ -74,6 +75,11 @@ final class CaravanEntity
         return $this->sex;
     }
 
+    public function getEntryDate(): ?\DateTimeInterface
+    {
+        return $this->entryDate;
+    }
+
     public function getCreatedAt(): ?\DateTimeInterface
     {
         return $this->createdAt;
@@ -108,7 +114,8 @@ final class CaravanEntity
         ?float $entryWeight,
         ?float $exitWeight,
         ?string $breed,
-        ?string $sex
+        ?string $sex,
+        ?\DateTimeInterface $entryDate = null
     ): void {
         $this->validateTeeth($teeth);
         
@@ -117,7 +124,14 @@ final class CaravanEntity
         $this->entryWeight = $entryWeight;
         $this->exitWeight = $exitWeight;
         $this->breed = $breed;
-        $this->sex = $sex;
+        
+        if ($sex !== null) {
+            $this->sex = $sex;
+        }
+
+        if ($entryDate !== null) {
+            $this->entryDate = $entryDate;
+        }
     }
 
     /**

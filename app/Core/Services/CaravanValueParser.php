@@ -171,6 +171,88 @@ final class CaravanValueParser
         }
 
         // Try direct matching first
-        return AnimalCategory::tryFrom($normalized);
+        $enumValue = AnimalCategory::tryFrom($normalized);
+        if ($enumValue !== null) {
+            return $enumValue;
+        }
+
+        // Handle plurals and common variations
+        $mappings = [
+            'novillitos' => AnimalCategory::NOVILLITO,
+            'novillos'   => AnimalCategory::NOVILLO,
+            'vaquillonas' => AnimalCategory::VAQUILLONA,
+            'vaquilla'    => AnimalCategory::VAQUILLONA,
+            'vacas'      => AnimalCategory::VACA,
+            'terneros'   => AnimalCategory::TERNERO,
+            'terneras'   => AnimalCategory::TERNERA,
+            'toros'      => AnimalCategory::TORO,
+        ];
+
+        return $mappings[$normalized] ?? null;
+    }
+
+    /**
+     * Parse a raw sex value from OCR into a normalized string.
+     * Handles common OCR misreadings like "Hombro", "Hemora", etc.
+     *
+     * @param string $raw
+     * @param AnimalCategory|null $category Contextual hint
+     * @return string
+     */
+    public static function parseSex(string $raw, ?AnimalCategory $category = null): string
+    {
+        $normalized = mb_strtolower(trim($raw));
+
+        if (str_starts_with($normalized, 'h') || str_contains($normalized, 'hem')) {
+            return 'Hembra';
+        }
+
+        if (str_starts_with($normalized, 'm') || str_contains($normalized, 'mac') || str_contains($normalized, 'hom')) {
+            // "hom" can be "hombre" (macho) or "hombro" (ocr error for hembra?) 
+            // In the user's sample "Hombro" was meant to be "Hembra" based on category "vaca".
+            // Let's use category hint if available.
+            if ($category === AnimalCategory::VACA || $category === AnimalCategory::VAQUILLONA || $category === AnimalCategory::TERNERA || $category === AnimalCategory::VACA_VACIA) {
+                return 'Hembra';
+            }
+            return 'Macho';
+        }
+
+        // Contextual defaults
+        if ($category !== null) {
+            $females = [AnimalCategory::VACA, AnimalCategory::VAQUILLONA, AnimalCategory::TERNERA, AnimalCategory::VACA_VACIA];
+            return in_array($category, $females, true) ? 'Hembra' : 'Macho';
+        }
+
+        return $raw ?: 'N/D';
+    }
+
+    /**
+     * Parse a raw breed value from OCR into a normalized string.
+     * Handles common OCR misreadings like "angos" (Angus).
+     *
+     * @param string $raw
+     * @return string|null
+     */
+    public static function parseBreed(string $raw): ?string
+    {
+        $normalized = mb_strtolower(trim($raw));
+
+        if ($normalized === '') {
+            return null;
+        }
+
+        if (str_contains($normalized, 'ang')) {
+            return 'Angus';
+        }
+
+        if (str_contains($normalized, 'her') || str_contains($normalized, 'ere')) {
+            return 'Hereford';
+        }
+
+        if (str_contains($normalized, 'bra')) {
+            return 'Brangus';
+        }
+
+        return ucfirst($raw);
     }
 }
