@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Application\UseCases;
+namespace App\Application\UseCases\Caravans;
 
 use App\Application\DTOs\RegisterCaravanDTO;
 use App\Application\DTOs\UpsertCaravanResultDTO;

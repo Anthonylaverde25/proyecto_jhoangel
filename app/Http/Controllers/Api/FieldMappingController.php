@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
-use App\Application\UseCases\LearnFieldMappingUseCase;
+use App\Application\UseCases\FieldMappings\FieldMappingUseCases;
 use App\Http\Controllers\Controller;
 use App\Models\FieldMapping;
 use Illuminate\Http\JsonResponse;
@@ -12,6 +12,10 @@ use Illuminate\Http\Request;
 
 class FieldMappingController extends Controller
 {
+    public function __construct(
+        private readonly FieldMappingUseCases $fieldMappings
+    ) {
+    }
     /**
      * List all field mappings for a given target model.
      *
@@ -39,7 +43,7 @@ class FieldMappingController extends Controller
      * @param LearnFieldMappingUseCase $learnUseCase
      * @return JsonResponse
      */
-    public function learn(Request $request, LearnFieldMappingUseCase $learnUseCase): JsonResponse
+    public function learn(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'alias_name'   => 'required|string|max:255',
@@ -47,7 +51,7 @@ class FieldMappingController extends Controller
             'target_model' => 'required|string|max:255',
         ]);
 
-        ($learnUseCase)(
+        ($this->fieldMappings->learn)(
             $validated['alias_name'],
             $validated['target_field'],
             $validated['target_model']

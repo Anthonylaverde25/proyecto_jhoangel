@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
-use App\Application\UseCases\ResolveFieldMappingsUseCase;
+use App\Application\UseCases\FieldMappings\FieldMappingUseCases;
 use App\Infrastructure\OCR\OCRProviderFactory;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Log;
 class DocumentAnalysisController extends Controller
 {
     public function __construct(
-        private readonly \App\Application\UseCases\ResolveFieldMappingsUseCase $resolveFieldMappings,
+        private readonly FieldMappingUseCases $fieldMappings,
         private readonly \App\Application\Services\OCRNormalizationService $normalizationService
     ) {
     }
@@ -56,7 +56,7 @@ class DocumentAnalysisController extends Controller
             $targetModel = $request->input('target_model', 'caravans');
 
             foreach ($extractedData as &$table) {
-                $resolution = ($this->resolveFieldMappings)($table['headers'], $targetModel);
+                $resolution = ($this->fieldMappings->resolve)($table['headers'], $targetModel);
                 $table['field_mapping'] = $resolution['mapped'];
                 $table['unresolved_headers'] = $resolution['unresolved'];
 

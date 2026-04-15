@@ -5,18 +5,16 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Application\DTOs\RegisterCaravanDTO;
-use App\Application\UseCases\UpsertCaravanUseCase;
+use App\Application\UseCases\Caravans\CaravanUseCases;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use App\Application\UseCases\ListCaravansUseCase;
 use App\Http\Resources\CaravanResource;
 
 class CaravanController extends Controller
 {
     public function __construct(
-        private readonly UpsertCaravanUseCase $upsertUseCase,
-        private readonly ListCaravansUseCase $listUseCase
+        private readonly CaravanUseCases $caravan
     ) {
     }
 
@@ -25,7 +23,7 @@ class CaravanController extends Controller
      */
     public function index(): JsonResponse
     {
-        $entities = ($this->listUseCase)();
+        $entities = ($this->caravan->list)();
         
         return response()->json(
             CaravanResource::collection($entities)
@@ -56,7 +54,7 @@ class CaravanController extends Controller
             sex: $validated['sex'] ?? null
         );
 
-        $result = ($this->upsertUseCase)($dto);
+        $result = ($this->caravan->upsert)($dto);
 
         return response()->json([
             'action' => $result->action,

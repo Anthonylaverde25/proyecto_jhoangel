@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Application\DTOs\ImportCaravansDTO;
-use App\Application\UseCases\ImportCaravansUseCase;
+use App\Application\UseCases\Caravans\CaravanUseCases;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,7 +13,7 @@ use Illuminate\Http\Request;
 class ImportCaravansController extends Controller
 {
     public function __construct(
-        private readonly ImportCaravansUseCase $importUseCase,
+        private readonly CaravanUseCases $caravan,
     ) {
     }
 
@@ -42,7 +42,7 @@ class ImportCaravansController extends Controller
             targetModel: 'caravans',
         );
 
-        $result = ($this->importUseCase)($dto);
+        $result = ($this->caravan->import)($dto);
 
         $statusCode = $result['imported'] > 0 ? 201 : 422;
 

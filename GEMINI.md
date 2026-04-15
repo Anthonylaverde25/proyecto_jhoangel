@@ -45,7 +45,7 @@ Execution: Generate production-grade code in English.
 
 Statelessness: No sessions, no cookies. Auth must be Token-based (e.g., Sanctum/JWT).
 
-Use Cases: Must implement the \_\_invoke method to enforce Single Responsibility (SRP).
+Use Cases: Must implement the __invoke method to enforce Single Responsibility (SRP). They must be organized in subdirectories by domain (e.g., UseCases/Caravans/) and accessed via a Domain Aggregator (e.g., CaravanUseCases.php) to prevent constructor bloating in controllers.
 
 Encapsulation: No Eloquent models shall pass beyond the Infrastructure Layer. Use Mappers to convert to Entities.
 
