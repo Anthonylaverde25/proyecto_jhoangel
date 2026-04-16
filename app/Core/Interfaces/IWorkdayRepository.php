@@ -19,4 +19,10 @@ interface IWorkdayRepository
      * Útil para calcular el siguiente secuencial.
      */
     public function getLastCodeForDate(\DateTimeInterface $date): ?string;
+
+    /**
+     * Vincula un arreglo de IDs de Caravanas a la jornada actual (Muchos a Muchos).
+     * Garantiza que no se generen registros duplicados en la pivot.
+     */
+    public function attachCaravans(WorkdayEntity $workday, array $caravanIds): void;
 }

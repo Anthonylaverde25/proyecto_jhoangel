@@ -40,4 +40,16 @@ class EloquentWorkdayRepository implements IWorkdayRepository
             ->orderBy('code', 'desc')
             ->value('code');
     }
+
+    public function attachCaravans(WorkdayEntity $workday, array $caravanIds): void
+    {
+        if ($workday->getId() === null) {
+            return; // No se puede enlazar a una entidad no guardada
+        }
+        
+        $model = Workday::find($workday->getId());
+        if ($model) {
+            $model->caravans()->syncWithoutDetaching($caravanIds);
+        }
+    }
 }

@@ -9,11 +9,17 @@ use App\Core\Entities\CaravanEntity;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Services\CaravanValueParser;
 use App\Core\ValueObjects\CaravanNumber;
+use App\Core\Entities\WorkdayEntity;
+use App\Core\Enums\WorkType;
+use App\Core\Interfaces\IWorkdayRepository;
+use App\Core\Services\WorkdayCodeGenerator;
 
 final class ImportCaravansUseCase
 {
     public function __construct(
         private readonly ICaravanRepository $repository,
+        private readonly IWorkdayRepository $workdayRepository,
+        private readonly WorkdayCodeGenerator $workdayCodeGenerator
     ) {
     }
 
@@ -29,6 +35,21 @@ final class ImportCaravansUseCase
         $imported = 0;
         $skipped = 0;
         $errors = [];
+        $processedCaravanIds = [];
+
+        // Generar la jornada (Workday) real
+        $workType = WorkType::from($dto->workType);
+        $workDate = new \DateTimeImmutable();
+        $code = $this->workdayCodeGenerator->generateForDate($workDate);
+        
+        $workday = new WorkdayEntity(
+            id: null,
+            code: $code,
+            type: $workType,
+            workDate: $workDate,
+        );
+
+        $savedWorkday = $this->workdayRepository->save($workday);
 
         foreach ($dto->rows as $index => $row) {
             try {
@@ -91,6 +112,9 @@ final class ImportCaravansUseCase
                     $existingEntity->updateDetails($category, $teeth, $entryWeight, $exitWeight, $breed, $sex, $entryDate);
                     $this->repository->save($existingEntity);
                     $imported++;
+                    if ($existingEntity->getId()) {
+                        $processedCaravanIds[] = $existingEntity->getId();
+                    }
                     continue;
                 }
 
@@ -133,8 +157,11 @@ final class ImportCaravansUseCase
                     createdAt: null,
                 );
 
-                $this->repository->save($entity);
+                $savedEntity = $this->repository->save($entity);
                 $imported++;
+                if ($savedEntity->getId()) {
+                    $processedCaravanIds[] = $savedEntity->getId();
+                }
             } catch (\Throwable $e) {
                 $errors[] = [
                     'row' => $index + 1,
@@ -143,10 +170,16 @@ final class ImportCaravansUseCase
             }
         }
 
+        // Vincular animales a la jornada
+        if (!empty($processedCaravanIds)) {
+            $this->workdayRepository->attachCaravans($savedWorkday, $processedCaravanIds);
+        }
+
         return [
             'imported' => $imported,
             'skipped' => $skipped,
             'errors' => $errors,
+            'workday_code' => $savedWorkday->getCode(),
         ];
     }
 }

@@ -35,11 +35,13 @@ class ImportCaravansController extends Controller
             'rows.*.breed'          => 'nullable|string',
             'rows.*.sex'            => 'nullable|string',
             'rows.*.entry_date'     => 'nullable|string',
+            'work_type'             => 'nullable|string|in:entry,update,exit',
         ]);
 
         $dto = new ImportCaravansDTO(
             rows: $validated['rows'],
             targetModel: 'caravans',
+            workType: $validated['work_type'] ?? 'entry',
         );
 
         $result = ($this->caravan->import)($dto);

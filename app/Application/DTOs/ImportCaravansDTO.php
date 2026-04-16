@@ -13,6 +13,7 @@ final readonly class ImportCaravansDTO
     public function __construct(
         public array $rows,
         public string $targetModel = 'caravans',
+        public string $workType = 'entry',
     ) {
     }
 }

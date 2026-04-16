@@ -14,7 +14,8 @@ class DocumentAnalysisController extends Controller
 {
     public function __construct(
         private readonly FieldMappingUseCases $fieldMappings,
-        private readonly \App\Application\Services\OCRNormalizationService $normalizationService
+        private readonly \App\Application\Services\OCRNormalizationService $normalizationService,
+        private readonly \App\Core\Services\WorkdayCodeGenerator $workdayCodeGenerator
     ) {
     }
 
@@ -85,6 +86,7 @@ class DocumentAnalysisController extends Controller
             return response()->json([
                 'status' => 'success',
                 'provider' => $requestedProvider ?? config('services.ocr.driver'),
+                'suggested_workday_code' => $this->workdayCodeGenerator->generateForDate(new \DateTime()),
                 'document_info' => [
                     'pages' => count($extractedData),
                 ],
