@@ -6,11 +6,19 @@ namespace App\Application\Mappers;
 
 use App\Models\Provider;
 use App\Core\Entities\ProviderEntity;
+use App\Application\Mappers\FarmMapper;
 
 class ProviderMapper
 {
     public static function toEntity(Provider $model): ProviderEntity
     {
+        $farms = [];
+        if ($model->relationLoaded('farms')) {
+            foreach ($model->farms as $farmModel) {
+                $farms[] = FarmMapper::toEntity($farmModel);
+            }
+        }
+
         return new ProviderEntity(
             $model->id,
             $model->name,
@@ -21,6 +29,7 @@ class ProviderMapper
             $model->phone,
             (bool) $model->is_active,
             $model->created_at,
+            $farms
         );
     }
 

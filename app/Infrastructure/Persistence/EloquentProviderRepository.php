@@ -13,14 +13,14 @@ class EloquentProviderRepository implements IProviderRepository
 {
     public function findAll(): array
     {
-        return Provider::all()
+        return Provider::with('farms')->get()
             ->map(fn (Provider $model) => ProviderMapper::toEntity($model))
             ->toArray();
     }
 
     public function findById(int $id): ?ProviderEntity
     {
-        $model = Provider::find($id);
+        $model = Provider::with('farms')->find($id);
         return $model ? ProviderMapper::toEntity($model) : null;
     }
 

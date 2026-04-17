@@ -7,6 +7,7 @@ namespace App\Http\Resources;
 use App\Core\Entities\ProviderEntity;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Http\Resources\FarmResource;
 
 /**
  * @property-read ProviderEntity $resource
@@ -27,6 +28,7 @@ class ProviderResource extends JsonResource
             'email'           => $this->resource->getEmail(),
             'phone'           => $this->resource->getPhone(),
             'is_active'       => $this->resource->isActive(),
+            'farms'           => FarmResource::collection($this->resource->getFarms()),
             'created_at'      => $this->resource->getCreatedAt()?->format('Y-m-d H:i:s'),
         ];
     }

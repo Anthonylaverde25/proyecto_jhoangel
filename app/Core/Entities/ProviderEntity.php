@@ -15,7 +15,9 @@ final class ProviderEntity
         private ?string $email,
         private ?string $phone,
         private bool $isActive = true,
-        private ?\DateTimeInterface $createdAt = null
+        private ?\DateTimeInterface $createdAt = null,
+        /** @var FarmEntity[] */
+        private array $farms = []
     ) {
     }
 
@@ -62,6 +64,14 @@ final class ProviderEntity
     public function getCreatedAt(): ?\DateTimeInterface
     {
         return $this->createdAt;
+    }
+
+    /**
+     * @return FarmEntity[]
+     */
+    public function getFarms(): array
+    {
+        return $this->farms;
     }
 
     public function updateDetails(
