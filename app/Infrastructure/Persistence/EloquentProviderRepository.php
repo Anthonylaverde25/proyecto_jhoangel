@@ -9,6 +9,9 @@ use App\Core\Interfaces\IProviderRepository;
 use App\Models\Provider;
 use App\Application\Mappers\ProviderMapper;
 
+use Illuminate\Support\Facades\DB;
+use App\Application\Mappers\FarmMapper;
+
 class EloquentProviderRepository implements IProviderRepository
 {
     public function findAll(): array
@@ -32,11 +35,22 @@ class EloquentProviderRepository implements IProviderRepository
 
     public function save(ProviderEntity $provider): ProviderEntity
     {
-        $model = $provider->getId() !== null ? Provider::find($provider->getId()) : null;
-        $model = ProviderMapper::toModel($provider, $model);
-        $model->save();
+        return DB::transaction(function () use ($provider) {
+            $model = $provider->getId() !== null ? Provider::find($provider->getId()) : null;
+            $model = ProviderMapper::toModel($provider, $model);
+            $model->save();
 
-        return ProviderMapper::toEntity($model);
+            // Sincronizar establacimientos (Farms)
+            if (!empty($provider->getFarms())) {
+                foreach ($provider->getFarms() as $farmEntity) {
+                    $farmModel = FarmMapper::toModel($farmEntity);
+                    $farmModel->provider_id = $model->id; // Vincular al nuevo proveedor
+                    $farmModel->save();
+                }
+            }
+
+            return ProviderMapper::toEntity($model->load('farms'));
+        });
     }
 
     public function delete(int $id): bool

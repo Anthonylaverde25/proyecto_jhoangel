@@ -12,7 +12,9 @@ final readonly class CreateProviderDTO
         public string $cuit,
         public ?string $location,
         public ?string $email,
-        public ?string $phone
+        public ?string $phone,
+        /** @var array<string, mixed>[] */
+        public array $farms = []
     ) {
     }
 
@@ -24,7 +26,8 @@ final readonly class CreateProviderDTO
             (string) ($data['cuit'] ?? ''),
             isset($data['location']) ? (string) $data['location'] : null,
             isset($data['email']) ? (string) $data['email'] : null,
-            isset($data['phone']) ? (string) $data['phone'] : null
+            isset($data['phone']) ? (string) $data['phone'] : null,
+            (array) ($data['farms'] ?? [])
         );
     }
 }

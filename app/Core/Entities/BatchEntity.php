@@ -12,7 +12,10 @@ final class BatchEntity
         private int $farmId,
         private ?string $observaciones,
         private bool $isActive = true,
-        private ?\DateTimeInterface $createdAt = null
+        private ?\DateTimeInterface $createdAt = null,
+        private ?string $farmName = null,
+        private ?int $providerId = null,
+        private ?string $providerName = null
     ) {
     }
 
@@ -44,6 +47,36 @@ final class BatchEntity
     public function getCreatedAt(): ?\DateTimeInterface
     {
         return $this->createdAt;
+    }
+
+    public function getFarmName(): ?string
+    {
+        return $this->farmName;
+    }
+
+    public function setFarmName(?string $farmName): void
+    {
+        $this->farmName = $farmName;
+    }
+
+    public function getProviderId(): ?int
+    {
+        return $this->providerId;
+    }
+
+    public function setProviderId(?int $providerId): void
+    {
+        $this->providerId = $providerId;
+    }
+
+    public function getProviderName(): ?string
+    {
+        return $this->providerName;
+    }
+
+    public function setProviderName(?string $providerName): void
+    {
+        $this->providerName = $providerName;
     }
 
     public function updateDetails(string $name, ?string $observaciones): void

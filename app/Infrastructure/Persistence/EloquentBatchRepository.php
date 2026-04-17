@@ -13,20 +13,20 @@ class EloquentBatchRepository implements IBatchRepository
 {
     public function findAll(): array
     {
-        return Batch::all()
+        return Batch::with('farm.provider')->get()
             ->map(fn (Batch $model) => BatchMapper::toEntity($model))
             ->toArray();
     }
 
     public function findById(int $id): ?BatchEntity
     {
-        $model = Batch::find($id);
+        $model = Batch::with('farm.provider')->find($id);
         return $model ? BatchMapper::toEntity($model) : null;
     }
 
     public function findByFarmId(int $farmId): array
     {
-        return Batch::where('farm_id', $farmId)
+        return Batch::with('farm.provider')->where('farm_id', $farmId)
             ->get()
             ->map(fn (Batch $model) => BatchMapper::toEntity($model))
             ->toArray();

@@ -8,6 +8,7 @@ final readonly class CreateFarmDTO
 {
     public function __construct(
         public string $name,
+        public string $renspa,
         public ?string $location,
         public int $providerId
     ) {
@@ -17,6 +18,7 @@ final readonly class CreateFarmDTO
     {
         return new self(
             (string) ($data['name'] ?? ''),
+            (string) ($data['renspa'] ?? ''),
             isset($data['location']) ? (string) $data['location'] : null,
             (int) ($data['provider_id'] ?? 0)
         );

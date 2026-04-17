@@ -11,7 +11,7 @@ class BatchMapper
 {
     public static function toEntity(Batch $model): BatchEntity
     {
-        return new BatchEntity(
+        $entity = new BatchEntity(
             $model->id,
             $model->name,
             (int) $model->farm_id,
@@ -19,6 +19,17 @@ class BatchMapper
             (bool) $model->is_active,
             $model->created_at,
         );
+
+        if ($model->relationLoaded('farm') && $model->farm) {
+            $entity->setFarmName($model->farm->name);
+            
+            if ($model->farm->relationLoaded('provider') && $model->farm->provider) {
+                $entity->setProviderId($model->farm->provider_id);
+                $entity->setProviderName($model->farm->provider->name);
+            }
+        }
+
+        return $entity;
     }
 
     public static function toModel(BatchEntity $entity, ?Batch $model = null): Batch

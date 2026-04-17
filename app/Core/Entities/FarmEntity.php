@@ -9,6 +9,7 @@ final class FarmEntity
     public function __construct(
         private readonly ?int $id,
         private string $name,
+        private string $renspa,
         private ?string $location,
         private int $providerId,
         private bool $isActive = true,
@@ -24,6 +25,11 @@ final class FarmEntity
     public function getName(): string
     {
         return $this->name;
+    }
+
+    public function getRenspa(): string
+    {
+        return $this->renspa;
     }
 
     public function getLocation(): ?string
@@ -46,9 +52,10 @@ final class FarmEntity
         return $this->createdAt;
     }
 
-    public function updateDetails(string $name, ?string $location): void
+    public function updateDetails(string $name, string $renspa, ?string $location): void
     {
         $this->name = $name;
+        $this->renspa = $renspa;
         $this->location = $location;
     }
 

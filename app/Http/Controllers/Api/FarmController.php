@@ -38,6 +38,7 @@ class FarmController extends Controller
     {
         $validated = $request->validate([
             'name'        => 'required|string|max:255',
+            'renspa'      => 'required|string|unique:farms,renspa|max:255',
             'location'    => 'nullable|string|max:500',
             'provider_id' => 'required|integer|exists:providers,id',
         ]);

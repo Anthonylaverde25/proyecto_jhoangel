@@ -42,6 +42,10 @@ class ProviderController extends Controller
             'location'        => 'nullable|string|max:500',
             'email'           => 'nullable|email|max:255',
             'phone'           => 'nullable|string|max:50',
+            'farms'           => 'nullable|array',
+            'farms.*.name'    => 'required|string|max:255',
+            'farms.*.renspa'  => 'required|string|distinct|unique:farms,renspa|max:255',
+            'farms.*.location'=> 'nullable|string|max:500',
         ]);
 
         $dto = CreateProviderDTO::fromArray($validated);

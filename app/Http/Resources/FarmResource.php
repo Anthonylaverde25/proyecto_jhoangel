@@ -21,6 +21,7 @@ class FarmResource extends JsonResource
         return [
             'id'          => $this->resource->getId(),
             'name'        => $this->resource->getName(),
+            'renspa'      => $this->resource->getRenspa(),
             'location'    => $this->resource->getLocation(),
             'provider_id' => $this->resource->getProviderId(),
             'is_active'   => $this->resource->isActive(),

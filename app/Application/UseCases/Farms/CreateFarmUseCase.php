@@ -20,6 +20,7 @@ final class CreateFarmUseCase
         $entity = new FarmEntity(
             id: null,
             name: $dto->name,
+            renspa: $dto->renspa,
             location: $dto->location,
             providerId: $dto->providerId,
             isActive: true

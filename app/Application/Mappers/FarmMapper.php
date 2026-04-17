@@ -14,6 +14,7 @@ class FarmMapper
         return new FarmEntity(
             $model->id,
             $model->name,
+            (string) $model->renspa,
             $model->location,
             (int) $model->provider_id,
             (bool) $model->is_active,
@@ -28,6 +29,7 @@ class FarmMapper
         }
 
         $model->name = $entity->getName();
+        $model->renspa = $entity->getRenspa();
         $model->location = $entity->getLocation();
         $model->provider_id = $entity->getProviderId();
         $model->is_active = $entity->isActive();

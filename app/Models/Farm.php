@@ -12,6 +12,7 @@ class Farm extends Model
 {
     protected $fillable = [
         'name',
+        'renspa',
         'location',
         'provider_id',
         'is_active',
