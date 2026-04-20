@@ -31,7 +31,7 @@ class AzureOCRProvider implements IOCRProvider
 
         $fileContent = file_get_contents($file->getRealPath());
 
-        // 1. Submit the document to Azure (Layout Model)
+        // 1. Submit the document to Azure (Document Model for KVP and layout)
         $response = Http::withHeaders([
             'Ocp-Apim-Subscription-Key' => $this->apiKey,
             'Content-Type' => $file->getMimeType(),
@@ -69,7 +69,10 @@ class AzureOCRProvider implements IOCRProvider
         }
 
         $analyzeResult = $resultResponse->json('analyzeResult');
-        return $this->parseTables($analyzeResult['tables'] ?? []);
+        return [
+            'tables' => $this->parseTables($analyzeResult['tables'] ?? []),
+            'metadata' => $this->parseKeyValuePairs($analyzeResult['keyValuePairs'] ?? []),
+        ];
     }
 
     /**
@@ -136,5 +139,25 @@ class AzureOCRProvider implements IOCRProvider
         $header = preg_replace('/[^a-z0-9_ ]/', '', $header);
         $header = str_replace(' ', '_', $header);
         return $header ?: 'unnamed_column';
+    }
+
+    /**
+     * Parse key-value pairs from document.
+     *
+     * @param array $keyValuePairs
+     * @return array
+     */
+    private function parseKeyValuePairs(array $keyValuePairs): array
+    {
+        $metadata = [];
+        foreach ($keyValuePairs as $kvp) {
+            $key = $this->sanitizeHeader($kvp['key']['content'] ?? '');
+            $value = $kvp['value']['content'] ?? '';
+            if ($key) {
+                // Also clean up common noise in the output values
+                $metadata[$key] = trim(str_replace([':unselected:', ':selected:'], '', $value));
+            }
+        }
+        return $metadata;
     }
 }

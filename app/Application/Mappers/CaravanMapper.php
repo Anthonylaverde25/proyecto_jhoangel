@@ -27,6 +27,7 @@ class CaravanMapper
             $model->sex,
             $model->entry_date ? (is_string($model->entry_date) ? new \DateTime($model->entry_date) : $model->entry_date) : null,
             $model->created_at,
+            $model->batch_id ? (int) $model->batch_id : null,
         );
     }
 
@@ -47,6 +48,7 @@ class CaravanMapper
         $model->breed = $entity->getBreed();
         $model->sex = $entity->getSex();
         $model->entry_date = $entity->getEntryDate();
+        $model->batch_id = $entity->getBatchId();
 
         return $model;
     }

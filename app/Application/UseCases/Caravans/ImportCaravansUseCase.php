@@ -109,7 +109,7 @@ final class ImportCaravansUseCase
                         }
                     }
 
-                    $existingEntity->updateDetails($category, $teeth, $entryWeight, $exitWeight, $breed, $sex, $entryDate);
+                    $existingEntity->updateDetails($category, $teeth, $entryWeight, $exitWeight, $breed, $sex, $entryDate, $dto->batchId);
                     $this->repository->save($existingEntity);
                     $imported++;
                     if ($existingEntity->getId()) {
@@ -155,6 +155,7 @@ final class ImportCaravansUseCase
                     sex: $sex,
                     entryDate: $entryDate,
                     createdAt: null,
+                    batchId: $dto->batchId,
                 );
 
                 $savedEntity = $this->repository->save($entity);

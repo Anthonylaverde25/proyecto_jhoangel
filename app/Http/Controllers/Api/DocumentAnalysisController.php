@@ -51,12 +51,53 @@ class DocumentAnalysisController extends Controller
             
             // 1. Resolve Provider and Digitalize
             $ocrProvider = OCRProviderFactory::make($requestedProvider);
-            $extractedData = $ocrProvider->analyze($file);
+            $analysisResult = $ocrProvider->analyze($file);
+            
+            $tables = $analysisResult['tables'] ?? $analysisResult;
+            $metadata = $analysisResult['metadata'] ?? [];
 
-            // 2. Resolve field mappings (synonym system)
+            // 2. Resolve Context (Provider, Farm, Batch)
+            $cuit = $metadata['cuit'] ?? null;
+            $renspa = $metadata['renspa'] ?? null;
+            $lote = $metadata['lote'] ?? null;
+
+            $provider = null;
+            $farm = null;
+            $batch = null;
+
+            if ($cuit) {
+                // Ensure CUIT is clean
+                $cleanCuit = preg_replace('/[^0-9]/', '', $cuit);
+                $provider = \App\Models\Provider::where('cuit', $cleanCuit)->first();
+            }
+
+            if ($provider && $renspa) {
+                $cleanRenspa = preg_replace('/[^a-zA-Z0-9]/', '', $renspa);
+                $farm = \App\Models\Farm::where('provider_id', $provider->id)
+                    ->where('renspa', $cleanRenspa)
+                    ->first();
+            }
+
+            if ($farm && $lote) {
+                $batch = \App\Models\Batch::firstOrCreate(
+                    ['farm_id' => $farm->id, 'name' => $lote],
+                    ['is_active' => true]
+                );
+            }
+
+            $contextDto = (new \App\Application\DTOs\ExtractedDocumentContextDTO(
+                cuit: $cuit,
+                renspa: $renspa,
+                lote: $lote,
+                providerId: $provider?->id,
+                farmId: $farm?->id,
+                batchId: $batch?->id,
+            ))->toArray();
+
+            // 3. Resolve field mappings (synonym system)
             $targetModel = $request->input('target_model', 'caravans');
 
-            foreach ($extractedData as &$table) {
+            foreach ($tables as &$table) {
                 $resolution = ($this->fieldMappings->resolve)($table['headers'], $targetModel);
                 $table['field_mapping'] = $resolution['mapped'];
                 $table['unresolved_headers'] = $resolution['unresolved'];
@@ -88,9 +129,10 @@ class DocumentAnalysisController extends Controller
                 'provider' => $requestedProvider ?? config('services.ocr.driver'),
                 'suggested_workday_code' => $this->workdayCodeGenerator->generateForDate(new \DateTime()),
                 'document_info' => [
-                    'pages' => count($extractedData),
+                    'pages' => count($tables),
                 ],
-                'data' => $extractedData,
+                'context' => $contextDto,
+                'data' => $tables,
             ]);
 
         } catch (\Exception $e) {

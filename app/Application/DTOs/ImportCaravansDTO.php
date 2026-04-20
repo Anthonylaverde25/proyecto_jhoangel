@@ -14,6 +14,7 @@ final readonly class ImportCaravansDTO
         public array $rows,
         public string $targetModel = 'caravans',
         public string $workType = 'entry',
+        public ?int $batchId = null,
     ) {
     }
 }

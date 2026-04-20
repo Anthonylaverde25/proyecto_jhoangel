@@ -36,12 +36,14 @@ class ImportCaravansController extends Controller
             'rows.*.sex'            => 'nullable|string',
             'rows.*.entry_date'     => 'nullable|string',
             'work_type'             => 'nullable|string|in:entry,update,exit',
+            'batch_id'              => 'nullable|integer|exists:batches,id',
         ]);
 
         $dto = new ImportCaravansDTO(
             rows: $validated['rows'],
             targetModel: 'caravans',
             workType: $validated['work_type'] ?? 'entry',
+            batchId: $validated['batch_id'] ?? null,
         );
 
         $result = ($this->caravan->import)($dto);
