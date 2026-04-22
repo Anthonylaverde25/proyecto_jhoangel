@@ -24,6 +24,15 @@ class EloquentBatchRepository implements IBatchRepository
         return $model ? BatchMapper::toEntity($model) : null;
     }
 
+    public function findByNameAndFarmId(string $name, int $farmId): ?BatchEntity
+    {
+        $model = Batch::with('farm.provider')
+            ->where('name', $name)
+            ->where('farm_id', $farmId)
+            ->first();
+        return $model ? BatchMapper::toEntity($model) : null;
+    }
+
     public function findByFarmId(int $farmId): array
     {
         return Batch::with('farm.provider')->where('farm_id', $farmId)

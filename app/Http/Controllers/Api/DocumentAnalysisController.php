@@ -57,9 +57,33 @@ class DocumentAnalysisController extends Controller
             $metadata = $analysisResult['metadata'] ?? [];
 
             // 2. Resolve Context (Provider, Farm, Batch)
+            // Sometimes Azure (especially prebuilt-layout) extracts the top header as the first table instead of KVPs.
+            if (empty(array_filter($metadata)) && isset($tables[0])) {
+                $firstTable = $tables[0];
+                $hasHeaderKeywords = false;
+                foreach ($firstTable['headers'] as $h) {
+                    if (in_array($h, ['cuit', 'renspa', 'lote', 'alias', 'establecimiento'])) {
+                        $hasHeaderKeywords = true;
+                        break;
+                    }
+                }
+
+                if ($hasHeaderKeywords && !empty($firstTable['rows'])) {
+                    $row = $firstTable['rows'][0];
+                    foreach ($firstTable['headers'] as $h) {
+                        if (isset($row[$h]['value'])) {
+                            $metadata[$h] = $row[$h]['value'];
+                        }
+                    }
+                    // Remove the header table so it doesn't get processed as caravans
+                    array_shift($tables);
+                    $tables = array_values($tables);
+                }
+            }
+
             $cuit = $metadata['cuit'] ?? null;
             $renspa = $metadata['renspa'] ?? null;
-            $lote = $metadata['lote'] ?? null;
+            $lote = $metadata['lote'] ?? $metadata['alias'] ?? null;
 
             $provider = null;
             $farm = null;
@@ -68,21 +92,20 @@ class DocumentAnalysisController extends Controller
             if ($cuit) {
                 // Ensure CUIT is clean
                 $cleanCuit = preg_replace('/[^0-9]/', '', $cuit);
-                $provider = \App\Models\Provider::where('cuit', $cleanCuit)->first();
+                $provider = \App\Models\Provider::whereRaw("REPLACE(cuit, '-', '') = ?", [$cleanCuit])->first();
             }
 
             if ($provider && $renspa) {
                 $cleanRenspa = preg_replace('/[^a-zA-Z0-9]/', '', $renspa);
                 $farm = \App\Models\Farm::where('provider_id', $provider->id)
-                    ->where('renspa', $cleanRenspa)
+                    ->whereRaw("REPLACE(REPLACE(renspa, '.', ''), '/', '') = ?", [$cleanRenspa])
                     ->first();
             }
 
             if ($farm && $lote) {
-                $batch = \App\Models\Batch::firstOrCreate(
-                    ['farm_id' => $farm->id, 'name' => $lote],
-                    ['is_active' => true]
-                );
+                $batch = \App\Models\Batch::where('farm_id', $farm->id)
+                    ->where('name', $lote)
+                    ->first();
             }
 
             $contextDto = (new \App\Application\DTOs\ExtractedDocumentContextDTO(

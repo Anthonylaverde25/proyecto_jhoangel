@@ -12,6 +12,8 @@ use App\Core\ValueObjects\CaravanNumber;
 use App\Core\Entities\WorkdayEntity;
 use App\Core\Enums\WorkType;
 use App\Core\Interfaces\IWorkdayRepository;
+use App\Core\Interfaces\IBatchRepository;
+use App\Core\Entities\BatchEntity;
 use App\Core\Services\WorkdayCodeGenerator;
 
 final class ImportCaravansUseCase
@@ -19,6 +21,7 @@ final class ImportCaravansUseCase
     public function __construct(
         private readonly ICaravanRepository $repository,
         private readonly IWorkdayRepository $workdayRepository,
+        private readonly IBatchRepository $batchRepository,
         private readonly WorkdayCodeGenerator $workdayCodeGenerator
     ) {
     }
@@ -50,6 +53,27 @@ final class ImportCaravansUseCase
         );
 
         $savedWorkday = $this->workdayRepository->save($workday);
+
+        $batchId = $dto->batchId;
+
+        // Si no hay batch_id, pero el frontend envió farm_id y batch_name, creamos el lote en vuelo
+        if (!$batchId && $dto->farmId && $dto->batchName) {
+            $existingBatch = $this->batchRepository->findByNameAndFarmId($dto->batchName, $dto->farmId);
+            
+            if ($existingBatch) {
+                $batchId = $existingBatch->getId();
+            } else {
+                $newBatch = new BatchEntity(
+                    id: null,
+                    name: $dto->batchName,
+                    farmId: $dto->farmId,
+                    observaciones: null,
+                    isActive: true
+                );
+                $savedBatch = $this->batchRepository->save($newBatch);
+                $batchId = $savedBatch->getId();
+            }
+        }
 
         foreach ($dto->rows as $index => $row) {
             try {
@@ -109,7 +133,7 @@ final class ImportCaravansUseCase
                         }
                     }
 
-                    $existingEntity->updateDetails($category, $teeth, $entryWeight, $exitWeight, $breed, $sex, $entryDate, $dto->batchId);
+                    $existingEntity->updateDetails($category, $teeth, $entryWeight, $exitWeight, $breed, $sex, $entryDate, $batchId);
                     $this->repository->save($existingEntity);
                     $imported++;
                     if ($existingEntity->getId()) {
@@ -155,7 +179,7 @@ final class ImportCaravansUseCase
                     sex: $sex,
                     entryDate: $entryDate,
                     createdAt: null,
-                    batchId: $dto->batchId,
+                    batchId: $batchId,
                 );
 
                 $savedEntity = $this->repository->save($entity);

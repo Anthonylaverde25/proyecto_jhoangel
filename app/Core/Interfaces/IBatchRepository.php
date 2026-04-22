@@ -15,6 +15,8 @@ interface IBatchRepository
 
     public function findById(int $id): ?BatchEntity;
 
+    public function findByNameAndFarmId(string $name, int $farmId): ?BatchEntity;
+
     /**
      * @return BatchEntity[]
      */

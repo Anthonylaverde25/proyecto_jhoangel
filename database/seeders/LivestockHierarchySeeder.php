@@ -52,6 +52,7 @@ class LivestockHierarchySeeder extends Seeder
             $farm1Id = DB::table('farms')->insertGetId([
                 'name' => 'Sección A - ' . $names[$index],
                 'location' => 'Norte del establecimiento',
+                'renspa' => '01.0' . ($index + 1) . '.0.00001/01',
                 'provider_id' => $providerId,
                 'is_active' => true,
                 'created_at' => now(),
@@ -61,6 +62,7 @@ class LivestockHierarchySeeder extends Seeder
             $farm2Id = DB::table('farms')->insertGetId([
                 'name' => 'Sección B - ' . $names[$index],
                 'location' => 'Sur del establecimiento',
+                'renspa' => '01.0' . ($index + 1) . '.0.00002/01',
                 'provider_id' => $providerId,
                 'is_active' => true,
                 'created_at' => now(),

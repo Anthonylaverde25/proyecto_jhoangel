@@ -15,6 +15,8 @@ final readonly class ImportCaravansDTO
         public string $targetModel = 'caravans',
         public string $workType = 'entry',
         public ?int $batchId = null,
+        public ?int $farmId = null,
+        public ?string $batchName = null,
     ) {
     }
 }

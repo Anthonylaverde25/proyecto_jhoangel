@@ -37,6 +37,8 @@ class ImportCaravansController extends Controller
             'rows.*.entry_date'     => 'nullable|string',
             'work_type'             => 'nullable|string|in:entry,update,exit',
             'batch_id'              => 'nullable|integer|exists:batches,id',
+            'farm_id'               => 'nullable|integer|exists:farms,id',
+            'batch_name'            => 'nullable|string',
         ]);
 
         $dto = new ImportCaravansDTO(
@@ -44,6 +46,8 @@ class ImportCaravansController extends Controller
             targetModel: 'caravans',
             workType: $validated['work_type'] ?? 'entry',
             batchId: $validated['batch_id'] ?? null,
+            farmId: $validated['farm_id'] ?? null,
+            batchName: $validated['batch_name'] ?? null,
         );
 
         $result = ($this->caravan->import)($dto);
