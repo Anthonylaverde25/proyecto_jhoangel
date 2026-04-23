@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Api\AnalysisController;
+use App\Http\Controllers\Api\BreedController;
 use App\Http\Controllers\Api\DocumentAnalysisController;
 use App\Http\Controllers\Api\CaravanController;
 use App\Http\Controllers\Api\FieldMappingController;
@@ -25,3 +26,5 @@ Route::post('/field-mappings/learn', [FieldMappingController::class, 'learn']);
 Route::apiResource('providers', ProviderController::class)->only(['index', 'store']);
 Route::apiResource('farms', FarmController::class)->only(['index', 'store']);
 Route::apiResource('batches', BatchController::class)->only(['index', 'store']);
+
+Route::get('/breeds', [BreedController::class, 'index']);

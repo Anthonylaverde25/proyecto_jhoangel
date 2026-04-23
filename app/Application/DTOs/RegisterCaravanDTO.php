@@ -13,6 +13,8 @@ final readonly class RegisterCaravanDTO
         public int $teeth = 0,
         public ?float $entryWeight = null,
         public ?string $breed = null,
+        public ?int $breedId = null,
+        public ?int $batchId = null,
     ) {
     }
 
@@ -29,6 +31,8 @@ final readonly class RegisterCaravanDTO
             (int) ($data['teeth'] ?? 0),
             isset($data['entry_weight']) ? (float) $data['entry_weight'] : null,
             isset($data['breed']) ? (string) $data['breed'] : null,
+            isset($data['breed_id']) ? (int) $data['breed_id'] : null,
+            isset($data['batch_id']) ? (int) $data['batch_id'] : null,
         );
     }
 }

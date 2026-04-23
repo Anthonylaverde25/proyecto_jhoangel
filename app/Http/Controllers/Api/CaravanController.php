@@ -42,16 +42,20 @@ class CaravanController extends Controller
             'teeth'          => 'required|integer|min:0|max:99',
             'entry_weight'   => 'nullable|numeric',
             'breed'          => 'nullable|string',
+            'breed_id'       => 'nullable|integer|exists:breeds,id',
             'sex'            => 'nullable|string',
+            'batch_id'       => 'nullable|integer|exists:batches,id',
         ]);
 
         $dto = new RegisterCaravanDTO(
             identification: $validated['identification'],
+            sex: $validated['sex'] ?? null,
             category: $validated['category'] ?? null,
             teeth: (int) $validated['teeth'],
             entryWeight: isset($validated['entry_weight']) ? (float) $validated['entry_weight'] : null,
             breed: $validated['breed'] ?? null,
-            sex: $validated['sex'] ?? null
+            breedId: isset($validated['breed_id']) ? (int) $validated['breed_id'] : null,
+            batchId: isset($validated['batch_id']) ? (int) $validated['batch_id'] : null
         );
 
         $result = ($this->caravan->upsert)($dto);

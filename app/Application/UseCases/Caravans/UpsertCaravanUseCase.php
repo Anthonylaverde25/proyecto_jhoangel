@@ -33,7 +33,10 @@ final class UpsertCaravanUseCase
                 $dto->entryWeight !== null ? (float) $dto->entryWeight : null,
                 null, 
                 $dto->breed,
-                $dto->sex
+                $dto->sex,
+                null,
+                $dto->batchId,
+                $dto->breedId
             );
 
             $this->caravanRepository->save($existingEntity);
@@ -54,8 +57,11 @@ final class UpsertCaravanUseCase
             $dto->entryWeight !== null ? (float) $dto->entryWeight : null,
             null,
             $dto->breed,
+            $dto->breedId,
             $dto->sex,
-            null
+            null,
+            null,
+            $dto->batchId
         );
 
         $savedEntity = $this->caravanRepository->save($newEntity);

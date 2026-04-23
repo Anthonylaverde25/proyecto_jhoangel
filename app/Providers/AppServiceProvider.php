@@ -29,7 +29,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(IProviderRepository::class, EloquentProviderRepository::class);
         $this->app->bind(IFarmRepository::class, EloquentFarmRepository::class);
         $this->app->bind(IBatchRepository::class, EloquentBatchRepository::class);
-
+        $this->app->bind(\App\Core\Interfaces\IBreedRepository::class, \App\Infrastructure\Persistence\EloquentBreedRepository::class);
         $this->app->bind(\App\Core\Interfaces\IOCRProvider::class, function ($app) {
             $driver = config('services.ocr.driver');
 

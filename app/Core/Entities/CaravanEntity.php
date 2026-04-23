@@ -18,6 +18,7 @@ final class CaravanEntity
         private ?float $entryWeight = null,
         private ?float $exitWeight = null,
         private ?string $breed = null,
+        private ?int $breedId = null,
         private string $sex,
         private ?\DateTimeInterface $entryDate = null,
         private ?\DateTimeInterface $createdAt = null,
@@ -76,6 +77,11 @@ final class CaravanEntity
         return $this->breed;
     }
 
+    public function getBreedId(): ?int
+    {
+        return $this->breedId;
+    }
+
     public function getSex(): ?string
     {
         return $this->sex;
@@ -122,7 +128,8 @@ final class CaravanEntity
         ?string $breed,
         ?string $sex,
         ?\DateTimeInterface $entryDate = null,
-        ?int $batchId = null
+        ?int $batchId = null,
+        ?int $breedId = null
     ): void {
         $this->validateTeeth($teeth);
         
@@ -131,6 +138,10 @@ final class CaravanEntity
         $this->entryWeight = $entryWeight;
         $this->exitWeight = $exitWeight;
         $this->breed = $breed;
+        
+        if ($breedId !== null) {
+            $this->breedId = $breedId;
+        }
         
         if ($sex !== null) {
             $this->sex = $sex;

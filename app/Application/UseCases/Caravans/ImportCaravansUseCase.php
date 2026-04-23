@@ -15,6 +15,7 @@ use App\Core\Interfaces\IWorkdayRepository;
 use App\Core\Interfaces\IBatchRepository;
 use App\Core\Entities\BatchEntity;
 use App\Core\Services\WorkdayCodeGenerator;
+use App\Core\Interfaces\IBreedRepository;
 
 final class ImportCaravansUseCase
 {
@@ -22,7 +23,8 @@ final class ImportCaravansUseCase
         private readonly ICaravanRepository $repository,
         private readonly IWorkdayRepository $workdayRepository,
         private readonly IBatchRepository $batchRepository,
-        private readonly WorkdayCodeGenerator $workdayCodeGenerator
+        private readonly WorkdayCodeGenerator $workdayCodeGenerator,
+        private readonly IBreedRepository $breedRepository
     ) {
     }
 
@@ -75,6 +77,13 @@ final class ImportCaravansUseCase
             }
         }
 
+        // Cargar todas las razas en memoria (Caché Anti N+1)
+        $allBreeds = $this->breedRepository->getAll();
+        $breedsCache = [];
+        foreach ($allBreeds as $breedEntity) {
+            $breedsCache[mb_strtolower($breedEntity->getName())] = $breedEntity->getId();
+        }
+
         foreach ($dto->rows as $index => $row) {
             try {
                 $identificationRaw = trim((string)($row['identification'] ?? ''));
@@ -116,8 +125,20 @@ final class ImportCaravansUseCase
                     }
 
                     $breed = $existingEntity->getBreed();
+                    $breedId = $existingEntity->getBreedId();
                     if (isset($row['breed']) && (string)$row['breed'] !== '') {
-                        $breed = CaravanValueParser::parseBreed((string)$row['breed']) ?? $breed;
+                        $parsedBreed = CaravanValueParser::parseBreed((string)$row['breed']);
+                        if ($parsedBreed !== null) {
+                            $breed = $parsedBreed;
+                            $lowerBreed = mb_strtolower($parsedBreed);
+                            if (isset($breedsCache[$lowerBreed])) {
+                                $breedId = $breedsCache[$lowerBreed];
+                            } else {
+                                $newBreed = $this->breedRepository->findByNameOrCreate($parsedBreed);
+                                $breedId = $newBreed->getId();
+                                $breedsCache[$lowerBreed] = $breedId;
+                            }
+                        }
                     }
 
                     $sex = $existingEntity->getSex();
@@ -133,7 +154,7 @@ final class ImportCaravansUseCase
                         }
                     }
 
-                    $existingEntity->updateDetails($category, $teeth, $entryWeight, $exitWeight, $breed, $sex, $entryDate, $batchId);
+                    $existingEntity->updateDetails($category, $teeth, $entryWeight, $exitWeight, $breed, $sex, $entryDate, $batchId, $breedId);
                     $this->repository->save($existingEntity);
                     $imported++;
                     if ($existingEntity->getId()) {
@@ -149,9 +170,22 @@ final class ImportCaravansUseCase
                 $entryWeight = isset($row['entry_weight']) && $row['entry_weight'] !== ''
                     ? CaravanValueParser::parseWeight((string) $row['entry_weight'])
                     : null;
-                $breed = isset($row['breed']) && $row['breed'] !== ''
-                    ? CaravanValueParser::parseBreed((string) $row['breed'])
-                    : null;
+                $breed = null;
+                $breedId = null;
+                if (isset($row['breed']) && $row['breed'] !== '') {
+                    $parsedBreed = CaravanValueParser::parseBreed((string) $row['breed']);
+                    if ($parsedBreed !== null) {
+                        $breed = $parsedBreed;
+                        $lowerBreed = mb_strtolower($parsedBreed);
+                        if (isset($breedsCache[$lowerBreed])) {
+                            $breedId = $breedsCache[$lowerBreed];
+                        } else {
+                            $newBreed = $this->breedRepository->findByNameOrCreate($parsedBreed);
+                            $breedId = $newBreed->getId();
+                            $breedsCache[$lowerBreed] = $breedId;
+                        }
+                    }
+                }
                 
                 $sexRaw = $row['sex'] ?? '';
                 $sex = CaravanValueParser::parseSex((string) $sexRaw, $category);
@@ -176,6 +210,7 @@ final class ImportCaravansUseCase
                     entryWeight: $entryWeight,
                     exitWeight: null,
                     breed: $breed,
+                    breedId: $breedId,
                     sex: $sex,
                     entryDate: $entryDate,
                     createdAt: null,
