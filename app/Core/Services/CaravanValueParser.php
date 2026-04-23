@@ -235,24 +235,12 @@ final class CaravanValueParser
      */
     public static function parseBreed(string $raw): ?string
     {
-        $normalized = mb_strtolower(trim($raw));
+        $cleaned = trim($raw);
 
-        if ($normalized === '') {
+        if ($cleaned === '') {
             return null;
         }
 
-        if (str_contains($normalized, 'ang')) {
-            return 'Angus';
-        }
-
-        if (str_contains($normalized, 'her') || str_contains($normalized, 'ere')) {
-            return 'Hereford';
-        }
-
-        if (str_contains($normalized, 'bra')) {
-            return 'Brangus';
-        }
-
-        return ucfirst($raw);
+        return ucfirst(mb_strtolower($cleaned));
     }
 }

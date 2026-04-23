@@ -16,6 +16,7 @@ use App\Core\Interfaces\IBatchRepository;
 use App\Core\Entities\BatchEntity;
 use App\Core\Services\WorkdayCodeGenerator;
 use App\Core\Interfaces\IBreedRepository;
+use App\Core\Services\BreedMatcherService;
 
 final class ImportCaravansUseCase
 {
@@ -24,7 +25,8 @@ final class ImportCaravansUseCase
         private readonly IWorkdayRepository $workdayRepository,
         private readonly IBatchRepository $batchRepository,
         private readonly WorkdayCodeGenerator $workdayCodeGenerator,
-        private readonly IBreedRepository $breedRepository
+        private readonly IBreedRepository $breedRepository,
+        private readonly BreedMatcherService $breedMatcher
     ) {
     }
 
@@ -77,12 +79,8 @@ final class ImportCaravansUseCase
             }
         }
 
-        // Cargar todas las razas en memoria (Caché Anti N+1)
+        // Cargar todas las razas en memoria
         $allBreeds = $this->breedRepository->getAll();
-        $breedsCache = [];
-        foreach ($allBreeds as $breedEntity) {
-            $breedsCache[mb_strtolower($breedEntity->getName())] = $breedEntity->getId();
-        }
 
         foreach ($dto->rows as $index => $row) {
             try {
@@ -129,14 +127,16 @@ final class ImportCaravansUseCase
                     if (isset($row['breed']) && (string)$row['breed'] !== '') {
                         $parsedBreed = CaravanValueParser::parseBreed((string)$row['breed']);
                         if ($parsedBreed !== null) {
-                            $breed = $parsedBreed;
-                            $lowerBreed = mb_strtolower($parsedBreed);
-                            if (isset($breedsCache[$lowerBreed])) {
-                                $breedId = $breedsCache[$lowerBreed];
+                            $matchedBreed = $this->breedMatcher->findBestMatch($parsedBreed, $allBreeds);
+                            
+                            if ($matchedBreed !== null) {
+                                $breedId = $matchedBreed->getId();
+                                $breed = $matchedBreed->getName();
                             } else {
                                 $newBreed = $this->breedRepository->findByNameOrCreate($parsedBreed);
                                 $breedId = $newBreed->getId();
-                                $breedsCache[$lowerBreed] = $breedId;
+                                $breed = $newBreed->getName();
+                                $allBreeds[] = $newBreed;
                             }
                         }
                     }
@@ -175,14 +175,16 @@ final class ImportCaravansUseCase
                 if (isset($row['breed']) && $row['breed'] !== '') {
                     $parsedBreed = CaravanValueParser::parseBreed((string) $row['breed']);
                     if ($parsedBreed !== null) {
-                        $breed = $parsedBreed;
-                        $lowerBreed = mb_strtolower($parsedBreed);
-                        if (isset($breedsCache[$lowerBreed])) {
-                            $breedId = $breedsCache[$lowerBreed];
+                        $matchedBreed = $this->breedMatcher->findBestMatch($parsedBreed, $allBreeds);
+                        
+                        if ($matchedBreed !== null) {
+                            $breedId = $matchedBreed->getId();
+                            $breed = $matchedBreed->getName();
                         } else {
                             $newBreed = $this->breedRepository->findByNameOrCreate($parsedBreed);
                             $breedId = $newBreed->getId();
-                            $breedsCache[$lowerBreed] = $breedId;
+                            $breed = $newBreed->getName();
+                            $allBreeds[] = $newBreed;
                         }
                     }
                 }

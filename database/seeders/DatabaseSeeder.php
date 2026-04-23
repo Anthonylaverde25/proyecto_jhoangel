@@ -25,6 +25,8 @@ class DatabaseSeeder extends Seeder
         $this->call([
             CaravanFieldMappingSeeder::class,
             LivestockHierarchySeeder::class,
+            BreedSeeder::class,
+
 
         ]);
     }
