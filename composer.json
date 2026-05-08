@@ -10,7 +10,8 @@
         "google/cloud-document-ai": "^2.6",
         "laravel/framework": "^13.0",
         "laravel/sanctum": "^4.0",
-        "laravel/tinker": "^3.0"
+        "laravel/tinker": "^3.0",
+        "stancl/tenancy": "^3.10"
     },
     "require-dev": {
         "beyondcode/laravel-er-diagram-generator": "^6.0",

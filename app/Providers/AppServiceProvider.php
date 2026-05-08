@@ -23,12 +23,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->singleton(\App\Core\Interfaces\ICompanyContext::class, \App\Core\Contexts\CompanyContext::class);
         $this->app->bind(ICaravanRepository::class, EloquentCaravanRepository::class);
         $this->app->bind(IFieldMappingResolver::class, EloquentFieldMappingResolver::class);
         $this->app->bind(IWorkdayRepository::class, EloquentWorkdayRepository::class);
         $this->app->bind(IProviderRepository::class, EloquentProviderRepository::class);
         $this->app->bind(IFarmRepository::class, EloquentFarmRepository::class);
         $this->app->bind(IBatchRepository::class, EloquentBatchRepository::class);
+        $this->app->bind(\App\Core\Interfaces\ICompanyRepository::class, \App\Infrastructure\Persistence\EloquentCompanyRepository::class);
         $this->app->bind(\App\Core\Interfaces\IBreedRepository::class, \App\Infrastructure\Persistence\EloquentBreedRepository::class);
         $this->app->bind(\App\Core\Interfaces\IOCRProvider::class, function ($app) {
             $driver = config('services.ocr.driver');

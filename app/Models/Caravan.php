@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
 use App\Core\Enums\AnimalCategory;
 
 class Caravan extends Model
 {
+    use BelongsToCompany;
+
     /**
      * @var string[]
      */
     protected $fillable = [
+        'company_id',
         'batch_id',
         'identification',
         'category',

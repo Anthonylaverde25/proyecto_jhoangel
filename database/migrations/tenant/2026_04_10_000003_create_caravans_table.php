@@ -16,6 +16,7 @@ return new class extends Migration
     {
         Schema::create('caravans', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('company_id')->constrained('companies')->onDelete('cascade');
             
             // Identificación única (Número de Caravana)
             $table->unsignedInteger('identification')->unique();

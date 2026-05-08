@@ -11,20 +11,33 @@ use App\Http\Controllers\Api\ImportCaravansController;
 use App\Http\Controllers\Api\ProviderController;
 use App\Http\Controllers\Api\FarmController;
 use App\Http\Controllers\Api\BatchController;
+use App\Http\Controllers\Api\AuthController;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/analyze-table', AnalysisController::class);
-Route::match(['get', 'post'], '/test/azure-layout', DocumentAnalysisController::class);
-Route::post('/caravans/import', ImportCaravansController::class);
-Route::get('/caravans', [CaravanController::class, 'index']);
-Route::post('/caravans/upsert', [CaravanController::class, 'upsert']);
+use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
+use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 
-Route::get('/field-mappings/{model}', [FieldMappingController::class, 'index']);
-Route::post('/field-mappings/learn', [FieldMappingController::class, 'learn']);
+Route::middleware([
+    InitializeTenancyByDomain::class,
+    PreventAccessFromCentralDomains::class,
+])->group(function () {
+    
+    Route::post('/login', [AuthController::class, 'login']);
+    Route::middleware('auth:sanctum')->get('/me', [AuthController::class, 'me']);
 
-// Jerarquía de Lotes
-Route::apiResource('providers', ProviderController::class)->only(['index', 'store']);
-Route::apiResource('farms', FarmController::class)->only(['index', 'store']);
-Route::apiResource('batches', BatchController::class)->only(['index', 'store']);
+    Route::post('/analyze-table', AnalysisController::class);
+    Route::match(['get', 'post'], '/test/azure-layout', DocumentAnalysisController::class);
+    Route::post('/caravans/import', ImportCaravansController::class);
+    Route::get('/caravans', [CaravanController::class, 'index']);
+    Route::post('/caravans/upsert', [CaravanController::class, 'upsert']);
 
-Route::get('/breeds', [BreedController::class, 'index']);
+    Route::get('/field-mappings/{model}', [FieldMappingController::class, 'index']);
+    Route::post('/field-mappings/learn', [FieldMappingController::class, 'learn']);
+
+    // Jerarquía de Lotes
+    Route::apiResource('providers', ProviderController::class)->only(['index', 'store']);
+    Route::apiResource('farms', FarmController::class)->only(['index', 'store']);
+    Route::apiResource('batches', BatchController::class)->only(['index', 'store']);
+
+    Route::get('/breeds', [BreedController::class, 'index']);
+});

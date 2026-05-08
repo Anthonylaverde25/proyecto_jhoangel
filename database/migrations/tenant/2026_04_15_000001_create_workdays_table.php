@@ -13,12 +13,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('batches', function (Blueprint $table) {
+        Schema::create('workdays', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->foreignId('farm_id')->constrained('farms')->onDelete('restrict');
-            $table->text('observaciones')->nullable();
-            $table->boolean('is_active')->default(true);
+            $table->foreignId('company_id')->constrained('companies')->onDelete('cascade');
+            $table->string('code')->unique(); // e.g. WD-20260415-001
+            $table->enum('type', ['entry', 'update', 'exit']);
+            $table->date('work_date');
             $table->timestamps();
         });
     }
@@ -28,6 +28,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('batches');
+        Schema::dropIfExists('workdays');
     }
 };

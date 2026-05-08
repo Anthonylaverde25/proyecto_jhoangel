@@ -75,6 +75,7 @@ class LivestockHierarchySeeder extends Seeder
             foreach ($farmIds as $farmId) {
                 DB::table('batches')->insert([
                     [
+                        'company_id' => 1,
                         'name' => 'Lote Invierno - ' . $farmId,
                         'farm_id' => $farmId,
                         'observaciones' => 'Lote destinado a invernada.',
@@ -83,6 +84,7 @@ class LivestockHierarchySeeder extends Seeder
                         'updated_at' => now(),
                     ],
                     [
+                        'company_id' => 1,
                         'name' => 'Lote Recría - ' . $farmId,
                         'farm_id' => $farmId,
                         'observaciones' => 'Animales en fase de recría.',
