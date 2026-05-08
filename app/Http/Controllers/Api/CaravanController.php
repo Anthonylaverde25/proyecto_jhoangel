@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Http\Resources\CaravanResource;
+use App\Http\Resources\CaravanMovementResource;
 
 class CaravanController extends Controller
 {
@@ -64,5 +65,17 @@ class CaravanController extends Controller
             'action' => $result->action,
             'id'     => $result->id,
         ], $result->action === 'created' ? 201 : 200);
+    }
+
+    /**
+     * Obtiene el historial de movimientos de una caravana.
+     */
+    public function movements(int $id): JsonResponse
+    {
+        $entities = $this->caravan->movements->execute($id);
+
+        return response()->json(
+            CaravanMovementResource::collection($entities)
+        );
     }
 }

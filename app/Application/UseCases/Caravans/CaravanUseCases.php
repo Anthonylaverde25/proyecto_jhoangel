@@ -10,6 +10,7 @@ final class CaravanUseCases
         public readonly ListCaravansUseCase $list,
         public readonly UpsertCaravanUseCase $upsert,
         public readonly ImportCaravansUseCase $import,
+        public readonly ListCaravanMovementsUseCase $movements,
     ) {
     }
 }

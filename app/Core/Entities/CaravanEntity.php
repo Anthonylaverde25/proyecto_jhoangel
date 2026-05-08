@@ -23,6 +23,7 @@ final class CaravanEntity
         private ?\DateTimeInterface $entryDate = null,
         private ?\DateTimeInterface $createdAt = null,
         private ?int $batchId = null,
+        private ?int $companyId = null,
     ) {
         $this->validateTeeth($teeth);
     }
@@ -45,6 +46,11 @@ final class CaravanEntity
     public function getBatchId(): ?int
     {
         return $this->batchId;
+    }
+
+    public function getCompanyId(): ?int
+    {
+        return $this->companyId;
     }
 
     public function getIdentification(): CaravanNumber

@@ -12,4 +12,6 @@ interface ICompanyRepository
      * @return CompanyEntity[]
      */
     public function getForUser(int $userId): array;
+
+    public function findById(int $id): ?CompanyEntity;
 }

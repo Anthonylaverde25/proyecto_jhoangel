@@ -15,11 +15,13 @@ interface ICaravanRepository
      */
     public function save(CaravanEntity $caravan): CaravanEntity;
 
+    public function findByIdentification(CaravanNumber $identification): ?CaravanEntity;
+
     /**
      * @param CaravanNumber $identification
      * @return CaravanEntity|null
      */
-    public function findByIdentification(CaravanNumber $identification): ?CaravanEntity;
+    public function findByIdentificationGlobal(CaravanNumber $identification): ?CaravanEntity;
 
     /**
      * @param int $id

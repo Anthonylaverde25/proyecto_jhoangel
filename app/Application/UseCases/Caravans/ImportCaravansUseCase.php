@@ -17,6 +17,8 @@ use App\Core\Entities\BatchEntity;
 use App\Core\Services\WorkdayCodeGenerator;
 use App\Core\Interfaces\IBreedRepository;
 use App\Core\Services\BreedMatcherService;
+use App\Core\Interfaces\ICompanyContext;
+use App\Core\Services\CaravanTraceabilityService;
 
 final class ImportCaravansUseCase
 {
@@ -26,7 +28,9 @@ final class ImportCaravansUseCase
         private readonly IBatchRepository $batchRepository,
         private readonly WorkdayCodeGenerator $workdayCodeGenerator,
         private readonly IBreedRepository $breedRepository,
-        private readonly BreedMatcherService $breedMatcher
+        private readonly BreedMatcherService $breedMatcher,
+        private readonly ICompanyContext $companyContext,
+        private readonly CaravanTraceabilityService $traceabilityService
     ) {
     }
 
@@ -43,6 +47,7 @@ final class ImportCaravansUseCase
         $skipped = 0;
         $errors = [];
         $processedCaravanIds = [];
+        $activeCompanyId = $this->companyContext->getCompanyId();
 
         // Generar la jornada (Workday) real
         $workType = WorkType::from($dto->workType);
@@ -99,63 +104,12 @@ final class ImportCaravansUseCase
                 }
 
                 $identification = new CaravanNumber($identificationRaw);
+                
+                // 1. Intentar encontrar en la compañía actual
                 $existingEntity = $this->repository->findByIdentification($identification);
 
                 if ($existingEntity !== null) {
-                    $category = $existingEntity->getCategory();
-                    if (isset($row['category']) && (string)$row['category'] !== '') {
-                        $category = CaravanValueParser::parseCategory((string)$row['category']) ?? $category;
-                    }
-
-                    $teeth = $existingEntity->getTeeth();
-                    if (isset($row['teeth']) && (string)$row['teeth'] !== '') {
-                        $teeth = CaravanValueParser::parseTeeth((string)$row['teeth']);
-                    }
-
-                    $entryWeight = $existingEntity->getEntryWeight();
-                    if (isset($row['entry_weight']) && (string)$row['entry_weight'] !== '') {
-                        $entryWeight = CaravanValueParser::parseWeight((string)$row['entry_weight']) ?? $entryWeight;
-                    }
-
-                    $exitWeight = $existingEntity->getExitWeight();
-                    if (isset($row['exit_weight']) && (string)$row['exit_weight'] !== '') {
-                        $exitWeight = CaravanValueParser::parseWeight((string)$row['exit_weight']) ?? $exitWeight;
-                    }
-
-                    $breed = $existingEntity->getBreed();
-                    $breedId = $existingEntity->getBreedId();
-                    if (isset($row['breed']) && (string)$row['breed'] !== '') {
-                        $parsedBreed = CaravanValueParser::parseBreed((string)$row['breed']);
-                        if ($parsedBreed !== null) {
-                            $matchedBreed = $this->breedMatcher->findBestMatch($parsedBreed, $allBreeds);
-                            
-                            if ($matchedBreed !== null) {
-                                $breedId = $matchedBreed->getId();
-                                $breed = $matchedBreed->getName();
-                            } else {
-                                $newBreed = $this->breedRepository->findByNameOrCreate($parsedBreed);
-                                $breedId = $newBreed->getId();
-                                $breed = $newBreed->getName();
-                                $allBreeds[] = $newBreed;
-                            }
-                        }
-                    }
-
-                    $sex = $existingEntity->getSex();
-                    if (isset($row['sex']) && (string)$row['sex'] !== '') {
-                        $sex = CaravanValueParser::parseSex((string)$row['sex'], $category);
-                    }
-
-                    $entryDate = $existingEntity->getEntryDate();
-                    if (isset($row['entry_date']) && (string)$row['entry_date'] !== '') {
-                        $parsedDate = CaravanValueParser::parseDate((string)$row['entry_date']);
-                        if ($parsedDate) {
-                            $entryDate = new \DateTime($parsedDate);
-                        }
-                    }
-
-                    $existingEntity->updateDetails($category, $teeth, $entryWeight, $exitWeight, $breed, $sex, $entryDate, $batchId, $breedId);
-                    $this->repository->save($existingEntity);
+                    $this->updateCaravan($existingEntity, $row, $allBreeds, $batchId);
                     $imported++;
                     if ($existingEntity->getId()) {
                         $processedCaravanIds[] = $existingEntity->getId();
@@ -163,6 +117,43 @@ final class ImportCaravansUseCase
                     continue;
                 }
 
+                // 2. Intentar encontrar GLOBALMENTE (Transferencia)
+                $globalEntity = $this->repository->findByIdentificationGlobal($identification);
+                if ($globalEntity !== null) {
+                    $oldCompanyId = $globalEntity->getCompanyId();
+                    
+                    // Crear nueva instancia de entidad para la nueva compañía (Transferencia)
+                    $transferEntity = new CaravanEntity(
+                        $globalEntity->getId(),
+                        $globalEntity->getIdentification(),
+                        $globalEntity->getCategory(),
+                        $globalEntity->getTeeth(),
+                        $globalEntity->getEntryWeight(),
+                        $globalEntity->getExitWeight(),
+                        $globalEntity->getBreed(),
+                        $globalEntity->getBreedId(),
+                        $globalEntity->getSex(),
+                        $globalEntity->getEntryDate(),
+                        null,
+                        $batchId,
+                        $activeCompanyId
+                    );
+
+                    $this->updateCaravan($transferEntity, $row, $allBreeds, $batchId);
+                    $savedTransfer = $this->repository->save($transferEntity);
+                    
+                    if ($oldCompanyId && $activeCompanyId) {
+                        $this->traceabilityService->recordTransfer($savedTransfer, $oldCompanyId, $activeCompanyId);
+                    }
+
+                    $imported++;
+                    if ($savedTransfer->getId()) {
+                        $processedCaravanIds[] = $savedTransfer->getId();
+                    }
+                    continue;
+                }
+
+                // 3. Crear Nueva (Arrival)
                 $category = isset($row['category']) && $row['category'] !== ''
                     ? CaravanValueParser::parseCategory((string) $row['category'])
                     : null;
@@ -170,24 +161,10 @@ final class ImportCaravansUseCase
                 $entryWeight = isset($row['entry_weight']) && $row['entry_weight'] !== ''
                     ? CaravanValueParser::parseWeight((string) $row['entry_weight'])
                     : null;
-                $breed = null;
-                $breedId = null;
-                if (isset($row['breed']) && $row['breed'] !== '') {
-                    $parsedBreed = CaravanValueParser::parseBreed((string) $row['breed']);
-                    if ($parsedBreed !== null) {
-                        $matchedBreed = $this->breedMatcher->findBestMatch($parsedBreed, $allBreeds);
-                        
-                        if ($matchedBreed !== null) {
-                            $breedId = $matchedBreed->getId();
-                            $breed = $matchedBreed->getName();
-                        } else {
-                            $newBreed = $this->breedRepository->findByNameOrCreate($parsedBreed);
-                            $breedId = $newBreed->getId();
-                            $breed = $newBreed->getName();
-                            $allBreeds[] = $newBreed;
-                        }
-                    }
-                }
+                
+                $breedData = $this->resolveBreed($row, $allBreeds);
+                $breed = $breedData['name'];
+                $breedId = $breedData['id'];
                 
                 $sexRaw = $row['sex'] ?? '';
                 $sex = CaravanValueParser::parseSex((string) $sexRaw, $category);
@@ -217,9 +194,16 @@ final class ImportCaravansUseCase
                     entryDate: $entryDate,
                     createdAt: null,
                     batchId: $batchId,
+                    companyId: $activeCompanyId
                 );
 
                 $savedEntity = $this->repository->save($entity);
+                
+                // Trazabilidad inicial
+                if ($activeCompanyId) {
+                    $this->traceabilityService->recordInitialArrival($savedEntity, $activeCompanyId);
+                }
+
                 $imported++;
                 if ($savedEntity->getId()) {
                     $processedCaravanIds[] = $savedEntity->getId();
@@ -243,5 +227,77 @@ final class ImportCaravansUseCase
             'errors' => $errors,
             'workday_code' => $savedWorkday->getCode(),
         ];
+    }
+
+    private function updateCaravan(CaravanEntity $entity, array $row, array &$allBreeds, ?int $batchId): void
+    {
+        $category = $entity->getCategory();
+        if (isset($row['category']) && (string)$row['category'] !== '') {
+            $category = CaravanValueParser::parseCategory((string)$row['category']) ?? $category;
+        }
+
+        $teeth = $entity->getTeeth();
+        if (isset($row['teeth']) && (string)$row['teeth'] !== '') {
+            $teeth = CaravanValueParser::parseTeeth((string)$row['teeth']);
+        }
+
+        $entryWeight = $entity->getEntryWeight();
+        if (isset($row['entry_weight']) && (string)$row['entry_weight'] !== '') {
+            $entryWeight = CaravanValueParser::parseWeight((string)$row['entry_weight']) ?? $entryWeight;
+        }
+
+        $exitWeight = $entity->getExitWeight();
+        if (isset($row['exit_weight']) && (string)$row['exit_weight'] !== '') {
+            $exitWeight = CaravanValueParser::parseWeight((string)$row['exit_weight']) ?? $exitWeight;
+        }
+
+        $breed = $entity->getBreed();
+        $breedId = $entity->getBreedId();
+        $breedData = $this->resolveBreed($row, $allBreeds);
+        if ($breedData['name']) {
+            $breed = $breedData['name'];
+            $breedId = $breedData['id'];
+        }
+
+        $sex = $entity->getSex();
+        if (isset($row['sex']) && (string)$row['sex'] !== '') {
+            $sex = CaravanValueParser::parseSex((string)$row['sex'], $category);
+        }
+
+        $entryDate = $entity->getEntryDate();
+        if (isset($row['entry_date']) && (string)$row['entry_date'] !== '') {
+            $parsedDate = CaravanValueParser::parseDate((string)$row['entry_date']);
+            if ($parsedDate) {
+                $entryDate = new \DateTime($parsedDate);
+            }
+        }
+
+        $entity->updateDetails($category, $teeth, $entryWeight, $exitWeight, $breed, $sex, $entryDate, $batchId, $breedId);
+        $this->repository->save($entity);
+    }
+
+    private function resolveBreed(array $row, array &$allBreeds): array
+    {
+        $breed = null;
+        $breedId = null;
+        
+        if (isset($row['breed']) && $row['breed'] !== '') {
+            $parsedBreed = CaravanValueParser::parseBreed((string) $row['breed']);
+            if ($parsedBreed !== null) {
+                $matchedBreed = $this->breedMatcher->findBestMatch($parsedBreed, $allBreeds);
+                
+                if ($matchedBreed !== null) {
+                    $breedId = $matchedBreed->getId();
+                    $breed = $matchedBreed->getName();
+                } else {
+                    $newBreed = $this->breedRepository->findByNameOrCreate($parsedBreed);
+                    $breedId = $newBreed->getId();
+                    $breed = $newBreed->getName();
+                    $allBreeds[] = $newBreed;
+                }
+            }
+        }
+
+        return ['id' => $breedId, 'name' => $breed];
     }
 }

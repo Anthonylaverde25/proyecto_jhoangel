@@ -28,6 +28,15 @@ class EloquentCaravanRepository implements ICaravanRepository
         return $model ? CaravanMapper::toEntity($model) : null;
     }
 
+    public function findByIdentificationGlobal(CaravanNumber $identification): ?CaravanEntity
+    {
+        $model = Caravan::withoutGlobalScopes()
+            ->where('identification', $identification->getValue())
+            ->first();
+        
+        return $model ? CaravanMapper::toEntity($model) : null;
+    }
+
     public function findById(int $id): ?CaravanEntity
     {
         $model = Caravan::find($id);

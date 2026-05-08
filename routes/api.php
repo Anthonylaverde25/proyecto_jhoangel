@@ -30,6 +30,7 @@ Route::middleware([
     Route::post('/caravans/import', ImportCaravansController::class);
     Route::get('/caravans', [CaravanController::class, 'index']);
     Route::post('/caravans/upsert', [CaravanController::class, 'upsert']);
+    Route::get('/caravans/{id}/movements', [CaravanController::class, 'movements']);
 
     Route::get('/field-mappings/{model}', [FieldMappingController::class, 'index']);
     Route::post('/field-mappings/learn', [FieldMappingController::class, 'learn']);
