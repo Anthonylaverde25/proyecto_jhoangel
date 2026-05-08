@@ -31,6 +31,18 @@ class ProviderController extends Controller
     }
 
     /**
+     * Obtiene un proveedor específico.
+     */
+    public function show(int $id): JsonResponse
+    {
+        $entity = ($this->provider->find)($id);
+        
+        return response()->json(
+            new ProviderResource($entity)
+        );
+    }
+
+    /**
      * Crea un nuevo proveedor.
      */
     public function store(Request $request): JsonResponse

@@ -9,6 +9,7 @@ final class FarmUseCases
     public function __construct(
         public readonly ListFarmsUseCase $list,
         public readonly CreateFarmUseCase $create,
+        public readonly FindFarmUseCase $find,
     ) {
     }
 }

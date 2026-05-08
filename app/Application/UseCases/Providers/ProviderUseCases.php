@@ -9,6 +9,7 @@ final class ProviderUseCases
     public function __construct(
         public readonly ListProvidersUseCase $list,
         public readonly CreateProviderUseCase $create,
+        public readonly FindProviderUseCase $find,
     ) {
     }
 }

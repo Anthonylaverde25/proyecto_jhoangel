@@ -37,8 +37,8 @@ Route::middleware([
     Route::post('/field-mappings/learn', [FieldMappingController::class, 'learn']);
 
     // Jerarquía de Lotes
-    Route::apiResource('providers', ProviderController::class)->only(['index', 'store']);
-    Route::apiResource('farms', FarmController::class)->only(['index', 'store']);
+    Route::apiResource('providers', ProviderController::class)->only(['index', 'store', 'show']);
+    Route::apiResource('farms', FarmController::class)->only(['index', 'store', 'show']);
     Route::apiResource('batches', BatchController::class)->only(['index', 'store']);
 
     Route::get('/breeds', [BreedController::class, 'index']);

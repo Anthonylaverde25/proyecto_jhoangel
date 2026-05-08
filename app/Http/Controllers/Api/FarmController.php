@@ -32,6 +32,18 @@ class FarmController extends Controller
     }
 
     /**
+     * Obtiene una granja específica.
+     */
+    public function show(int $id): JsonResponse
+    {
+        $entity = ($this->farm->find)($id);
+        
+        return response()->json(
+            new FarmResource($entity)
+        );
+    }
+
+    /**
      * Crea una nueva granja vinculada a un proveedor.
      */
     public function store(Request $request): JsonResponse
