@@ -4,16 +4,20 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CaravanMovement extends Model
 {
+    use BelongsToCompany;
+
     /**
      * @var string[]
      */
     protected $fillable = [
         'caravan_id',
+        'company_id',
         'renspa',
         'type',
         'movement_date',
@@ -26,6 +30,7 @@ class CaravanMovement extends Model
     protected $casts = [
         'movement_date' => 'datetime',
         'caravan_id' => 'integer',
+        'company_id' => 'integer',
     ];
 
     public function caravan(): BelongsTo

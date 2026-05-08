@@ -22,6 +22,7 @@ final class RecordCaravanMovementUseCase
         $movement = new CaravanMovementEntity(
             null,
             $caravanId,
+            null, // El company_id se autocompleta vía trait en la persistencia
             $renspa,
             $type,
             new \DateTime(),

@@ -15,4 +15,10 @@ interface ICaravanMovementRepository
      * @return CaravanMovementEntity[]
      */
     public function findByCaravanId(int $caravanId): array;
+
+    /**
+     * @param int $limit
+     * @return CaravanMovementEntity[]
+     */
+    public function findAll(int $limit = 100): array;
 }

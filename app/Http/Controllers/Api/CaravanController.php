@@ -78,4 +78,16 @@ class CaravanController extends Controller
             CaravanMovementResource::collection($entities)
         );
     }
+
+    /**
+     * Obtiene todos los movimientos recientes del sistema (auditoría global).
+     */
+    public function allMovements(): JsonResponse
+    {
+        $entities = $this->caravan->movements->execute();
+
+        return response()->json(
+            CaravanMovementResource::collection($entities)
+        );
+    }
 }

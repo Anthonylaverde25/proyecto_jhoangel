@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('caravan_movements', function (Blueprint $table) {
             $table->id();
             $table->foreignId('caravan_id')->constrained()->onDelete('cascade');
+            $table->foreignId('company_id')->constrained()->onDelete('cascade');
             $table->string('renspa');
             $table->enum('type', ['ORIGIN', 'ENTRY', 'EXIT', 'TRANSFER'])->default('ENTRY');
             $table->dateTime('movement_date');
@@ -21,7 +22,7 @@ return new class extends Migration
             $table->timestamps();
 
             // Index for performance
-            $table->index(['caravan_id', 'movement_date']);
+            $table->index(['company_id', 'caravan_id', 'movement_date']);
         });
     }
 

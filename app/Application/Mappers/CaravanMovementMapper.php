@@ -14,10 +14,12 @@ class CaravanMovementMapper
         return new CaravanMovementEntity(
             $model->id,
             (int) $model->caravan_id,
+            (int) $model->company_id,
             (string) $model->renspa,
             (string) $model->type,
             $model->movement_date,
-            $model->observations
+            $model->observations,
+            $model->caravan ? (string) $model->caravan->identification : null
         );
     }
 
@@ -28,6 +30,7 @@ class CaravanMovementMapper
         }
 
         $model->caravan_id = $entity->getCaravanId();
+        $model->company_id = $entity->getCompanyId();
         $model->renspa = $entity->getRenspa();
         $model->type = $entity->getType();
         $model->movement_date = $entity->getMovementDate();
