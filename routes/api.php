@@ -29,7 +29,8 @@ Route::middleware([
     Route::match(['get', 'post'], '/test/azure-layout', DocumentAnalysisController::class);
     Route::post('/caravans/import', ImportCaravansController::class);
     Route::get('/caravans', [CaravanController::class, 'index']);
-    Route::post('/caravans/upsert', [CaravanController::class, 'upsert']);
+    Route::post('/caravans', [CaravanController::class, 'upsert']);
+    Route::post('/caravans/bulk', [CaravanController::class, 'bulkStore']);
     Route::get('/caravans/movements', [CaravanController::class, 'allMovements']);
     Route::get('/caravans/{id}/movements', [CaravanController::class, 'movements']);
 
@@ -39,7 +40,7 @@ Route::middleware([
     // Jerarquía de Lotes
     Route::apiResource('providers', ProviderController::class)->only(['index', 'store', 'show']);
     Route::apiResource('farms', FarmController::class)->only(['index', 'store', 'show']);
-    Route::apiResource('batches', BatchController::class)->only(['index', 'store']);
+    Route::apiResource('batches', BatchController::class)->only(['index', 'store', 'show']);
 
     Route::get('/breeds', [BreedController::class, 'index']);
 });

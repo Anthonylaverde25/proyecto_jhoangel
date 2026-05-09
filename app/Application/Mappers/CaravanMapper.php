@@ -23,7 +23,7 @@ class CaravanMapper
             (int) $model->teeth,
             $model->entry_weight ? (float) $model->entry_weight : null,
             $model->exit_weight ? (float) $model->exit_weight : null,
-            $model->breed,
+            $model->relationLoaded('breedRelation') && $model->breedRelation ? $model->breedRelation->name : $model->breed,
             $model->breed_id ? (int) $model->breed_id : null,
             $model->sex,
             $model->entry_date ? (is_string($model->entry_date) ? new \DateTime($model->entry_date) : $model->entry_date) : null,

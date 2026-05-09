@@ -46,6 +46,7 @@ class CaravanController extends Controller
             'breed_id'       => 'nullable|integer|exists:breeds,id',
             'sex'            => 'nullable|string',
             'batch_id'       => 'nullable|integer|exists:batches,id',
+            'farm_id'        => 'nullable|integer|exists:farms,id',
         ]);
 
         $dto = new RegisterCaravanDTO(
@@ -56,7 +57,8 @@ class CaravanController extends Controller
             entryWeight: isset($validated['entry_weight']) ? (float) $validated['entry_weight'] : null,
             breed: $validated['breed'] ?? null,
             breedId: isset($validated['breed_id']) ? (int) $validated['breed_id'] : null,
-            batchId: isset($validated['batch_id']) ? (int) $validated['batch_id'] : null
+            batchId: isset($validated['batch_id']) ? (int) $validated['batch_id'] : null,
+            farmId: isset($validated['farm_id']) ? (int) $validated['farm_id'] : null
         );
 
         $result = ($this->caravan->upsert)($dto);
@@ -89,5 +91,41 @@ class CaravanController extends Controller
         return response()->json(
             CaravanMovementResource::collection($entities)
         );
+    }
+    /**
+     * Registro masivo de caravanas.
+     */
+    public function bulkStore(Request $request): JsonResponse
+    {
+        $request->validate([
+            'caravans' => 'required|array|min:1',
+            'caravans.*.identification' => 'required|string',
+            'caravans.*.category'       => 'nullable|string',
+            'caravans.*.teeth'          => 'required|integer|min:0|max:99',
+            'caravans.*.entry_weight'   => 'nullable|numeric',
+            'caravans.*.breed'          => 'nullable|string',
+            'caravans.*.breed_id'       => 'nullable|integer|exists:breeds,id',
+            'caravans.*.sex'            => 'nullable|string',
+            'caravans.*.batch_id'       => 'nullable|integer|exists:batches,id',
+            'caravans.*.farm_id'        => 'nullable|integer|exists:farms,id',
+        ]);
+
+        $dtos = array_map(function ($data) {
+            return new RegisterCaravanDTO(
+                identification: $data['identification'],
+                sex: $data['sex'] ?? null,
+                category: $data['category'] ?? null,
+                teeth: (int) $data['teeth'],
+                entryWeight: isset($data['entry_weight']) ? (float) $data['entry_weight'] : null,
+                breed: $data['breed'] ?? null,
+                breedId: isset($data['breed_id']) ? (int) $data['breed_id'] : null,
+                batchId: isset($data['batch_id']) ? (int) $data['batch_id'] : null,
+                farmId: isset($data['farm_id']) ? (int) $data['farm_id'] : null
+            );
+        }, $request->input('caravans'));
+
+        ($this->caravan->bulk)($dtos);
+
+        return response()->json(['message' => 'Caravanas procesadas correctamente'], 201);
     }
 }

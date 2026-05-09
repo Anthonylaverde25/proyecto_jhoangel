@@ -19,19 +19,25 @@ final class CaravanTraceabilityService
         private readonly RecordCaravanMovementUseCase $recordMovement
     ) {}
 
-    public function recordInitialArrival(CaravanEntity $caravan, int $activeCompanyId): void
+    public function recordInitialArrival(CaravanEntity $caravan, int $activeCompanyId, ?int $farmId = null): void
     {
         $caravanId = $caravan->getId();
         if (!$caravanId) return;
 
         // 1. Trazabilidad: Origen (Farm)
-        if ($caravan->getBatchId()) {
+        $targetFarmId = $farmId;
+
+        if (!$targetFarmId && $caravan->getBatchId()) {
             $batch = $this->batchRepository->findById($caravan->getBatchId());
-            if ($batch && $batch->getFarmId()) {
-                $farm = $this->farmRepository->findById($batch->getFarmId());
-                if ($farm && $farm->getRenspa()) {
-                    $this->recordMovement->execute($caravanId, $farm->getRenspa(), 'ORIGIN', "Ingreso inicial desde Farm: {$farm->getName()}");
-                }
+            if ($batch) {
+                $targetFarmId = $batch->getFarmId();
+            }
+        }
+
+        if ($targetFarmId) {
+            $farm = $this->farmRepository->findById($targetFarmId);
+            if ($farm && $farm->getRenspa()) {
+                $this->recordMovement->execute($caravanId, $farm->getRenspa(), 'ORIGIN', "Ingreso inicial desde Farm: {$farm->getName()}");
             }
         }
 

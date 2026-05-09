@@ -18,12 +18,14 @@ class EloquentCaravanRepository implements ICaravanRepository
         $model = CaravanMapper::toModel($caravan, $model);
         $model->save();
 
-        return CaravanMapper::toEntity($model);
+        return CaravanMapper::toEntity($model->load('breedRelation'));
     }
 
     public function findByIdentification(CaravanNumber $identification): ?CaravanEntity
     {
-        $model = Caravan::where('identification', $identification->getValue())->first();
+        $model = Caravan::with('breedRelation')
+            ->where('identification', $identification->getValue())
+            ->first();
         
         return $model ? CaravanMapper::toEntity($model) : null;
     }
@@ -31,6 +33,7 @@ class EloquentCaravanRepository implements ICaravanRepository
     public function findByIdentificationGlobal(CaravanNumber $identification): ?CaravanEntity
     {
         $model = Caravan::withoutGlobalScopes()
+            ->with('breedRelation')
             ->where('identification', $identification->getValue())
             ->first();
         
@@ -39,14 +42,15 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function findById(int $id): ?CaravanEntity
     {
-        $model = Caravan::find($id);
+        $model = Caravan::with('breedRelation')->find($id);
         
         return $model ? CaravanMapper::toEntity($model) : null;
     }
 
     public function findAll(): array
     {
-        return Caravan::all()
+        return Caravan::with('breedRelation')
+            ->get()
             ->map(fn (Caravan $model) => CaravanMapper::toEntity($model))
             ->toArray();
     }

@@ -50,4 +50,18 @@ class BatchController extends Controller
             201
         );
     }
+
+    /**
+     * Obtiene un lote específico por su ID.
+     */
+    public function show(int $id): JsonResponse
+    {
+        $entity = ($this->batch->find)($id);
+
+        if (!$entity) {
+            return response()->json(['message' => 'Lote no encontrado'], 404);
+        }
+
+        return response()->json(new BatchResource($entity));
+    }
 }

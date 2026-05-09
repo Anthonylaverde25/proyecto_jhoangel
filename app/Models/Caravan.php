@@ -18,6 +18,7 @@ class Caravan extends Model
     protected $fillable = [
         'company_id',
         'batch_id',
+        'breed_id',
         'identification',
         'category',
         'teeth',
@@ -39,6 +40,7 @@ class Caravan extends Model
         'exit_weight' => 'decimal:2',
         'entry_date' => 'date:Y-m-d',
         'batch_id' => 'integer',
+        'breed_id' => 'integer',
     ];
 
     /**
@@ -49,5 +51,15 @@ class Caravan extends Model
     public function batch(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Batch::class);
+    }
+
+    /**
+     * Get the breed associated with the caravan.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function breedRelation(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Breed::class, 'breed_id');
     }
 }

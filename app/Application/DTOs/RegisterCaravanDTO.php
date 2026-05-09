@@ -15,6 +15,7 @@ final readonly class RegisterCaravanDTO
         public ?string $breed = null,
         public ?int $breedId = null,
         public ?int $batchId = null,
+        public ?int $farmId = null,
     ) {
     }
 
@@ -33,6 +34,7 @@ final readonly class RegisterCaravanDTO
             isset($data['breed']) ? (string) $data['breed'] : null,
             isset($data['breed_id']) ? (int) $data['breed_id'] : null,
             isset($data['batch_id']) ? (int) $data['batch_id'] : null,
+            isset($data['farm_id']) ? (int) $data['farm_id'] : null,
         );
     }
 }

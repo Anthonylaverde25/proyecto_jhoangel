@@ -119,7 +119,7 @@ final class UpsertCaravanUseCase
         $savedEntity = $this->caravanRepository->save($newEntity);
 
         // Registrar trazabilidad de llegada inicial
-        $this->traceabilityService->recordInitialArrival($savedEntity, $activeCompanyId);
+        $this->traceabilityService->recordInitialArrival($savedEntity, $activeCompanyId, $dto->farmId);
 
         return new UpsertCaravanResultDTO('created', $savedEntity->getId());
     }

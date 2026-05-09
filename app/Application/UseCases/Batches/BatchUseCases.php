@@ -9,6 +9,7 @@ final class BatchUseCases
     public function __construct(
         public readonly ListBatchesUseCase $list,
         public readonly CreateBatchUseCase $create,
+        public readonly FindBatchUseCase $find,
     ) {
     }
 }

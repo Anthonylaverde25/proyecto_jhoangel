@@ -11,6 +11,7 @@ final class CaravanUseCases
         public readonly UpsertCaravanUseCase $upsert,
         public readonly ImportCaravansUseCase $import,
         public readonly ListCaravanMovementsUseCase $movements,
+        public readonly BulkCreateCaravansUseCase $bulk,
     ) {
     }
 }
