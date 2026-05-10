@@ -17,14 +17,21 @@ class Batch extends Model
         'company_id',
         'name',
         'farm_id',
+        'activity_id',
         'observaciones',
         'is_active',
     ];
 
     protected $casts = [
         'farm_id' => 'integer',
+        'activity_id' => 'integer',
         'is_active' => 'boolean',
     ];
+
+    public function activity(): BelongsTo
+    {
+        return $this->belongsTo(Activity::class);
+    }
 
     public function farm(): BelongsTo
     {

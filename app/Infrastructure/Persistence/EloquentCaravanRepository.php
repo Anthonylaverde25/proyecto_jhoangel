@@ -49,10 +49,8 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function findAll(): array
     {
-        return Caravan::with('breedRelation')
-            ->get()
-            ->map(fn (Caravan $model) => CaravanMapper::toEntity($model))
-            ->toArray();
+        $models = Caravan::with(['breedRelation', 'batch'])->get();
+        return $models->map(fn($model) => CaravanMapper::toEntity($model))->toArray();
     }
 
     public function delete(int $id): bool

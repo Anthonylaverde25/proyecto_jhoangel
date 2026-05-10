@@ -31,6 +31,10 @@ class CaravanResource extends JsonResource
             'breed_id'       => $this->resource->getBreedId(),
             'sex'            => $this->resource->getSex(),
             'entry_date'     => $this->resource->getCreatedAt()?->format('m/Y'),
+            'batch'          => [
+                'id'   => $this->resource->getBatchId(),
+                'name' => $this->resource->getBatchName(),
+            ],
         ];
     }
 }

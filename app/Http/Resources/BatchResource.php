@@ -26,6 +26,8 @@ class BatchResource extends JsonResource
             'provider_id'   => $this->resource->getProviderId(),
             'provider_name' => $this->resource->getProviderName(),
             'observaciones' => $this->resource->getObservaciones(),
+            'activity_id'   => $this->resource->getActivityId(),
+            'activity_name' => $this->resource->getActivityName(),
             'is_active'     => $this->resource->isActive(),
             'created_at'    => $this->resource->getCreatedAt()?->format('Y-m-d H:i:s'),
         ];

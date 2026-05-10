@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\ProviderController;
 use App\Http\Controllers\Api\FarmController;
 use App\Http\Controllers\Api\BatchController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ActivityController;
 use Illuminate\Support\Facades\Route;
 
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -43,4 +44,6 @@ Route::middleware([
     Route::apiResource('batches', BatchController::class)->only(['index', 'store', 'show']);
 
     Route::get('/breeds', [BreedController::class, 'index']);
+    Route::get('/activities', [ActivityController::class, 'index']);
+    Route::patch('/activities/{id}/toggle', [ActivityController::class, 'toggle']);
 });

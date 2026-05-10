@@ -18,6 +18,11 @@ class BatchMapper
             $model->observaciones,
             (bool) $model->is_active,
             $model->created_at,
+            null, // farmName
+            null, // providerId
+            null, // providerName
+            $model->activity_id,
+            $model->activity?->name
         );
 
         if ($model->relationLoaded('farm') && $model->farm) {
@@ -40,6 +45,7 @@ class BatchMapper
 
         $model->name = $entity->getName();
         $model->farm_id = $entity->getFarmId();
+        $model->activity_id = $entity->getActivityId();
         $model->observaciones = $entity->getObservaciones();
         $model->is_active = $entity->isActive();
 

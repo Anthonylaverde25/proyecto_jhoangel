@@ -15,9 +15,22 @@ final class BatchEntity
         private ?\DateTimeInterface $createdAt = null,
         private ?string $farmName = null,
         private ?int $providerId = null,
-        private ?string $providerName = null
+        private ?string $providerName = null,
+        private ?int $activityId = null,
+        private ?string $activityName = null
     ) {
     }
+
+    public function getActivityId(): ?int
+    {
+        return $this->activityId;
+    }
+
+    public function getActivityName(): ?string
+    {
+        return $this->activityName;
+    }
+
 
     public function getId(): ?int
     {

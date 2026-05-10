@@ -20,6 +20,7 @@ class TenantDatabaseSeeder extends Seeder
             CaravanFieldMappingSeeder::class,
             LivestockHierarchySeeder::class,
             BreedSeeder::class,
+            ActivitySeeder::class,
         ]);
     }
 }
