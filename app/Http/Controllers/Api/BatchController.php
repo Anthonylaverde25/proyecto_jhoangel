@@ -51,9 +51,6 @@ class BatchController extends Controller
         );
     }
 
-    /**
-     * Obtiene un lote específico por su ID.
-     */
     public function show(int $id): JsonResponse
     {
         $entity = ($this->batch->find)($id);
@@ -61,6 +58,20 @@ class BatchController extends Controller
         if (!$entity) {
             return response()->json(['message' => 'Lote no encontrado'], 404);
         }
+
+        return response()->json(new BatchResource($entity));
+    }
+
+    /**
+     * Cambia la actividad de un lote específico.
+     */
+    public function changeActivity(Request $request, int $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'activity_id' => 'required|integer|exists:activities,id',
+        ]);
+
+        $entity = ($this->batch->changeActivity)($id, (int) $validated['activity_id']);
 
         return response()->json(new BatchResource($entity));
     }

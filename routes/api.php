@@ -42,6 +42,7 @@ Route::middleware([
     Route::apiResource('providers', ProviderController::class)->only(['index', 'store', 'show']);
     Route::apiResource('farms', FarmController::class)->only(['index', 'store', 'show']);
     Route::apiResource('batches', BatchController::class)->only(['index', 'store', 'show']);
+    Route::patch('/batches/{id}/activity', [BatchController::class, 'changeActivity']);
 
     Route::get('/breeds', [BreedController::class, 'index']);
     Route::get('/activities', [ActivityController::class, 'index']);

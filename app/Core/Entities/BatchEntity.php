@@ -113,4 +113,9 @@ final class BatchEntity
     {
         $this->isActive = false;
     }
+
+    public function setActivityId(int $activityId): void
+    {
+        $this->activityId = $activityId;
+    }
 }
