@@ -15,7 +15,7 @@ final class ChangeBatchActivityUseCase
     ) {
     }
 
-    public function __invoke(int $batchId, int $activityId): BatchEntity
+    public function __invoke(int $batchId, int $activityId, ?float $weight = null): BatchEntity
     {
         $batch = $this->repository->findById($batchId);
 
@@ -24,7 +24,12 @@ final class ChangeBatchActivityUseCase
         }
 
         $batch->setActivityId($activityId);
+        $savedBatch = $this->repository->save($batch);
 
-        return $this->repository->save($batch);
+        if ($weight !== null) {
+            $this->repository->addWeight($batchId, $weight, 'TRANSFER', new \DateTimeImmutable(), $activityId);
+        }
+
+        return $savedBatch;
     }
 }

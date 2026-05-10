@@ -8,6 +8,7 @@ use App\Application\DTOs\CreateBatchDTO;
 use App\Application\UseCases\Batches\BatchUseCases;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BatchResource;
+use App\Http\Resources\BatchWeightResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -16,6 +17,16 @@ class BatchController extends Controller
     public function __construct(
         private readonly BatchUseCases $batch
     ) {
+    }
+
+    /**
+     * Lista el historial de pesos de un lote.
+     */
+    public function getWeightHistory(int $id): JsonResponse
+    {
+        $weights = ($this->batch->getWeights)($id);
+
+        return response()->json(BatchWeightResource::collection($weights));
     }
 
     /**
@@ -69,9 +80,12 @@ class BatchController extends Controller
     {
         $validated = $request->validate([
             'activity_id' => 'required|integer|exists:activities,id',
+            'weight' => 'nullable|numeric|min:0',
         ]);
 
-        $entity = ($this->batch->changeActivity)($id, (int) $validated['activity_id']);
+        $weight = isset($validated['weight']) ? (float) $validated['weight'] : null;
+
+        $entity = ($this->batch->changeActivity)($id, (int) $validated['activity_id'], $weight);
 
         return response()->json(new BatchResource($entity));
     }

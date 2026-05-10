@@ -43,6 +43,7 @@ Route::middleware([
     Route::apiResource('farms', FarmController::class)->only(['index', 'store', 'show']);
     Route::apiResource('batches', BatchController::class)->only(['index', 'store', 'show']);
     Route::patch('/batches/{id}/activity', [BatchController::class, 'changeActivity']);
+    Route::get('/batches/{id}/weights', [BatchController::class, 'getWeightHistory']);
 
     Route::get('/breeds', [BreedController::class, 'index']);
     Route::get('/activities', [ActivityController::class, 'index']);

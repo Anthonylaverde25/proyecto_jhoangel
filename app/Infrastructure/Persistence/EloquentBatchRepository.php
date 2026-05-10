@@ -54,4 +54,25 @@ class EloquentBatchRepository implements IBatchRepository
     {
         return (bool) Batch::destroy($id);
     }
+
+    public function addWeight(int $batchId, float $weight, string $type, \DateTimeInterface $date, ?int $activityId = null): void
+    {
+        \App\Models\BatchWeight::create([
+            'batch_id' => $batchId,
+            'activity_id' => $activityId,
+            'weight' => $weight,
+            'type' => $type,
+            'weighing_date' => $date->format('Y-m-d'),
+        ]);
+    }
+
+    public function getWeights(int $batchId): array
+    {
+        return \App\Models\BatchWeight::with('activity')
+            ->where('batch_id', $batchId)
+            ->orderBy('weighing_date', 'asc')
+            ->get()
+            ->map(fn (\App\Models\BatchWeight $model) => \App\Application\Mappers\BatchWeightMapper::toEntity($model))
+            ->toArray();
+    }
 }

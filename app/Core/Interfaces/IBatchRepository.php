@@ -25,4 +25,8 @@ interface IBatchRepository
     public function save(BatchEntity $batch): BatchEntity;
 
     public function delete(int $id): bool;
+
+    public function addWeight(int $batchId, float $weight, string $type, \DateTimeInterface $date, ?int $activityId = null): void;
+
+    public function getWeights(int $batchId): array;
 }
