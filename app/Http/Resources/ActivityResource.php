@@ -20,6 +20,14 @@ class ActivityResource extends JsonResource
             'name' => $this->resource->getName(),
             'code' => $this->resource->getCode(),
             'is_enabled' => $this->resource->isEnabled(),
+            'is_final' => $this->resource->isFinal(),
+            'caravans_count' => $this->resource->getCaravansCount(),
+            'batches' => array_map(fn($batch) => [
+                'id' => $batch->getId(),
+                'name' => $batch->getName(),
+                'farm_name' => $batch->getFarmName(),
+                'count' => $batch->getCaravansCount(),
+            ], $this->resource->getBatches()),
         ];
     }
 }

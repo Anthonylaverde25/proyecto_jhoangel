@@ -16,6 +16,8 @@ use App\Infrastructure\Persistence\EloquentFarmRepository;
 use App\Infrastructure\Persistence\EloquentBatchRepository;
 use App\Core\Interfaces\ICaravanMovementRepository;
 use App\Infrastructure\Persistence\EloquentCaravanMovementRepository;
+use App\Core\Interfaces\IActivityRepository;
+use App\Infrastructure\Persistence\EloquentActivityRepository;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -35,6 +37,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(\App\Core\Interfaces\ICompanyRepository::class, \App\Infrastructure\Persistence\EloquentCompanyRepository::class);
         $this->app->bind(\App\Core\Interfaces\IBreedRepository::class, \App\Infrastructure\Persistence\EloquentBreedRepository::class);
         $this->app->bind(ICaravanMovementRepository::class, EloquentCaravanMovementRepository::class);
+        $this->app->bind(IActivityRepository::class, EloquentActivityRepository::class);
         $this->app->bind(\App\Core\Interfaces\IOCRProvider::class, function ($app) {
             $driver = config('services.ocr.driver');
 

@@ -14,6 +14,11 @@ class UserSeeder extends Seeder
      */
     public function run(): void
     {
+        // Limpiar tablas para permitir re-ejecución (idempotencia)
+        DB::table('company_user')->delete();
+        DB::table('users')->delete();
+        DB::table('companies')->delete();
+
         // 1. Crear Hacienda Principal
         $company1Id = DB::table('companies')->insertGetId([
             'name' => 'Hacienda Principal',

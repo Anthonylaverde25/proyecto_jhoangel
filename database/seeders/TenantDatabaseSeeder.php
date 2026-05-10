@@ -18,8 +18,8 @@ class TenantDatabaseSeeder extends Seeder
         $this->call([
             UserSeeder::class,
             CaravanFieldMappingSeeder::class,
-            LivestockHierarchySeeder::class,
             BreedSeeder::class,
+            LivestockHierarchySeeder::class,
             ActivitySeeder::class,
         ]);
     }

@@ -17,8 +17,14 @@ final class BatchEntity
         private ?int $providerId = null,
         private ?string $providerName = null,
         private ?int $activityId = null,
-        private ?string $activityName = null
+        private ?string $activityName = null,
+        private ?int $caravansCount = null
     ) {
+    }
+
+    public function getCaravansCount(): ?int
+    {
+        return $this->caravansCount;
     }
 
     public function getActivityId(): ?int

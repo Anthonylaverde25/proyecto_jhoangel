@@ -14,10 +14,18 @@ class LivestockHierarchySeeder extends Seeder
      */
     public function run(): void
     {
-        // Limpiar tablas para permitir re-ejecución (idempotencia)
+        // 1. Limpiar tablas para permitir re-ejecución (idempotencia)
+        DB::table('caravans')->delete();
         DB::table('batches')->delete();
         DB::table('farms')->delete();
         DB::table('providers')->delete();
+
+        // Obtener razas disponibles
+        $breedIds = DB::table('breeds')->pluck('id')->toArray();
+        $categories = ['novillito', 'novillo', 'vaquillona', 'vaca', 'vaca_vacia', 'ternero', 'toro'];
+        
+        // Obtener la primera empresa disponible
+        $companyId = DB::table('companies')->first()->id;
 
         // 1. Crear Proveedores
         $provider1Id = DB::table('providers')->insertGetId([
@@ -73,26 +81,46 @@ class LivestockHierarchySeeder extends Seeder
 
             // 3. Crear Lotes (2 por granja)
             foreach ($farmIds as $farmId) {
-                DB::table('batches')->insert([
-                    [
-                        'company_id' => 1,
-                        'name' => 'Lote Invierno - ' . $farmId,
-                        'farm_id' => $farmId,
-                        'observaciones' => 'Lote destinado a invernada.',
-                        'is_active' => true,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ],
-                    [
-                        'company_id' => 1,
-                        'name' => 'Lote Recría - ' . $farmId,
-                        'farm_id' => $farmId,
-                        'observaciones' => 'Animales en fase de recría.',
-                        'is_active' => true,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ],
+                $batch1Id = DB::table('batches')->insertGetId([
+                    'company_id' => $companyId,
+                    'name' => 'Lote Invierno - ' . $farmId,
+                    'farm_id' => $farmId,
+                    'observaciones' => 'Lote destinado a invernada.',
+                    'is_active' => true,
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
+
+                $batch2Id = DB::table('batches')->insertGetId([
+                    'company_id' => $companyId,
+                    'name' => 'Lote Recría - ' . $farmId,
+                    'farm_id' => $farmId,
+                    'observaciones' => 'Animales en fase de recría.',
+                    'is_active' => true,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $batchIds = [$batch1Id, $batch2Id];
+
+                // 4. Crear Caravanas (5 por lote)
+                foreach ($batchIds as $batchId) {
+                    for ($i = 1; $i <= 5; $i++) {
+                        DB::table('caravans')->insert([
+                            'company_id' => $companyId,
+                            'batch_id' => $batchId,
+                            'identification' => 'CAR-' . $batchId . '-' . $i . '-' . rand(100, 999),
+                            'category' => $categories[array_rand($categories)],
+                            'breed_id' => !empty($breedIds) ? $breedIds[array_rand($breedIds)] : null,
+                            'sex' => rand(0, 1) ? 'M' : 'H',
+                            'teeth' => rand(0, 8),
+                            'entry_weight' => rand(150, 450) + (rand(0, 99) / 100),
+                            'entry_date' => now()->subDays(rand(1, 365)),
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                }
             }
         }
     }

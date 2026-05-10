@@ -15,6 +15,6 @@ class ListAvailableActivitiesUseCase
     public function __invoke(int $companyId): array
     {
         // This could be improved to return the catalog with the current status for the company
-        return $this->activityRepository.findAll();
+        return $this->activityRepository->findAll();
     }
 }
