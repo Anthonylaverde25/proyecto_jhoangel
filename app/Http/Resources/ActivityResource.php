@@ -26,6 +26,7 @@ class ActivityResource extends JsonResource
                 'id' => $batch->getId(),
                 'name' => $batch->getName(),
                 'farm_name' => $batch->getFarmName(),
+                'current_weight' => $batch->getCurrentWeight(),
                 'count' => $batch->getCaravansCount(),
             ], $this->resource->getBatches()),
         ];

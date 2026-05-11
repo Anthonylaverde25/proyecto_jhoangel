@@ -22,9 +22,22 @@ final class CreateBatchUseCase
             name: $dto->name,
             farmId: $dto->farmId,
             observaciones: $dto->observaciones,
-            isActive: true
+            isActive: true,
+            activityId: $dto->activityId
         );
 
-        return $this->repository->save($entity);
+        $savedEntity = $this->repository->save($entity);
+
+        if ($dto->weight !== null && $dto->activityId !== null) {
+            $this->repository->addWeight(
+                $savedEntity->getId(),
+                $dto->weight,
+                'INITIAL',
+                new \DateTimeImmutable(),
+                $dto->activityId
+            );
+        }
+
+        return $savedEntity;
     }
 }

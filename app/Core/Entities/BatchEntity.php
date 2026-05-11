@@ -18,8 +18,19 @@ final class BatchEntity
         private ?string $providerName = null,
         private ?int $activityId = null,
         private ?string $activityName = null,
+        private ?float $currentWeight = null,
         private ?int $caravansCount = null
     ) {
+    }
+
+    public function getCurrentWeight(): ?float
+    {
+        return $this->currentWeight;
+    }
+
+    public function setCurrentWeight(?float $currentWeight): void
+    {
+        $this->currentWeight = $currentWeight;
     }
 
     public function getCaravansCount(): ?int

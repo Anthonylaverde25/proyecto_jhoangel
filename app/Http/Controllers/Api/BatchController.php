@@ -50,6 +50,8 @@ class BatchController extends Controller
         $validated = $request->validate([
             'name'          => 'required|string|max:255',
             'farm_id'       => 'required|integer|exists:farms,id',
+            'activity_id'   => 'nullable|integer|exists:activities,id',
+            'weight'        => 'nullable|numeric|min:0',
             'observaciones' => 'nullable|string',
         ]);
 

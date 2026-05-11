@@ -64,6 +64,9 @@ class EloquentBatchRepository implements IBatchRepository
             'type' => $type,
             'weighing_date' => $date->format('Y-m-d'),
         ]);
+
+        // Sync current_weight to batch
+        \App\Models\Batch::where('id', $batchId)->update(['current_weight' => $weight]);
     }
 
     public function getWeights(int $batchId): array

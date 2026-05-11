@@ -18,6 +18,7 @@ class Batch extends Model
         'name',
         'farm_id',
         'activity_id',
+        'current_weight',
         'observaciones',
         'is_active',
     ];
@@ -25,6 +26,7 @@ class Batch extends Model
     protected $casts = [
         'farm_id' => 'integer',
         'activity_id' => 'integer',
+        'current_weight' => 'float',
         'is_active' => 'boolean',
     ];
 

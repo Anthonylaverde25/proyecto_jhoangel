@@ -9,7 +9,9 @@ final readonly class CreateBatchDTO
     public function __construct(
         public string $name,
         public int $farmId,
-        public ?string $observaciones = null
+        public ?string $observaciones = null,
+        public ?int $activityId = null,
+        public ?float $weight = null
     ) {
     }
 
@@ -18,7 +20,9 @@ final readonly class CreateBatchDTO
         return new self(
             (string) ($data['name'] ?? ''),
             (int) ($data['farm_id'] ?? 0),
-            isset($data['observaciones']) ? (string) $data['observaciones'] : null
+            isset($data['observaciones']) ? (string) $data['observaciones'] : null,
+            isset($data['activity_id']) ? (int) $data['activity_id'] : null,
+            isset($data['weight']) ? (float) $data['weight'] : null
         );
     }
 }

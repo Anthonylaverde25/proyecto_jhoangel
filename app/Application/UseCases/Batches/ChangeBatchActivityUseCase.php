@@ -23,11 +23,22 @@ final class ChangeBatchActivityUseCase
             throw new DomainException("Lote no encontrado.");
         }
 
+        // Capturamos la actividad anterior antes de actualizar
+        $oldActivityId = $batch->getActivityId();
+
         $batch->setActivityId($activityId);
         $savedBatch = $this->repository->save($batch);
 
         if ($weight !== null) {
-            $this->repository->addWeight($batchId, $weight, 'TRANSFER', new \DateTimeImmutable(), $activityId);
+            $now = new \DateTimeImmutable();
+
+            // Registro de salida de la actividad anterior (si existía y es distinta)
+            if ($oldActivityId !== null && $oldActivityId !== $activityId) {
+                $this->repository->addWeight($batchId, $weight, 'TRANSFER', $now, $oldActivityId);
+            }
+
+            // Registro de entrada a la nueva actividad
+            $this->repository->addWeight($batchId, $weight, 'INITIAL', $now, $activityId);
         }
 
         return $savedBatch;

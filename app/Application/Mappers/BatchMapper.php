@@ -22,7 +22,8 @@ class BatchMapper
             null, // providerId
             null, // providerName
             $model->activity_id,
-            $model->activity?->name
+            $model->activity?->name,
+            $model->current_weight
         );
 
         if ($model->relationLoaded('farm') && $model->farm) {
@@ -46,6 +47,7 @@ class BatchMapper
         $model->name = $entity->getName();
         $model->farm_id = $entity->getFarmId();
         $model->activity_id = $entity->getActivityId();
+        $model->current_weight = $entity->getCurrentWeight();
         $model->observaciones = $entity->getObservaciones();
         $model->is_active = $entity->isActive();
 

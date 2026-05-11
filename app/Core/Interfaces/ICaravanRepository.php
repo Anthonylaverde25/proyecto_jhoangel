@@ -35,6 +35,12 @@ interface ICaravanRepository
     public function findAll(): array;
 
     /**
+     * @param int $batchId
+     * @return int
+     */
+    public function countByBatch(int $batchId): int;
+
+    /**
      * @param int $id
      * @return bool
      */

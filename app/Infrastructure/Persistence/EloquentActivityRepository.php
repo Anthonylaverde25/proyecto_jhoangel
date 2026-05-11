@@ -36,6 +36,7 @@ class EloquentActivityRepository implements IActivityRepository
                 null,
                 (int) $b->activity_id,
                 $model->name,
+                (float) $b->current_weight,
                 (int) $b->caravans_count
             ))->toArray());
             return $entity;
@@ -68,6 +69,7 @@ class EloquentActivityRepository implements IActivityRepository
                 null,
                 (int) $b->activity_id,
                 $model->name,
+                (float) $b->current_weight,
                 (int) $b->caravans_count
             ))->toArray());
             return $entity;

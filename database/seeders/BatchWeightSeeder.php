@@ -57,6 +57,9 @@ class BatchWeightSeeder extends Seeder
                     'weighing_date' => $currentDate->isFuture() ? Carbon::now()->toDateString() : $currentDate->toDateString(),
                 ]);
 
+                // Sync the batch current_weight with the latest simulated weight
+                $batch->update(['current_weight' => $currentWeight]);
+
                 if ($currentDate->isFuture()) break;
             }
         }

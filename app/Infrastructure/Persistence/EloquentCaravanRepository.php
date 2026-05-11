@@ -57,4 +57,9 @@ class EloquentCaravanRepository implements ICaravanRepository
     {
         return (bool) Caravan::destroy($id);
     }
+
+    public function countByBatch(int $batchId): int
+    {
+        return Caravan::where('batch_id', $batchId)->count();
+    }
 }

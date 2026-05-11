@@ -18,7 +18,8 @@ final class UpsertCaravanUseCase
     public function __construct(
         private readonly ICaravanRepository $caravanRepository,
         private readonly ICompanyContext $companyContext,
-        private readonly CaravanTraceabilityService $traceabilityService
+        private readonly CaravanTraceabilityService $traceabilityService,
+        private readonly \App\Core\Services\BatchWeightService $batchWeightService
     ) {
     }
 
@@ -47,25 +48,53 @@ final class UpsertCaravanUseCase
 
     private function handleUpdate(CaravanEntity $entity, RegisterCaravanDTO $dto, ?AnimalCategory $category): UpsertCaravanResultDTO
     {
+        $oldBatchId = $entity->getBatchId();
+        $oldWeight = $entity->getEntryWeight() ?? 0.0;
+        
+        $newBatchId = $dto->batchId;
+        $newWeight = $dto->entryWeight !== null ? (float) $dto->entryWeight : null;
+
         $entity->updateDetails(
             $category,
             (int) $dto->teeth,
-            $dto->entryWeight !== null ? (float) $dto->entryWeight : null,
+            $newWeight,
             null,
             $dto->breed,
             $dto->sex,
             null,
-            $dto->batchId,
+            $newBatchId,
             $dto->breedId
         );
 
         $this->caravanRepository->save($entity);
+
+        // Synchronize Batch weights
+        if ($newBatchId !== null && $newWeight !== null) {
+            if ($oldBatchId === $newBatchId) {
+                // Weight update within the same batch
+                if (abs($oldWeight - $newWeight) > 0.001) {
+                    $this->batchWeightService->updateBatchWeightAfterWeightChange($newBatchId, $oldWeight, $newWeight);
+                }
+            } else {
+                // Moved from one batch to another
+                if ($oldBatchId !== null) {
+                    $this->batchWeightService->updateBatchWeightAfterRemoval($oldBatchId, $oldWeight);
+                }
+                $this->batchWeightService->updateBatchWeightAfterAddition($newBatchId, $newWeight);
+            }
+        } elseif ($oldBatchId !== null && $newBatchId === null) {
+            // Removed from batch entirely
+            $this->batchWeightService->updateBatchWeightAfterRemoval($oldBatchId, $oldWeight);
+        }
+
         return new UpsertCaravanResultDTO('updated', $entity->getId());
     }
 
     private function handleTransfer(CaravanEntity $entity, int $newCompanyId, RegisterCaravanDTO $dto, ?AnimalCategory $category): UpsertCaravanResultDTO
     {
         $oldCompanyId = $entity->getCompanyId();
+        $newWeight = $dto->entryWeight !== null ? (float) $dto->entryWeight : null;
+        $newBatchId = $dto->batchId;
 
         // Actualizar datos y cambiar empresa
         $newEntity = new CaravanEntity(
@@ -73,18 +102,23 @@ final class UpsertCaravanUseCase
             $entity->getIdentification(),
             $category,
             (int) $dto->teeth,
-            $dto->entryWeight !== null ? (float) $dto->entryWeight : null,
+            $newWeight,
             null,
             $dto->breed,
             $dto->breedId,
             $dto->sex,
             null,
             null,
-            $dto->batchId,
+            $newBatchId,
             $newCompanyId
         );
 
         $savedEntity = $this->caravanRepository->save($newEntity);
+
+        // If it arrived with a batch and weight, sync it
+        if ($newBatchId !== null && $newWeight !== null) {
+            $this->batchWeightService->updateBatchWeightAfterAddition($newBatchId, $newWeight);
+        }
 
         // Registrar trazabilidad de transferencia
         if ($oldCompanyId) {
@@ -100,23 +134,31 @@ final class UpsertCaravanUseCase
             throw new \App\Core\Exceptions\DomainException("El campo 'sexo' es obligatorio para registrar una nueva caravana.");
         }
 
+        $newWeight = $dto->entryWeight !== null ? (float) $dto->entryWeight : null;
+        $newBatchId = $dto->batchId;
+
         $newEntity = new CaravanEntity(
             null,
             $identification,
             $category,
             (int) $dto->teeth,
-            $dto->entryWeight !== null ? (float) $dto->entryWeight : null,
+            $newWeight,
             null,
             $dto->breed,
             $dto->breedId,
             $dto->sex,
             null,
             null,
-            $dto->batchId,
+            $newBatchId,
             $activeCompanyId
         );
 
         $savedEntity = $this->caravanRepository->save($newEntity);
+
+        // Recalculate Batch Weight
+        if ($newBatchId !== null && $newWeight !== null) {
+            $this->batchWeightService->updateBatchWeightAfterAddition($newBatchId, $newWeight);
+        }
 
         // Registrar trazabilidad de llegada inicial
         $this->traceabilityService->recordInitialArrival($savedEntity, $activeCompanyId, $dto->farmId);
