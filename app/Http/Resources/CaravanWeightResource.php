@@ -7,6 +7,9 @@ namespace App\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
+/**
+ * @property-read \App\Core\Entities\CaravanWeightEntity $resource
+ */
 class CaravanWeightResource extends JsonResource
 {
     /**
@@ -17,13 +20,13 @@ class CaravanWeightResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->id,
-            'caravan_id' => $this->caravan_id,
-            'weight' => $this->weight,
-            'current' => $this->current,
-            'weighing_date' => $this->weighing_date->format('Y-m-d'),
-            'notes' => $this->notes,
-            'created_at' => $this->created_at->toDateTimeString(),
+            'id'            => $this->resource->getId(),
+            'caravan_id'    => $this->resource->getCaravanId(),
+            'weight'        => $this->resource->getWeight(),
+            'current'       => $this->resource->isCurrent(),
+            'weighing_date' => $this->resource->getWeighingDate()->format('Y-m-d'),
+            'notes'         => $this->resource->getNotes(),
+            'created_at'    => $this->resource->getCreatedAt()?->toDateTimeString(),
         ];
     }
 }

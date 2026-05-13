@@ -13,6 +13,7 @@ use App\Http\Resources\CaravanResource;
 use App\Http\Resources\CaravanMovementResource;
 use App\Http\Resources\CaravanWeightResource;
 use App\Application\DTOs\RecordCaravanWeightDTO;
+use App\Application\DTOs\BulkRecordCaravanWeightDTO;
 
 class CaravanController extends Controller
 {
@@ -164,5 +165,34 @@ class CaravanController extends Controller
         ($this->caravan->bulk)($dtos);
 
         return response()->json(['message' => 'Caravanas procesadas correctamente'], 201);
+    }
+
+    /**
+     * Registro masivo de pesajes para múltiples caravanas.
+     */
+    public function bulkRecordWeights(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'weights' => 'required|array|min:1',
+            'weights.*.caravan_id'    => 'required|integer|exists:caravans,id',
+            'weights.*.weight'        => 'required|numeric|min:0',
+            'weights.*.weighing_date' => 'required|date',
+            'weights.*.notes'         => 'nullable|string',
+        ]);
+
+        $weightDtos = array_map(function ($data) {
+            return new RecordCaravanWeightDTO(
+                caravanId: $data['caravan_id'],
+                weight: (float) $data['weight'],
+                weighingDate: $data['weighing_date'],
+                notes: $data['notes'] ?? null
+            );
+        }, $validated['weights']);
+
+        $dto = new BulkRecordCaravanWeightDTO($weightDtos);
+
+        ($this->caravan->bulkRecordWeights)($dto);
+
+        return response()->json(['message' => 'Pesajes masivos registrados correctamente'], 201);
     }
 }

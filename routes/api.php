@@ -36,6 +36,7 @@ Route::middleware([
     Route::get('/caravans/{id}/movements', [CaravanController::class, 'movements']);
     Route::get('/caravans/{id}/weights', [CaravanController::class, 'listWeights']);
     Route::post('/caravans/{id}/weights', [CaravanController::class, 'recordWeight']);
+    Route::post('/caravans/bulk-weights', [CaravanController::class, 'bulkRecordWeights']);
 
     Route::get('/field-mappings/{model}', [FieldMappingController::class, 'index']);
     Route::post('/field-mappings/learn', [FieldMappingController::class, 'learn']);
