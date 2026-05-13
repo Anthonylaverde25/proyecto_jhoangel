@@ -18,6 +18,8 @@ use App\Core\Interfaces\ICaravanMovementRepository;
 use App\Infrastructure\Persistence\EloquentCaravanMovementRepository;
 use App\Core\Interfaces\IActivityRepository;
 use App\Infrastructure\Persistence\EloquentActivityRepository;
+use App\Core\Interfaces\ICaravanWeightRepository;
+use App\Infrastructure\Persistence\EloquentCaravanWeightRepository;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -29,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(\App\Core\Interfaces\ICompanyContext::class, \App\Core\Contexts\CompanyContext::class);
         $this->app->bind(ICaravanRepository::class, EloquentCaravanRepository::class);
+        $this->app->bind(ICaravanWeightRepository::class, EloquentCaravanWeightRepository::class);
         $this->app->bind(IFieldMappingResolver::class, EloquentFieldMappingResolver::class);
         $this->app->bind(IWorkdayRepository::class, EloquentWorkdayRepository::class);
         $this->app->bind(IProviderRepository::class, EloquentProviderRepository::class);

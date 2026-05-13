@@ -41,6 +41,12 @@ interface ICaravanRepository
     public function countByBatch(int $batchId): int;
 
     /**
+     * @param int $batchId
+     * @return float|null
+     */
+    public function getAverageWeightByBatch(int $batchId): ?float;
+
+    /**
      * @param int $id
      * @return bool
      */

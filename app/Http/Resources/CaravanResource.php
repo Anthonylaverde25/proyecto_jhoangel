@@ -35,6 +35,7 @@ class CaravanResource extends JsonResource
                 'id'   => $this->resource->getBatchId(),
                 'name' => $this->resource->getBatchName(),
             ],
+            'current_weight' => $this->resource->getCurrentWeight() ?? $this->resource->getEntryWeight(),
         ];
     }
 }

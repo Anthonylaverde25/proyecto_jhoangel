@@ -31,6 +31,7 @@ class CaravanMapper
             $model->batch_id ? (int) $model->batch_id : null,
             $model->company_id ? (int) $model->company_id : null,
             $model->relationLoaded('batch') && $model->batch ? $model->batch->name : null,
+            $model->relationLoaded('currentWeight') && $model->currentWeight ? (float) $model->currentWeight->weight : null,
         );
     }
 

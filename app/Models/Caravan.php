@@ -54,6 +54,26 @@ class Caravan extends Model
     }
 
     /**
+     * Get the weight records for the caravan.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function weights(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CaravanWeight::class);
+    }
+
+    /**
+     * Get the current weight record for the caravan.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne
+     */
+    public function currentWeight(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(CaravanWeight::class)->where('current', true);
+    }
+
+    /**
      * Get the breed associated with the caravan.
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsTo

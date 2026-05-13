@@ -12,6 +12,8 @@ final class CaravanUseCases
         public readonly ImportCaravansUseCase $import,
         public readonly ListCaravanMovementsUseCase $movements,
         public readonly BulkCreateCaravansUseCase $bulk,
+        public readonly RecordCaravanWeightUseCase $recordWeight,
+        public readonly ListCaravanWeightsUseCase $listWeights,
     ) {
     }
 }

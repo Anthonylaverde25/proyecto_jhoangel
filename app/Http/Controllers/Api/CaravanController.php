@@ -11,6 +11,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Http\Resources\CaravanResource;
 use App\Http\Resources\CaravanMovementResource;
+use App\Http\Resources\CaravanWeightResource;
+use App\Application\DTOs\RecordCaravanWeightDTO;
 
 class CaravanController extends Controller
 {
@@ -67,6 +69,41 @@ class CaravanController extends Controller
             'action' => $result->action,
             'id'     => $result->id,
         ], $result->action === 'created' ? 201 : 200);
+    }
+
+    /**
+     * Registra un nuevo pesaje para una caravana específica.
+     */
+    public function recordWeight(Request $request, int $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'weight'        => 'required|numeric|min:0',
+            'weighing_date' => 'required|date',
+            'notes'         => 'nullable|string',
+        ]);
+
+        $dto = new RecordCaravanWeightDTO(
+            caravanId: $id,
+            weight: (float) $validated['weight'],
+            weighingDate: $validated['weighing_date'],
+            notes: $validated['notes'] ?? null
+        );
+
+        ($this->caravan->recordWeight)($dto);
+
+        return response()->json(['message' => 'Pesaje registrado correctamente'], 201);
+    }
+
+    /**
+     * Lista el historial de pesajes de una caravana.
+     */
+    public function listWeights(int $id): JsonResponse
+    {
+        $weights = ($this->caravan->listWeights)($id);
+
+        return response()->json(
+            CaravanWeightResource::collection($weights)
+        );
     }
 
     /**

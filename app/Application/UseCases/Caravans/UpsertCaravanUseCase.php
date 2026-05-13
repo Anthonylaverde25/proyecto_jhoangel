@@ -19,7 +19,8 @@ final class UpsertCaravanUseCase
         private readonly ICaravanRepository $caravanRepository,
         private readonly ICompanyContext $companyContext,
         private readonly CaravanTraceabilityService $traceabilityService,
-        private readonly \App\Core\Services\BatchWeightService $batchWeightService
+        private readonly \App\Core\Services\BatchWeightService $batchWeightService,
+        private readonly RecordCaravanWeightUseCase $recordCaravanWeightUseCase
     ) {
     }
 
@@ -54,10 +55,13 @@ final class UpsertCaravanUseCase
         $newBatchId = $dto->batchId;
         $newWeight = $dto->entryWeight !== null ? (float) $dto->entryWeight : null;
 
+        // Determine if we should update entry_weight (only if it's currently null)
+        $preservedEntryWeight = $entity->getEntryWeight() ?? $newWeight;
+
         $entity->updateDetails(
             $category,
             (int) $dto->teeth,
-            $newWeight,
+            $preservedEntryWeight,
             null,
             $dto->breed,
             $dto->sex,
@@ -68,23 +72,23 @@ final class UpsertCaravanUseCase
 
         $this->caravanRepository->save($entity);
 
-        // Synchronize Batch weights
-        if ($newBatchId !== null && $newWeight !== null) {
-            if ($oldBatchId === $newBatchId) {
-                // Weight update within the same batch
-                if (abs($oldWeight - $newWeight) > 0.001) {
-                    $this->batchWeightService->updateBatchWeightAfterWeightChange($newBatchId, $oldWeight, $newWeight);
-                }
-            } else {
-                // Moved from one batch to another
-                if ($oldBatchId !== null) {
-                    $this->batchWeightService->updateBatchWeightAfterRemoval($oldBatchId, $oldWeight);
-                }
-                $this->batchWeightService->updateBatchWeightAfterAddition($newBatchId, $newWeight);
-            }
-        } elseif ($oldBatchId !== null && $newBatchId === null) {
-            // Removed from batch entirely
-            $this->batchWeightService->updateBatchWeightAfterRemoval($oldBatchId, $oldWeight);
+        // Record weight in caravan_weights
+        if ($newWeight !== null) {
+            ($this->recordCaravanWeightUseCase)(new \App\Application\DTOs\RecordCaravanWeightDTO(
+                $entity->getId(),
+                $newWeight,
+                date('Y-m-d'),
+                'Weight updated via upsert'
+            ));
+        }
+
+        // Recalculate Batch weights
+        if ($oldBatchId !== null) {
+            $this->batchWeightService->recalculateBatchWeight($oldBatchId);
+        }
+        
+        if ($newBatchId !== null && $newBatchId !== $oldBatchId) {
+            $this->batchWeightService->recalculateBatchWeight($newBatchId);
         }
 
         return new UpsertCaravanResultDTO('updated', $entity->getId());
@@ -115,9 +119,19 @@ final class UpsertCaravanUseCase
 
         $savedEntity = $this->caravanRepository->save($newEntity);
 
-        // If it arrived with a batch and weight, sync it
-        if ($newBatchId !== null && $newWeight !== null) {
-            $this->batchWeightService->updateBatchWeightAfterAddition($newBatchId, $newWeight);
+        // Record weight in caravan_weights
+        if ($newWeight !== null) {
+            ($this->recordCaravanWeightUseCase)(new \App\Application\DTOs\RecordCaravanWeightDTO(
+                $savedEntity->getId(),
+                $newWeight,
+                date('Y-m-d'),
+                'Weight on transfer'
+            ));
+        }
+
+        // Recalculate Batch Weight
+        if ($newBatchId !== null) {
+            $this->batchWeightService->recalculateBatchWeight($newBatchId);
         }
 
         // Registrar trazabilidad de transferencia
@@ -155,9 +169,19 @@ final class UpsertCaravanUseCase
 
         $savedEntity = $this->caravanRepository->save($newEntity);
 
+        // Record initial weight in caravan_weights
+        if ($newWeight !== null) {
+            ($this->recordCaravanWeightUseCase)(new \App\Application\DTOs\RecordCaravanWeightDTO(
+                $savedEntity->getId(),
+                $newWeight,
+                date('Y-m-d'),
+                'Initial weight on arrival'
+            ));
+        }
+
         // Recalculate Batch Weight
-        if ($newBatchId !== null && $newWeight !== null) {
-            $this->batchWeightService->updateBatchWeightAfterAddition($newBatchId, $newWeight);
+        if ($newBatchId !== null) {
+            $this->batchWeightService->recalculateBatchWeight($newBatchId);
         }
 
         // Registrar trazabilidad de llegada inicial

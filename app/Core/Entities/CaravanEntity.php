@@ -25,6 +25,7 @@ final class CaravanEntity
         private ?int $batchId = null,
         private ?int $companyId = null,
         private ?string $batchName = null,
+        private ?float $currentWeight = null,
     ) {
         $this->validateTeeth($teeth);
     }
@@ -57,6 +58,11 @@ final class CaravanEntity
     public function getBatchName(): ?string
     {
         return $this->batchName;
+    }
+
+    public function getCurrentWeight(): ?float
+    {
+        return $this->currentWeight;
     }
 
     public function getIdentification(): CaravanNumber
