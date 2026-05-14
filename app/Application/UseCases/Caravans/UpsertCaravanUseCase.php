@@ -73,6 +73,7 @@ final class UpsertCaravanUseCase
         $this->caravanRepository->save($entity);
 
         // Record weight in caravan_weights
+        $weightRecorded = false;
         if ($newWeight !== null) {
             ($this->recordCaravanWeightUseCase)(new \App\Application\DTOs\RecordCaravanWeightDTO(
                 $entity->getId(),
@@ -80,14 +81,15 @@ final class UpsertCaravanUseCase
                 date('Y-m-d'),
                 'Weight updated via upsert'
             ));
+            $weightRecorded = true;
         }
 
         // Recalculate Batch weights
-        if ($oldBatchId !== null) {
+        if ($oldBatchId !== null && $oldBatchId !== $newBatchId) {
             $this->batchWeightService->recalculateBatchWeight($oldBatchId);
         }
         
-        if ($newBatchId !== null && $newBatchId !== $oldBatchId) {
+        if ($newBatchId !== null && !$weightRecorded && $newBatchId !== $oldBatchId) {
             $this->batchWeightService->recalculateBatchWeight($newBatchId);
         }
 
@@ -97,6 +99,7 @@ final class UpsertCaravanUseCase
     private function handleTransfer(CaravanEntity $entity, int $newCompanyId, RegisterCaravanDTO $dto, ?AnimalCategory $category): UpsertCaravanResultDTO
     {
         $oldCompanyId = $entity->getCompanyId();
+        $oldBatchId = $entity->getBatchId();
         $newWeight = $dto->entryWeight !== null ? (float) $dto->entryWeight : null;
         $newBatchId = $dto->batchId;
 
@@ -119,6 +122,7 @@ final class UpsertCaravanUseCase
 
         $savedEntity = $this->caravanRepository->save($newEntity);
 
+        $weightRecorded = false;
         // Record weight in caravan_weights
         if ($newWeight !== null) {
             ($this->recordCaravanWeightUseCase)(new \App\Application\DTOs\RecordCaravanWeightDTO(
@@ -127,10 +131,16 @@ final class UpsertCaravanUseCase
                 date('Y-m-d'),
                 'Weight on transfer'
             ));
+            $weightRecorded = true;
         }
 
-        // Recalculate Batch Weight
-        if ($newBatchId !== null) {
+        // Recalculate old Batch Weight (lost an animal)
+        if ($oldBatchId !== null) {
+            $this->batchWeightService->recalculateBatchWeight($oldBatchId);
+        }
+
+        // Recalculate new Batch Weight
+        if ($newBatchId !== null && !$weightRecorded) {
             $this->batchWeightService->recalculateBatchWeight($newBatchId);
         }
 
@@ -169,6 +179,7 @@ final class UpsertCaravanUseCase
 
         $savedEntity = $this->caravanRepository->save($newEntity);
 
+        $weightRecorded = false;
         // Record initial weight in caravan_weights
         if ($newWeight !== null) {
             ($this->recordCaravanWeightUseCase)(new \App\Application\DTOs\RecordCaravanWeightDTO(
@@ -177,10 +188,11 @@ final class UpsertCaravanUseCase
                 date('Y-m-d'),
                 'Initial weight on arrival'
             ));
+            $weightRecorded = true;
         }
 
         // Recalculate Batch Weight
-        if ($newBatchId !== null) {
+        if ($newBatchId !== null && !$weightRecorded) {
             $this->batchWeightService->recalculateBatchWeight($newBatchId);
         }
 

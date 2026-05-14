@@ -28,15 +28,15 @@ final class CreateBatchUseCase
 
         $savedEntity = $this->repository->save($entity);
 
-        if ($dto->weight !== null && $dto->activityId !== null) {
-            $this->repository->addWeight(
-                $savedEntity->getId(),
-                $dto->weight,
-                'INITIAL',
-                new \DateTimeImmutable(),
-                $dto->activityId
-            );
-        }
+        // Siempre se genera el registro de peso inicial al crear el lote.
+        // Si no se provee peso, se asume 0.0 para el historial.
+        $this->repository->addWeight(
+            $savedEntity->getId(),
+            $dto->weight ?? 0.0,
+            'INITIAL',
+            new \DateTimeImmutable(),
+            $dto->activityId
+        );
 
         return $savedEntity;
     }

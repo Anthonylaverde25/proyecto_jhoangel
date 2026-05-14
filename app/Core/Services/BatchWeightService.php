@@ -28,10 +28,18 @@ class BatchWeightService
             return;
         }
 
-        $newAvg = $this->caravanRepository->getAverageWeightByBatch($batchId);
+        $newAvg = $this->caravanRepository->getAverageWeightByBatch($batchId) ?? 0.0;
         
         $batch->setCurrentWeight($newAvg);
         $this->batchRepository->save($batch);
+
+        $this->batchRepository->addWeight(
+            $batchId,
+            $newAvg,
+            'CONTROL',
+            new \DateTimeImmutable(),
+            $batch->getActivityId()
+        );
     }
 
     /**
