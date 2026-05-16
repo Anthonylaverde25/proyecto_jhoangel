@@ -8,6 +8,7 @@ use App\Models\Caravan;
 use App\Core\Entities\CaravanEntity;
 use App\Core\ValueObjects\CaravanNumber;
 use App\Core\Enums\AnimalCategory;
+use App\Core\Enums\AnimalSex;
 
 class CaravanMapper
 {

@@ -29,7 +29,7 @@ return new class extends Migration
                 $table->string('breed')->nullable()->after('category');
             }
             if (!Schema::hasColumn('caravans', 'sex')) {
-                $table->string('sex')->after('breed');
+                $table->char('sex', 1)->after('breed');
             }
             if (!Schema::hasColumn('caravans', 'entry_date')) {
                 $table->date('entry_date')->nullable()->after('exit_weight');

@@ -29,7 +29,7 @@ class CaravanResource extends JsonResource
             'exit_weight'    => $this->resource->getExitWeight(),
             'breed'          => $this->resource->getBreed(),
             'breed_id'       => $this->resource->getBreedId(),
-            'sex'            => $this->resource->getSex(),
+            'sex'            => $this->resource->getSex()?->value,
             'entry_date'     => $this->resource->getCreatedAt()?->format('m/Y'),
             'batch'          => [
                 'id'   => $this->resource->getBatchId(),

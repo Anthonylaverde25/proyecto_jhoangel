@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Models\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
 use App\Core\Enums\AnimalCategory;
+use App\Core\Enums\AnimalSex;
 
 class Caravan extends Model
 {
@@ -41,6 +42,7 @@ class Caravan extends Model
         'entry_date' => 'date:Y-m-d',
         'batch_id' => 'integer',
         'breed_id' => 'integer',
+        'sex' => AnimalSex::class,
     ];
 
     /**

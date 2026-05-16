@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Entities;
 
 use App\Core\Enums\AnimalCategory;
+use App\Core\Enums\AnimalSex;
 use App\Core\Exceptions\DomainException;
 use App\Core\ValueObjects\CaravanNumber;
 
@@ -19,7 +20,7 @@ final class CaravanEntity
         private ?float $exitWeight = null,
         private ?string $breed = null,
         private ?int $breedId = null,
-        private string $sex,
+        private AnimalSex $sex,
         private ?\DateTimeInterface $entryDate = null,
         private ?\DateTimeInterface $createdAt = null,
         private ?int $batchId = null,
@@ -100,7 +101,7 @@ final class CaravanEntity
         return $this->breedId;
     }
 
-    public function getSex(): ?string
+    public function getSex(): AnimalSex
     {
         return $this->sex;
     }
@@ -144,7 +145,7 @@ final class CaravanEntity
         ?float $entryWeight,
         ?float $exitWeight,
         ?string $breed,
-        ?string $sex,
+        ?AnimalSex $sex,
         ?\DateTimeInterface $entryDate = null,
         ?int $batchId = null,
         ?int $breedId = null

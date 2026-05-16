@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Core\Services;
 
 use App\Core\Enums\AnimalCategory;
+use App\Core\Enums\AnimalSex;
+use App\Core\Exceptions\DomainException;
 
 /**
  * Pure PHP service to transform raw OCR string values into domain types.
@@ -197,14 +199,15 @@ final class CaravanValueParser
      *
      * @param string $raw
      * @param AnimalCategory|null $category Contextual hint
-     * @return string
+     * @return AnimalSex
+     * @throws DomainException
      */
-    public static function parseSex(string $raw, ?AnimalCategory $category = null): string
+    public static function parseSex(string $raw, ?AnimalCategory $category = null): AnimalSex
     {
         $normalized = mb_strtolower(trim($raw));
 
-        if (str_starts_with($normalized, 'h') || str_contains($normalized, 'hem')) {
-            return 'Hembra';
+        if (str_starts_with($normalized, 'h') || str_contains($normalized, 'hem') || $normalized === 'f') {
+            return AnimalSex::FEMALE;
         }
 
         if (str_starts_with($normalized, 'm') || str_contains($normalized, 'mac') || str_contains($normalized, 'hom')) {
@@ -212,18 +215,18 @@ final class CaravanValueParser
             // In the user's sample "Hombro" was meant to be "Hembra" based on category "vaca".
             // Let's use category hint if available.
             if ($category === AnimalCategory::VACA || $category === AnimalCategory::VAQUILLONA || $category === AnimalCategory::TERNERA || $category === AnimalCategory::VACA_VACIA) {
-                return 'Hembra';
+                return AnimalSex::FEMALE;
             }
-            return 'Macho';
+            return AnimalSex::MALE;
         }
 
         // Contextual defaults
         if ($category !== null) {
             $females = [AnimalCategory::VACA, AnimalCategory::VAQUILLONA, AnimalCategory::TERNERA, AnimalCategory::VACA_VACIA];
-            return in_array($category, $females, true) ? 'Hembra' : 'Macho';
+            return in_array($category, $females, true) ? AnimalSex::FEMALE : AnimalSex::MALE;
         }
 
-        return $raw ?: 'N/D';
+        throw new DomainException("No se pudo inferir el sexo del animal a partir del valor: '{$raw}'");
     }
 
     /**

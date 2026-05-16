@@ -14,6 +14,8 @@ use App\Http\Resources\CaravanMovementResource;
 use App\Http\Resources\CaravanWeightResource;
 use App\Application\DTOs\RecordCaravanWeightDTO;
 use App\Application\DTOs\BulkRecordCaravanWeightDTO;
+use Illuminate\Validation\Rules\Enum;
+use App\Core\Enums\AnimalSex;
 
 class CaravanController extends Controller
 {
@@ -47,7 +49,7 @@ class CaravanController extends Controller
             'entry_weight'   => 'nullable|numeric',
             'breed'          => 'nullable|string',
             'breed_id'       => 'nullable|integer|exists:breeds,id',
-            'sex'            => 'nullable|string',
+            'sex'            => ['nullable', new Enum(AnimalSex::class)],
             'batch_id'       => 'nullable|integer|exists:batches,id',
             'farm_id'        => 'nullable|integer|exists:farms,id',
         ]);
@@ -143,7 +145,7 @@ class CaravanController extends Controller
             'caravans.*.entry_weight'   => 'nullable|numeric',
             'caravans.*.breed'          => 'nullable|string',
             'caravans.*.breed_id'       => 'nullable|integer|exists:breeds,id',
-            'caravans.*.sex'            => 'nullable|string',
+            'caravans.*.sex'            => ['nullable', new Enum(AnimalSex::class)],
             'caravans.*.batch_id'       => 'nullable|integer|exists:batches,id',
             'caravans.*.farm_id'        => 'nullable|integer|exists:farms,id',
         ]);
