@@ -169,10 +169,6 @@ final class ImportCaravansUseCase
                 $sexRaw = $row['sex'] ?? '';
                 $sex = CaravanValueParser::parseSex((string) $sexRaw, $category);
 
-                if ($sex === 'N/D') {
-                    throw new \App\Core\Exceptions\DomainException("El campo 'sexo' es obligatorio para nuevas caravanas y no pudo ser inferido.");
-                }
-
                 $entryDate = null;
                 if (isset($row['entry_date']) && $row['entry_date'] !== '') {
                     $parsedDate = CaravanValueParser::parseDate((string) $row['entry_date']);

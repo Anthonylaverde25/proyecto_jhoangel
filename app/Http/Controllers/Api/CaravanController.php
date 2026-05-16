@@ -8,14 +8,16 @@ use App\Application\DTOs\RegisterCaravanDTO;
 use App\Application\UseCases\Caravans\CaravanUseCases;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use App\Http\Resources\CaravanResource;
 use App\Http\Resources\CaravanMovementResource;
 use App\Http\Resources\CaravanWeightResource;
 use App\Application\DTOs\RecordCaravanWeightDTO;
 use App\Application\DTOs\BulkRecordCaravanWeightDTO;
-use Illuminate\Validation\Rules\Enum;
 use App\Core\Enums\AnimalSex;
+use App\Http\Requests\Caravans\UpsertCaravanRequest;
+use App\Http\Requests\Caravans\RecordCaravanWeightRequest;
+use App\Http\Requests\Caravans\BulkStoreCaravanRequest;
+use App\Http\Requests\Caravans\BulkRecordWeightRequest;
 
 class CaravanController extends Controller
 {
@@ -40,23 +42,13 @@ class CaravanController extends Controller
      * Realiza un Upsert de una caravana.
      * Si la identificación existe, actualiza. Si no, crea.
      */
-    public function upsert(Request $request): JsonResponse
+    public function upsert(UpsertCaravanRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'identification' => 'required|string',
-            'category'       => 'nullable|string',
-            'teeth'          => 'required|integer|min:0|max:99',
-            'entry_weight'   => 'nullable|numeric',
-            'breed'          => 'nullable|string',
-            'breed_id'       => 'nullable|integer|exists:breeds,id',
-            'sex'            => ['nullable', new Enum(AnimalSex::class)],
-            'batch_id'       => 'nullable|integer|exists:batches,id',
-            'farm_id'        => 'nullable|integer|exists:farms,id',
-        ]);
+        $validated = $request->validated();
 
         $dto = new RegisterCaravanDTO(
             identification: $validated['identification'],
-            sex: $validated['sex'] ?? null,
+            sex: isset($validated['sex']) ? AnimalSex::from($validated['sex']) : null,
             category: $validated['category'] ?? null,
             teeth: (int) $validated['teeth'],
             entryWeight: isset($validated['entry_weight']) ? (float) $validated['entry_weight'] : null,
@@ -77,13 +69,9 @@ class CaravanController extends Controller
     /**
      * Registra un nuevo pesaje para una caravana específica.
      */
-    public function recordWeight(Request $request, int $id): JsonResponse
+    public function recordWeight(RecordCaravanWeightRequest $request, int $id): JsonResponse
     {
-        $validated = $request->validate([
-            'weight'        => 'required|numeric|min:0',
-            'weighing_date' => 'required|date',
-            'notes'         => 'nullable|string',
-        ]);
+        $validated = $request->validated();
 
         $dto = new RecordCaravanWeightDTO(
             caravanId: $id,
@@ -132,28 +120,16 @@ class CaravanController extends Controller
             CaravanMovementResource::collection($entities)
         );
     }
+
     /**
      * Registro masivo de caravanas.
      */
-    public function bulkStore(Request $request): JsonResponse
+    public function bulkStore(BulkStoreCaravanRequest $request): JsonResponse
     {
-        $request->validate([
-            'caravans' => 'required|array|min:1',
-            'caravans.*.identification' => 'required|string',
-            'caravans.*.category'       => 'nullable|string',
-            'caravans.*.teeth'          => 'required|integer|min:0|max:99',
-            'caravans.*.entry_weight'   => 'nullable|numeric',
-            'caravans.*.breed'          => 'nullable|string',
-            'caravans.*.breed_id'       => 'nullable|integer|exists:breeds,id',
-            'caravans.*.sex'            => ['nullable', new Enum(AnimalSex::class)],
-            'caravans.*.batch_id'       => 'nullable|integer|exists:batches,id',
-            'caravans.*.farm_id'        => 'nullable|integer|exists:farms,id',
-        ]);
-
         $dtos = array_map(function ($data) {
             return new RegisterCaravanDTO(
                 identification: $data['identification'],
-                sex: $data['sex'] ?? null,
+                sex: isset($data['sex']) ? AnimalSex::from($data['sex']) : null,
                 category: $data['category'] ?? null,
                 teeth: (int) $data['teeth'],
                 entryWeight: isset($data['entry_weight']) ? (float) $data['entry_weight'] : null,
@@ -172,15 +148,9 @@ class CaravanController extends Controller
     /**
      * Registro masivo de pesajes para múltiples caravanas.
      */
-    public function bulkRecordWeights(Request $request): JsonResponse
+    public function bulkRecordWeights(BulkRecordWeightRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'weights' => 'required|array|min:1',
-            'weights.*.caravan_id'    => 'required|integer|exists:caravans,id',
-            'weights.*.weight'        => 'required|numeric|min:0',
-            'weights.*.weighing_date' => 'required|date',
-            'weights.*.notes'         => 'nullable|string',
-        ]);
+        $validated = $request->validated();
 
         $weightDtos = array_map(function ($data) {
             return new RecordCaravanWeightDTO(
