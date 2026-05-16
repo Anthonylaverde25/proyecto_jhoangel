@@ -12,6 +12,8 @@ use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Interfaces\ICompanyContext;
 use App\Core\Services\CaravanTraceabilityService;
 use App\Core\ValueObjects\CaravanNumber;
+use App\Core\ValueObjects\FemaleReproductiveDetails;
+use App\Core\Enums\AnimalSex;
 
 final class UpsertCaravanUseCase
 {
@@ -70,6 +72,14 @@ final class UpsertCaravanUseCase
             $dto->breedId
         );
 
+        if ($entity->getSex() === AnimalSex::FEMALE && $category !== null) {
+            $currentDetails = $entity->getReproductiveDetails();
+            $isEmpty = $dto->isEmpty !== null ? $dto->isEmpty : ($currentDetails?->isEmpty() ?? true);
+            $arrivalCategory = $currentDetails?->getArrivalCategory() ?? $category;
+            
+            $entity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
+        }
+
         $this->caravanRepository->save($entity);
 
         // Record weight in caravan_weights
@@ -119,6 +129,14 @@ final class UpsertCaravanUseCase
             $newBatchId,
             $newCompanyId
         );
+
+        if ($newEntity->getSex() === AnimalSex::FEMALE && $category !== null) {
+            $currentDetails = $entity->getReproductiveDetails();
+            $isEmpty = $dto->isEmpty !== null ? $dto->isEmpty : ($currentDetails?->isEmpty() ?? true);
+            $arrivalCategory = $currentDetails?->getArrivalCategory() ?? $category;
+            
+            $newEntity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
+        }
 
         $savedEntity = $this->caravanRepository->save($newEntity);
 
@@ -176,6 +194,11 @@ final class UpsertCaravanUseCase
             $newBatchId,
             $activeCompanyId
         );
+
+        if ($newEntity->getSex() === AnimalSex::FEMALE && $category !== null) {
+            $isEmpty = $dto->isEmpty !== null ? $dto->isEmpty : true;
+            $newEntity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $category));
+        }
 
         $savedEntity = $this->caravanRepository->save($newEntity);
 

@@ -19,6 +19,7 @@ use App\Core\Interfaces\IBreedRepository;
 use App\Core\Services\BreedMatcherService;
 use App\Core\Interfaces\ICompanyContext;
 use App\Core\Services\CaravanTraceabilityService;
+use App\Core\ValueObjects\FemaleReproductiveDetails;
 
 final class ImportCaravansUseCase
 {
@@ -193,6 +194,11 @@ final class ImportCaravansUseCase
                     companyId: $activeCompanyId
                 );
 
+                if ($sex === \App\Core\Enums\AnimalSex::FEMALE && $category !== null) {
+                    $isEmpty = isset($row['is_empty']) ? filter_var($row['is_empty'], FILTER_VALIDATE_BOOLEAN) : true;
+                    $entity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $category));
+                }
+
                 $savedEntity = $this->repository->save($entity);
                 
                 // Trazabilidad inicial
@@ -269,6 +275,15 @@ final class ImportCaravansUseCase
         }
 
         $entity->updateDetails($category, $teeth, $entryWeight, $exitWeight, $breed, $sex, $entryDate, $batchId, $breedId);
+
+        if ($sex === \App\Core\Enums\AnimalSex::FEMALE && $category !== null) {
+            $currentDetails = $entity->getReproductiveDetails();
+            $isEmpty = isset($row['is_empty']) ? filter_var($row['is_empty'], FILTER_VALIDATE_BOOLEAN) : ($currentDetails?->isEmpty() ?? true);
+            $arrivalCategory = $currentDetails?->getArrivalCategory() ?? $category;
+            
+            $entity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
+        }
+
         $this->repository->save($entity);
     }
 

@@ -36,6 +36,10 @@ class CaravanResource extends JsonResource
                 'name' => $this->resource->getBatchName(),
             ],
             'current_weight' => $this->resource->getCurrentWeight() ?? $this->resource->getEntryWeight(),
+            'female_details' => $this->resource->getReproductiveDetails() ? [
+                'is_empty' => $this->resource->getReproductiveDetails()->isEmpty(),
+                'arrival_category' => $this->resource->getReproductiveDetails()->getArrivalCategory()->value,
+            ] : null,
         ];
     }
 }

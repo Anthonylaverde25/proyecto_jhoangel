@@ -8,6 +8,7 @@ use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
 use App\Core\Exceptions\DomainException;
 use App\Core\ValueObjects\CaravanNumber;
+use App\Core\ValueObjects\FemaleReproductiveDetails;
 
 final class CaravanEntity
 {
@@ -27,6 +28,7 @@ final class CaravanEntity
         private ?int $companyId = null,
         private ?string $batchName = null,
         private ?float $currentWeight = null,
+        private ?FemaleReproductiveDetails $reproductiveDetails = null,
     ) {
         $this->validateTeeth($teeth);
     }
@@ -114,6 +116,20 @@ final class CaravanEntity
     public function getCreatedAt(): ?\DateTimeInterface
     {
         return $this->createdAt;
+    }
+
+    public function getReproductiveDetails(): ?FemaleReproductiveDetails
+    {
+        return $this->reproductiveDetails;
+    }
+
+    public function recordFemaleDetails(FemaleReproductiveDetails $details): void
+    {
+        if ($this->sex !== AnimalSex::FEMALE) {
+            throw new DomainException("Solo las hembras pueden tener detalles reproductivos.");
+        }
+        
+        $this->reproductiveDetails = $details;
     }
 
     public function updateCategory(AnimalCategory $category): void

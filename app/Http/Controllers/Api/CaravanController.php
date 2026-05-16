@@ -55,7 +55,8 @@ class CaravanController extends Controller
             breed: $validated['breed'] ?? null,
             breedId: isset($validated['breed_id']) ? (int) $validated['breed_id'] : null,
             batchId: isset($validated['batch_id']) ? (int) $validated['batch_id'] : null,
-            farmId: isset($validated['farm_id']) ? (int) $validated['farm_id'] : null
+            farmId: isset($validated['farm_id']) ? (int) $validated['farm_id'] : null,
+            isEmpty: isset($validated['is_empty']) ? (bool) $validated['is_empty'] : null
         );
 
         $result = ($this->caravan->upsert)($dto);
@@ -136,7 +137,8 @@ class CaravanController extends Controller
                 breed: $data['breed'] ?? null,
                 breedId: isset($data['breed_id']) ? (int) $data['breed_id'] : null,
                 batchId: isset($data['batch_id']) ? (int) $data['batch_id'] : null,
-                farmId: isset($data['farm_id']) ? (int) $data['farm_id'] : null
+                farmId: isset($data['farm_id']) ? (int) $data['farm_id'] : null,
+                isEmpty: isset($data['is_empty']) ? (bool) $data['is_empty'] : null
             );
         }, $request->input('caravans'));
 

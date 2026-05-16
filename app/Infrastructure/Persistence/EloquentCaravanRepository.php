@@ -18,12 +18,25 @@ class EloquentCaravanRepository implements ICaravanRepository
         $model = CaravanMapper::toModel($caravan, $model);
         $model->save();
 
-        return CaravanMapper::toEntity($model->load(['breedRelation', 'currentWeight']));
+        if ($caravan->getReproductiveDetails() !== null) {
+            $details = $caravan->getReproductiveDetails();
+            $model->femaleDetail()->updateOrCreate(
+                ['caravan_id' => $model->id],
+                [
+                    'is_empty' => $details->isEmpty(),
+                    'arrival_category' => $details->getArrivalCategory(),
+                ]
+            );
+        } else {
+            $model->femaleDetail()->delete();
+        }
+
+        return CaravanMapper::toEntity($model->load(['breedRelation', 'currentWeight', 'femaleDetail']));
     }
 
     public function findByIdentification(CaravanNumber $identification): ?CaravanEntity
     {
-        $model = Caravan::with(['breedRelation', 'currentWeight'])
+        $model = Caravan::with(['breedRelation', 'currentWeight', 'femaleDetail'])
             ->where('identification', $identification->getValue())
             ->first();
         
@@ -33,7 +46,7 @@ class EloquentCaravanRepository implements ICaravanRepository
     public function findByIdentificationGlobal(CaravanNumber $identification): ?CaravanEntity
     {
         $model = Caravan::withoutGlobalScopes()
-            ->with(['breedRelation', 'currentWeight'])
+            ->with(['breedRelation', 'currentWeight', 'femaleDetail'])
             ->where('identification', $identification->getValue())
             ->first();
         
@@ -42,14 +55,14 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function findById(int $id): ?CaravanEntity
     {
-        $model = Caravan::with(['breedRelation', 'currentWeight'])->find($id);
+        $model = Caravan::with(['breedRelation', 'currentWeight', 'femaleDetail'])->find($id);
         
         return $model ? CaravanMapper::toEntity($model) : null;
     }
 
     public function findAll(): array
     {
-        $models = Caravan::with(['breedRelation', 'batch', 'currentWeight'])->get();
+        $models = Caravan::with(['breedRelation', 'batch', 'currentWeight', 'femaleDetail'])->get();
         return $models->map(fn($model) => CaravanMapper::toEntity($model))->toArray();
     }
 

@@ -35,6 +35,7 @@ class UpsertCaravanRequest extends FormRequest
             'sex'            => ['nullable', new Enum(AnimalSex::class)],
             'batch_id'       => 'nullable|integer|exists:batches,id',
             'farm_id'        => 'nullable|integer|exists:farms,id',
+            'is_empty'       => 'nullable|boolean',
         ];
     }
 }

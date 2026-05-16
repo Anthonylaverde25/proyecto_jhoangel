@@ -84,4 +84,14 @@ class Caravan extends Model
     {
         return $this->belongsTo(Breed::class, 'breed_id');
     }
+
+    /**
+     * Get the female details associated with the caravan.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne
+     */
+    public function femaleDetail(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(FemaleCaravanDetail::class);
+    }
 }

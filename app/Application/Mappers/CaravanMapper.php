@@ -9,6 +9,7 @@ use App\Core\Entities\CaravanEntity;
 use App\Core\ValueObjects\CaravanNumber;
 use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
+use App\Core\ValueObjects\FemaleReproductiveDetails;
 
 class CaravanMapper
 {
@@ -33,6 +34,10 @@ class CaravanMapper
             $model->company_id ? (int) $model->company_id : null,
             $model->relationLoaded('batch') && $model->batch ? $model->batch->name : null,
             $model->relationLoaded('currentWeight') && $model->currentWeight ? (float) $model->currentWeight->weight : null,
+            $model->relationLoaded('femaleDetail') && $model->femaleDetail ? new FemaleReproductiveDetails(
+                $model->femaleDetail->is_empty,
+                $model->femaleDetail->arrival_category
+            ) : null,
         );
     }
 
