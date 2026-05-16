@@ -154,7 +154,7 @@ final class UpsertCaravanUseCase
 
     private function handleNewArrival(CaravanNumber $identification, int $activeCompanyId, RegisterCaravanDTO $dto, ?AnimalCategory $category): UpsertCaravanResultDTO
     {
-        if ($dto->sex === null || trim($dto->sex) === '') {
+        if ($dto->sex === null) {
             throw new \App\Core\Exceptions\DomainException("El campo 'sexo' es obligatorio para registrar una nueva caravana.");
         }
 
