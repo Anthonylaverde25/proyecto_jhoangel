@@ -19,7 +19,10 @@ final class BatchEntity
         private ?int $activityId = null,
         private ?string $activityName = null,
         private ?float $currentWeight = null,
-        private ?int $caravansCount = null
+        private ?int $caravansCount = null,
+        private ?int $batchTypeId = null,
+        private ?string $batchTypeName = null,
+        private ?string $batchTypeCode = null
     ) {
     }
 
@@ -128,5 +131,25 @@ final class BatchEntity
     public function setActivityId(int $activityId): void
     {
         $this->activityId = $activityId;
+    }
+
+    public function getBatchTypeId(): ?int
+    {
+        return $this->batchTypeId;
+    }
+
+    public function getBatchTypeName(): ?string
+    {
+        return $this->batchTypeName;
+    }
+
+    public function getBatchTypeCode(): ?string
+    {
+        return $this->batchTypeCode;
+    }
+
+    public function setBatchTypeId(?int $batchTypeId): void
+    {
+        $this->batchTypeId = $batchTypeId;
     }
 }

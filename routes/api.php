@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\BatchController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\WorkTemplateController;
+use App\Http\Controllers\Api\BatchTypeController;
 use Illuminate\Support\Facades\Route;
 
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -52,6 +53,7 @@ Route::middleware([
     Route::get('/breeds', [BreedController::class, 'index']);
     Route::get('/activities', [ActivityController::class, 'index']);
     Route::patch('/activities/{id}/toggle', [ActivityController::class, 'toggle']);
+    Route::get('/batch-types', [BatchTypeController::class, 'index']);
 
     // Gestión de Plantillas
     Route::get('/template-types', [WorkTemplateController::class, 'types']);

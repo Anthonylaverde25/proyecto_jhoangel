@@ -13,6 +13,7 @@ use App\Core\Entities\WorkdayEntity;
 use App\Core\Enums\WorkType;
 use App\Core\Interfaces\IWorkdayRepository;
 use App\Core\Interfaces\IBatchRepository;
+use App\Core\Interfaces\IBatchTypeRepository;
 use App\Core\Entities\BatchEntity;
 use App\Core\Services\WorkdayCodeGenerator;
 use App\Core\Interfaces\IBreedRepository;
@@ -31,7 +32,8 @@ final class ImportCaravansUseCase
         private readonly IBreedRepository $breedRepository,
         private readonly BreedMatcherService $breedMatcher,
         private readonly ICompanyContext $companyContext,
-        private readonly CaravanTraceabilityService $traceabilityService
+        private readonly CaravanTraceabilityService $traceabilityService,
+        private readonly IBatchTypeRepository $batchTypeRepository
     ) {
     }
 
@@ -73,12 +75,14 @@ final class ImportCaravansUseCase
             if ($existingBatch) {
                 $batchId = $existingBatch->getId();
             } else {
+                $operationalType = $this->batchTypeRepository->findByCodeAndCompany('OPERATIONAL', $activeCompanyId);
                 $newBatch = new BatchEntity(
                     id: null,
                     name: $dto->batchName,
                     farmId: $dto->farmId,
                     observaciones: null,
-                    isActive: true
+                    isActive: true,
+                    batchTypeId: $operationalType?->getId()
                 );
                 $savedBatch = $this->batchRepository->save($newBatch);
                 $batchId = $savedBatch->getId();

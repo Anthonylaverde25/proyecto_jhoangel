@@ -47,12 +47,19 @@ class BatchController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $companyId = (int) $request->header('X-Company-ID');
+
         $validated = $request->validate([
             'name'          => 'required|string|max:255',
             'farm_id'       => 'required|integer|exists:farms,id',
             'activity_id'   => 'nullable|integer|exists:activities,id',
             'weight'        => 'nullable|numeric|min:0',
             'observaciones' => 'nullable|string',
+            'batch_type_id' => [
+                'required',
+                'integer',
+                \Illuminate\Validation\Rule::exists('batch_types', 'id')->where('company_id', $companyId),
+            ],
         ]);
 
         $dto = CreateBatchDTO::fromArray($validated);

@@ -21,6 +21,7 @@ class Batch extends Model
         'current_weight',
         'observaciones',
         'is_active',
+        'batch_type_id'
     ];
 
     protected $casts = [
@@ -44,4 +45,29 @@ class Batch extends Model
     {
         return $this->hasMany(Caravan::class);
     }
+
+    public function batchType(): BelongsTo
+    {
+      return $this->belongsTo(BatchType::class);
+    }
+
+    public function scopeOperational($query)
+    {
+        return $query->whereHas('batchType', function ($q) {
+            $q->where('code', 'OPERATIONAL');
+        });
+    }
+
+    public function scopeQuarantine($query)
+    {
+        return $query->whereHas('type', function ($q) {
+            $q->where('code', 'QUARANTINE');
+        });
+    }
+
+   public function isInQuarantine():bool
+   {
+    return $this->batchType?->code === 'QUARANTINE' ?? false;
+   }
+
 }

@@ -47,6 +47,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(IActivityRepository::class, EloquentActivityRepository::class);
         $this->app->bind(ITemplateTypeRepository::class, EloquentTemplateTypeRepository::class);
         $this->app->bind(IWorkTemplateRepository::class, EloquentWorkTemplateRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IBatchTypeRepository::class, \App\Infrastructure\Persistence\EloquentBatchTypeRepository::class);
         $this->app->bind(\App\Core\Interfaces\IOCRProvider::class, function ($app) {
             $driver = config('services.ocr.driver');
 

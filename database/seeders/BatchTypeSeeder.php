@@ -1,0 +1,80 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Database\Seeders;
+
+use App\Models\BatchType;
+use App\Models\Company;
+use Illuminate\Database\Seeder;
+
+class BatchTypeSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $companies = Company::all();
+
+        foreach ($companies as $c) {
+
+            // Operational
+            BatchType::firstOrCreate(
+                [
+                    'company_id' => $c->id,
+                    'code' => 'OPERATIONAL',
+                ],
+                [
+                    'name' => 'Operational',
+                    'description' => 'Lote operacional | Estandar',
+                    'icon' => 'heroicons-outline:check-circle',
+                    'color' => '#10b981',
+                    'is_active' => true,
+                ]
+            );
+
+            // Quarantine
+            BatchType::firstOrCreate(
+                [
+                    'company_id' => $c->id,
+                    'code' => 'QUARANTINE',
+                ],
+                [
+                    'name' => 'Quarantine',
+                    'description' => 'Lote en cuarentena sanitaria',
+                    'icon' => 'heroicons-outline:shield-exclamation',
+                    'color' => '#f59e0b',
+                    'is_active' => true,
+                ]
+            );
+
+            // Domestic Consumption
+            BatchType::firstOrCreate(
+                [
+                    'company_id' => $c->id,
+                    'code' => 'INTERNAL_CONSUMPTION',
+                ],
+                [
+                    'name' => 'Internal Consumption',
+                    'description' => 'Lote destinado a consumo interno',
+                    'icon' => 'heroicons-outline:home',
+                    'color' => '#3b82f6',
+                    'is_active' => true,
+                ]
+            );
+
+            // Internal Death
+            BatchType::firstOrCreate(
+                [
+                    'company_id' => $c->id,
+                    'code' => 'INTERNAL_DEATH',
+                ],
+                [
+                    'name' => 'Internal Death',
+                    'description' => 'Lote asociado a bajas o mortalidad interna',
+                    'icon' => 'heroicons-outline:x-circle',
+                    'color' => '#ef4444',
+                    'is_active' => true,
+                ]
+            );
+        }
+    }
+}

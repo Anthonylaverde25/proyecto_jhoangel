@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -23,6 +22,7 @@ class TenantDatabaseSeeder extends Seeder
             ActivitySeeder::class,
             BatchWeightSeeder::class,
             TemplateTypeSeeder::class,
+            BatchTypeSeeder::class,
         ]);
     }
 }

@@ -15,7 +15,7 @@ class EloquentActivityRepository implements IActivityRepository
     public function findAll(): array
     {
         return Activity::with(['batches' => function ($query) {
-            $query->with('farm')->withCount('caravans');
+            $query->with(['farm', 'batchType'])->withCount('caravans');
         }])->get()->map(function ($model) {
             $entity = new ActivityEntity(
                 $model->id,
@@ -37,7 +37,10 @@ class EloquentActivityRepository implements IActivityRepository
                 (int) $b->activity_id,
                 $model->name,
                 (float) $b->current_weight,
-                (int) $b->caravans_count
+                (int) $b->caravans_count,
+                $b->batch_type_id ? (int) $b->batch_type_id : null,
+                $b->batchType?->name,
+                $b->batchType?->code
             ))->toArray());
             return $entity;
         })->toArray();
@@ -48,7 +51,7 @@ class EloquentActivityRepository implements IActivityRepository
         return Activity::whereHas('companies', function ($query) use ($companyId) {
             $query->where('company_id', $companyId)->where('is_enabled', true);
         })->with(['batches' => function ($query) use ($companyId) {
-            $query->where('company_id', $companyId)->with('farm')->withCount('caravans');
+            $query->where('company_id', $companyId)->with(['farm', 'batchType'])->withCount('caravans');
         }])->get()->map(function ($model) {
             $entity = new ActivityEntity(
                 $model->id,
@@ -70,7 +73,10 @@ class EloquentActivityRepository implements IActivityRepository
                 (int) $b->activity_id,
                 $model->name,
                 (float) $b->current_weight,
-                (int) $b->caravans_count
+                (int) $b->caravans_count,
+                $b->batch_type_id ? (int) $b->batch_type_id : null,
+                $b->batchType?->name,
+                $b->batchType?->code
             ))->toArray());
             return $entity;
         })->toArray();

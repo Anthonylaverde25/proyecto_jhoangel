@@ -11,7 +11,8 @@ final readonly class CreateBatchDTO
         public int $farmId,
         public ?string $observaciones = null,
         public ?int $activityId = null,
-        public ?float $weight = null
+        public ?float $weight = null,
+        public ?int $batchTypeId = null
     ) {
     }
 
@@ -22,7 +23,8 @@ final readonly class CreateBatchDTO
             (int) ($data['farm_id'] ?? 0),
             isset($data['observaciones']) ? (string) $data['observaciones'] : null,
             isset($data['activity_id']) ? (int) $data['activity_id'] : null,
-            isset($data['weight']) ? (float) $data['weight'] : null
+            isset($data['weight']) ? (float) $data['weight'] : null,
+            isset($data['batch_type_id']) ? (int) $data['batch_type_id'] : null
         );
     }
 }

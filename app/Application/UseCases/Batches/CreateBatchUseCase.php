@@ -23,7 +23,8 @@ final class CreateBatchUseCase
             farmId: $dto->farmId,
             observaciones: $dto->observaciones,
             isActive: true,
-            activityId: $dto->activityId
+            activityId: $dto->activityId,
+            batchTypeId: $dto->batchTypeId
         );
 
         $savedEntity = $this->repository->save($entity);

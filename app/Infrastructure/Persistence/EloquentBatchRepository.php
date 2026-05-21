@@ -13,20 +13,20 @@ class EloquentBatchRepository implements IBatchRepository
 {
     public function findAll(): array
     {
-        return Batch::with('farm.provider')->get()
+        return Batch::with(['farm.provider', 'batchType'])->get()
             ->map(fn (Batch $model) => BatchMapper::toEntity($model))
             ->toArray();
     }
 
     public function findById(int $id): ?BatchEntity
     {
-        $model = Batch::with('farm.provider')->find($id);
+        $model = Batch::with(['farm.provider', 'batchType'])->find($id);
         return $model ? BatchMapper::toEntity($model) : null;
     }
 
     public function findByNameAndFarmId(string $name, int $farmId): ?BatchEntity
     {
-        $model = Batch::with('farm.provider')
+        $model = Batch::with(['farm.provider', 'batchType'])
             ->where('name', $name)
             ->where('farm_id', $farmId)
             ->first();
@@ -35,7 +35,7 @@ class EloquentBatchRepository implements IBatchRepository
 
     public function findByFarmId(int $farmId): array
     {
-        return Batch::with('farm.provider')->where('farm_id', $farmId)
+        return Batch::with(['farm.provider', 'batchType'])->where('farm_id', $farmId)
             ->get()
             ->map(fn (Batch $model) => BatchMapper::toEntity($model))
             ->toArray();
