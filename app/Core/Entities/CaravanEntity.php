@@ -6,6 +6,7 @@ namespace App\Core\Entities;
 
 use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
+use App\Core\Enums\GestationResult;
 use App\Core\Exceptions\DomainException;
 use App\Core\ValueObjects\CaravanNumber;
 use App\Core\ValueObjects\FemaleReproductiveDetails;
@@ -29,6 +30,8 @@ final class CaravanEntity
         private ?string $batchName = null,
         private ?float $currentWeight = null,
         private ?FemaleReproductiveDetails $reproductiveDetails = null,
+        /** @var GestationEntity[] */
+        private array $gestations = []
     ) {
         $this->validateTeeth($teeth);
     }
@@ -130,6 +133,48 @@ final class CaravanEntity
         }
         
         $this->reproductiveDetails = $details;
+    }
+
+    /**
+     * @return GestationEntity[]
+     */
+    public function getGestations(): array
+    {
+        return $this->gestations;
+    }
+
+    public function hasActiveGestation(): bool
+    {
+        foreach ($this->gestations as $gestation) {
+            if ($gestation->isCurrent()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function startNewGestation(?string $startDate): void
+    {
+        if ($this->sex !== AnimalSex::FEMALE) {
+            throw new DomainException("Solo las hembras pueden tener procesos de gestación.");
+        }
+
+        // Close any currently active gestation (in case of data inconsistency or override)
+        foreach ($this->gestations as $gestation) {
+            if ($gestation->isCurrent()) {
+                $gestation->closeGestation(GestationResult::FAILED, date('Y-m-d'), 'Cerrado automáticamente por nueva gestación.');
+            }
+        }
+
+        $this->gestations[] = new GestationEntity(
+            id: null,
+            startDate: $startDate,
+            estimatedDueDate: null,
+            isCurrent: true,
+            result: null,
+            endDate: null,
+            notes: 'Gestación iniciada automáticamente.'
+        );
     }
 
     public function updateCategory(AnimalCategory $category): void

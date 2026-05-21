@@ -94,4 +94,14 @@ class Caravan extends Model
     {
         return $this->hasOne(FemaleCaravanDetail::class);
     }
+
+    /**
+     * Get the gestations associated with the caravan.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function gestations(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CaravanGestation::class);
+    }
 }

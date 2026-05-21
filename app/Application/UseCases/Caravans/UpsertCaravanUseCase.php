@@ -78,6 +78,12 @@ final class UpsertCaravanUseCase
             $arrivalCategory = $currentDetails?->getArrivalCategory() ?? $category;
             
             $entity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
+
+            // Automatización Gestacional: Si está preñada y no tiene gestación activa, crear una
+            if (!$isEmpty && !$entity->hasActiveGestation()) {
+                $startDate = $dto->entryDate ?? date('Y-m-d');
+                $entity->startNewGestation($startDate);
+            }
         }
 
         $this->caravanRepository->save($entity);
@@ -136,6 +142,12 @@ final class UpsertCaravanUseCase
             $arrivalCategory = $currentDetails?->getArrivalCategory() ?? $category;
             
             $newEntity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
+
+            // Automatización Gestacional: Si está preñada y no tiene gestación activa, crear una
+            if (!$isEmpty && !$newEntity->hasActiveGestation()) {
+                $startDate = $dto->entryDate ?? date('Y-m-d');
+                $newEntity->startNewGestation($startDate);
+            }
         }
 
         $savedEntity = $this->caravanRepository->save($newEntity);
@@ -198,6 +210,12 @@ final class UpsertCaravanUseCase
         if ($newEntity->getSex() === AnimalSex::FEMALE && $category !== null) {
             $isEmpty = $dto->isEmpty !== null ? $dto->isEmpty : true;
             $newEntity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $category));
+
+            // Automatización Gestacional: Si está preñada y no tiene gestación activa, crear una
+            if (!$isEmpty && !$newEntity->hasActiveGestation()) {
+                $startDate = $dto->entryDate ?? date('Y-m-d');
+                $newEntity->startNewGestation($startDate);
+            }
         }
 
         $savedEntity = $this->caravanRepository->save($newEntity);

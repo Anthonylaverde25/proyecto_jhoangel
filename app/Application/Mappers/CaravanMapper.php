@@ -10,6 +10,7 @@ use App\Core\ValueObjects\CaravanNumber;
 use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
 use App\Core\ValueObjects\FemaleReproductiveDetails;
+use App\Core\Entities\GestationEntity;
 
 class CaravanMapper
 {
@@ -38,6 +39,17 @@ class CaravanMapper
                 $model->femaleDetail->is_empty,
                 $model->femaleDetail->arrival_category
             ) : null,
+            $model->relationLoaded('gestations') && $model->gestations ? $model->gestations->map(function ($g) {
+                return new GestationEntity(
+                    $g->id,
+                    $g->start_date ? (is_string($g->start_date) ? $g->start_date : $g->start_date->format('Y-m-d')) : null,
+                    $g->estimated_due_date ? (is_string($g->estimated_due_date) ? $g->estimated_due_date : $g->estimated_due_date->format('Y-m-d')) : null,
+                    $g->is_current,
+                    $g->result,
+                    $g->end_date ? (is_string($g->end_date) ? $g->end_date : $g->end_date->format('Y-m-d')) : null,
+                    $g->notes
+                );
+            })->toArray() : []
         );
     }
 
