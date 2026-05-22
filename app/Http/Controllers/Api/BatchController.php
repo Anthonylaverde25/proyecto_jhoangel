@@ -35,35 +35,59 @@ class BatchController extends Controller
     public function index(Request $request): JsonResponse
     {
         $farmId = $request->query('farm_id') ? (int) $request->query('farm_id') : null;
-        $entities = ($this->batch->list)($farmId);
+        $batchType = $request->query('batch_type') ? (string) $request->query('batch_type') : null;
+        $entities = ($this->batch->list)($farmId, $batchType);
         
         return response()->json(
             BatchResource::collection($entities)
         );
     }
 
-    /**
-     * Crea un nuevo lote vinculado a una granja.
-     */
     public function store(Request $request): JsonResponse
     {
-        $companyId = (int) $request->header('X-Company-ID');
-
-        $validated = $request->validate([
-            'name'          => 'required|string|max:255',
-            'farm_id'       => 'required|integer|exists:farms,id',
-            'activity_id'   => 'nullable|integer|exists:activities,id',
-            'weight'        => 'nullable|numeric|min:0',
-            'observaciones' => 'nullable|string',
-            'batch_type_id' => [
-                'required',
-                'integer',
-                \Illuminate\Validation\Rule::exists('batch_types', 'id')->where('company_id', $companyId),
-            ],
+        \Illuminate\Support\Facades\Log::info('Store batch request data', [
+            'headers' => $request->headers->all(),
+            'data' => $request->all(),
         ]);
 
-        $dto = CreateBatchDTO::fromArray($validated);
-        $entity = ($this->batch->create)($dto);
+        try {
+            $companyId = (int) $request->header('X-Company-ID');
+
+            $validated = $request->validate([
+                'name'          => 'required|string|max:255',
+                'farm_id'       => 'nullable|integer|exists:farms,id',
+                'activity_id'   => 'nullable|integer|exists:activities,id',
+                'weight'        => 'nullable|numeric|min:0',
+                'observaciones' => 'nullable|string',
+                'batch_type_id' => [
+                    'required',
+                    'integer',
+                    \Illuminate\Validation\Rule::exists('batch_types', 'id')->where('company_id', $companyId),
+                ],
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Illuminate\Support\Facades\Log::error('Validation failed for batch creation', [
+                'errors' => $e->errors(),
+            ]);
+            throw $e;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Unexpected error in batch validation phase', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
+
+        try {
+            $dto = CreateBatchDTO::fromArray($validated);
+            $entity = ($this->batch->create)($dto);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Unexpected error in batch creation execution', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
 
         return response()->json(
             new BatchResource($entity),

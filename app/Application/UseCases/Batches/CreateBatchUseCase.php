@@ -11,19 +11,34 @@ use App\Core\Interfaces\IBatchRepository;
 final class CreateBatchUseCase
 {
     public function __construct(
-        private readonly IBatchRepository $repository
+        private readonly IBatchRepository $repository,
+        private readonly \App\Core\Interfaces\IActivityRepository $activityRepository,
+        private readonly \App\Core\Interfaces\IBatchTypeRepository $batchTypeRepository
     ) {
     }
 
     public function __invoke(CreateBatchDTO $dto): BatchEntity
     {
+        $activityId = $dto->activityId;
+
+        // Auto-assign internal activity if it's an internal batch type
+        if ($dto->batchTypeId !== null) {
+            $batchType = $this->batchTypeRepository->findById($dto->batchTypeId);
+            if ($batchType !== null && in_array($batchType->getCode(), ['INTERNAL_CONSUMPTION', 'INTERNAL_DEATH', 'QUARANTINE'])) {
+                $internalActivity = $this->activityRepository->findByCode('INTERNAL');
+                if ($internalActivity !== null) {
+                    $activityId = $internalActivity->getId();
+                }
+            }
+        }
+
         $entity = new BatchEntity(
             id: null,
             name: $dto->name,
             farmId: $dto->farmId,
             observaciones: $dto->observaciones,
             isActive: true,
-            activityId: $dto->activityId,
+            activityId: $activityId,
             batchTypeId: $dto->batchTypeId
         );
 
@@ -36,7 +51,7 @@ final class CreateBatchUseCase
             $dto->weight ?? 0.0,
             'INITIAL',
             new \DateTimeImmutable(),
-            $dto->activityId
+            $activityId
         );
 
         return $savedEntity;

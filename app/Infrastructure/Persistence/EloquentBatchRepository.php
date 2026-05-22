@@ -11,9 +11,17 @@ use App\Application\Mappers\BatchMapper;
 
 class EloquentBatchRepository implements IBatchRepository
 {
-    public function findAll(): array
+    public function findAll(?string $batchType = null): array
     {
-        return Batch::with(['farm.provider', 'batchType'])->get()
+        $query = Batch::with(['farm.provider', 'batchType']);
+        
+        if ($batchType !== null) {
+            $query->whereHas('batchType', function ($q) use ($batchType) {
+                $q->where('code', $batchType);
+            });
+        }
+
+        return $query->get()
             ->map(fn (Batch $model) => BatchMapper::toEntity($model))
             ->toArray();
     }
@@ -33,10 +41,17 @@ class EloquentBatchRepository implements IBatchRepository
         return $model ? BatchMapper::toEntity($model) : null;
     }
 
-    public function findByFarmId(int $farmId): array
+    public function findByFarmId(int $farmId, ?string $batchType = null): array
     {
-        return Batch::with(['farm.provider', 'batchType'])->where('farm_id', $farmId)
-            ->get()
+        $query = Batch::with(['farm.provider', 'batchType'])->where('farm_id', $farmId);
+
+        if ($batchType !== null) {
+            $query->whereHas('batchType', function ($q) use ($batchType) {
+                $q->where('code', $batchType);
+            });
+        }
+
+        return $query->get()
             ->map(fn (Batch $model) => BatchMapper::toEntity($model))
             ->toArray();
     }

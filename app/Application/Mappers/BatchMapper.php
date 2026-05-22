@@ -14,7 +14,7 @@ class BatchMapper
         $entity = new BatchEntity(
             $model->id,
             $model->name,
-            (int) $model->farm_id,
+            $model->farm_id !== null ? (int) $model->farm_id : null,
             $model->observaciones,
             (bool) $model->is_active,
             $model->created_at,

@@ -17,7 +17,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('company_id')->constrained('companies')->onDelete('cascade');
             $table->string('name');
-            $table->foreignId('farm_id')->constrained('farms')->onDelete('restrict');
+            $table->foreignId('farm_id')->nullable()->constrained('farms')->onDelete('restrict');
             $table->text('observaciones')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();

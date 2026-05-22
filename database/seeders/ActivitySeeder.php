@@ -28,6 +28,10 @@ class ActivitySeeder extends Seeder
                 'code' => 'INVERNADA',
                 'is_final' => true,
             ],
+            [
+                'name' => 'Actividad Interna',
+                'code' => 'INTERNAL',
+            ],
         ];
 
         $activityIds = [];

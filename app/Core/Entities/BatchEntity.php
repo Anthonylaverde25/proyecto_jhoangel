@@ -9,7 +9,7 @@ final class BatchEntity
     public function __construct(
         private readonly ?int $id,
         private string $name,
-        private int $farmId,
+        private ?int $farmId,
         private ?string $observaciones,
         private bool $isActive = true,
         private ?\DateTimeInterface $createdAt = null,
@@ -62,7 +62,7 @@ final class BatchEntity
         return $this->name;
     }
 
-    public function getFarmId(): int
+    public function getFarmId(): ?int
     {
         return $this->farmId;
     }

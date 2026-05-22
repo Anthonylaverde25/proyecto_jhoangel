@@ -26,4 +26,10 @@ interface IActivityRepository
      * @return bool
      */
     public function toggleActivity(int $companyId, int $activityId, bool $isEnabled): bool;
+
+    /**
+     * @param string $code
+     * @return ActivityEntity|null
+     */
+    public function findByCode(string $code): ?ActivityEntity;
 }

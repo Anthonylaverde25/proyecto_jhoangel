@@ -91,4 +91,20 @@ class EloquentActivityRepository implements IActivityRepository
 
         return true;
     }
+
+    public function findByCode(string $code): ?ActivityEntity
+    {
+        $model = Activity::where('code', $code)->first();
+        if (!$model) {
+            return null;
+        }
+
+        return new ActivityEntity(
+            $model->id,
+            $model->name,
+            $model->code,
+            $model->is_active,
+            $model->is_final
+        );
+    }
 }

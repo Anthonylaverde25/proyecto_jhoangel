@@ -11,7 +11,7 @@ interface IBatchRepository
     /**
      * @return BatchEntity[]
      */
-    public function findAll(): array;
+    public function findAll(?string $batchType = null): array;
 
     public function findById(int $id): ?BatchEntity;
 
@@ -20,7 +20,7 @@ interface IBatchRepository
     /**
      * @return BatchEntity[]
      */
-    public function findByFarmId(int $farmId): array;
+    public function findByFarmId(int $farmId, ?string $batchType = null): array;
 
     public function save(BatchEntity $batch): BatchEntity;
 
