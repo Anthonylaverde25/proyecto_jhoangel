@@ -84,7 +84,7 @@ final class UpsertCaravanUseCase
             if ($isEmpty && $entity->hasActiveGestation()) {
                 $endDate = $dto->entryDate ?? date('Y-m-d');
                 $entity->getActiveGestation()->closeGestation(
-                    \App\Core\Enums\GestationResult::SUCCESSFUL,
+                    true,
                     $endDate,
                     'Closed via calving registration.'
                 );
@@ -163,7 +163,7 @@ final class UpsertCaravanUseCase
             if ($isEmpty && $newEntity->hasActiveGestation()) {
                 $endDate = $dto->entryDate ?? date('Y-m-d');
                 $newEntity->getActiveGestation()->closeGestation(
-                    \App\Core\Enums\GestationResult::SUCCESSFUL,
+                    true,
                     $endDate,
                     'Closed via calving registration.'
                 );

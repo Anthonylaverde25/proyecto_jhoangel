@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -20,8 +22,10 @@ return new class extends Migration
             
             $table->boolean('is_current')->default(true);
             
-            // The result will be stored as string matching GestationResult enum, or null if ongoing.
-            $table->string('result')->nullable(); 
+            // Gestation outcome
+            $table->boolean('success')->nullable();
+            $table->foreignId('loss_reason_id')->nullable()->constrained('gestation_loss_reasons')->nullOnDelete();
+            $table->text('loss_notes')->nullable();
             
             $table->date('end_date')->nullable();
             $table->text('notes')->nullable();
@@ -41,3 +45,4 @@ return new class extends Migration
         Schema::dropIfExists('caravan_gestations');
     }
 };
+

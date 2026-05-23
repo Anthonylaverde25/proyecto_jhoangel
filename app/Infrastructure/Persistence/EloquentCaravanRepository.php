@@ -33,7 +33,7 @@ class EloquentCaravanRepository implements ICaravanRepository
 
         // Persistir Gestaciones
         foreach ($caravan->getGestations() as $gestation) {
-            $model->gestations()->updateOrCreate(
+            $gestationModel = $model->gestations()->updateOrCreate(
                 ['id' => $gestation->getId()],
                 [
                     'start_date' => $gestation->getStartDate(),
@@ -41,19 +41,28 @@ class EloquentCaravanRepository implements ICaravanRepository
                     'is_current' => $gestation->isCurrent(),
                     'gestation_stage' => $gestation->getGestationStage()->value,
                     'gestation_months' => $gestation->getGestationMonths(),
-                    'result' => $gestation->getResult()?->value,
+                    'success' => $gestation->getSuccess(),
+                    'loss_reason_id' => $gestation->getLossReasonId(),
+                    'loss_notes' => $gestation->getLossNotes(),
                     'end_date' => $gestation->getEndDate(),
                     'notes' => $gestation->getNotes(),
                 ]
             );
+
+            // Sincronizar sires
+            $sireSyncData = [];
+            foreach ($gestation->getSires() as $sire) {
+                $sireSyncData[$sire->getSireId()] = ['is_confirmed' => $sire->isConfirmed()];
+            }
+            $gestationModel->sires()->sync($sireSyncData);
         }
 
-        return CaravanMapper::toEntity($model->load(['breedRelation', 'currentWeight', 'femaleDetail', 'gestations']));
+        return CaravanMapper::toEntity($model->load(['breedRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father']));
     }
 
     public function findByIdentification(CaravanNumber $identification): ?CaravanEntity
     {
-        $model = Caravan::with(['breedRelation', 'currentWeight', 'femaleDetail', 'gestations'])
+        $model = Caravan::with(['breedRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])
             ->where('identification', $identification->getValue())
             ->first();
         
@@ -63,7 +72,7 @@ class EloquentCaravanRepository implements ICaravanRepository
     public function findByIdentificationGlobal(CaravanNumber $identification): ?CaravanEntity
     {
         $model = Caravan::withoutGlobalScopes()
-            ->with(['breedRelation', 'currentWeight', 'femaleDetail', 'gestations'])
+            ->with(['breedRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])
             ->where('identification', $identification->getValue())
             ->first();
         
@@ -72,14 +81,14 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function findById(int $id): ?CaravanEntity
     {
-        $model = Caravan::with(['breedRelation', 'currentWeight', 'femaleDetail', 'gestations'])->find($id);
+        $model = Caravan::with(['breedRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])->find($id);
         
         return $model ? CaravanMapper::toEntity($model) : null;
     }
 
     public function findAll(): array
     {
-        $models = Caravan::with(['breedRelation', 'batch', 'currentWeight', 'femaleDetail', 'gestations'])->get();
+        $models = Caravan::with(['breedRelation', 'batch', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])->get();
         return $models->map(fn($model) => CaravanMapper::toEntity($model))->toArray();
     }
 
@@ -103,3 +112,4 @@ class EloquentCaravanRepository implements ICaravanRepository
         return $avg !== null ? (float) $avg : null;
     }
 }
+

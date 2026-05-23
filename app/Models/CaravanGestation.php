@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use App\Core\Enums\GestationResult;
 use App\Core\Enums\GestationStage;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CaravanGestation extends Model
 {
@@ -21,7 +22,9 @@ class CaravanGestation extends Model
         'is_current',
         'gestation_stage',
         'gestation_months',
-        'result',
+        'success',
+        'loss_reason_id',
+        'loss_notes',
         'end_date',
         'notes',
     ];
@@ -30,20 +33,49 @@ class CaravanGestation extends Model
      * @var array<string, string>
      */
     protected $casts = [
+        'caravan_id' => 'integer',
         'start_date' => 'date',
         'estimated_due_date' => 'date',
         'end_date' => 'date',
         'is_current' => 'boolean',
-        'result' => GestationResult::class,
+        'success' => 'boolean',
+        'loss_reason_id' => 'integer',
         'gestation_stage' => GestationStage::class,
         'gestation_months' => 'float',
     ];
 
     /**
-     * Get the caravan that owns the gestation.
+     * Get the caravan (mother) that owns the gestation.
      */
     public function caravan(): BelongsTo
     {
         return $this->belongsTo(Caravan::class);
     }
+
+    /**
+     * Get the potential fathers (sires) for this gestation.
+     */
+    public function sires(): BelongsToMany
+    {
+        return $this->belongsToMany(Caravan::class, 'gestation_sires', 'gestation_id', 'sire_id')
+            ->withPivot('is_confirmed')
+            ->withTimestamps();
+    }
+
+    /**
+     * Get the gestation loss reason.
+     */
+    public function lossReason(): BelongsTo
+    {
+        return $this->belongsTo(GestationLossReason::class, 'loss_reason_id');
+    }
+
+    /**
+     * Get the offspring lineage born from this gestation.
+     */
+    public function offspring(): HasMany
+    {
+        return $this->hasMany(CaravanLineage::class, 'gestation_id');
+    }
 }
+

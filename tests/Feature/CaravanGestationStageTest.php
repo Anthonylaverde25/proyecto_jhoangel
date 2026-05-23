@@ -232,7 +232,7 @@ class CaravanGestationStageTest extends TestCase
         $this->assertNotNull($caravan);
         $gestation = CaravanGestation::where('caravan_id', $caravan->id)->first();
         $this->assertTrue((bool)$gestation->is_current);
-        $this->assertNull($gestation->result);
+        $this->assertNull($gestation->success);
 
         // 2. Update the same caravan to empty (is_empty = true)
         $responseUpdate = $this->postJson('http://test.localhost/api/caravans', [
@@ -247,7 +247,7 @@ class CaravanGestationStageTest extends TestCase
         // 3. Verify the gestation has been closed
         $gestationUpdated = CaravanGestation::where('caravan_id', $caravan->id)->first();
         $this->assertFalse((bool)$gestationUpdated->is_current);
-        $this->assertEquals(\App\Core\Enums\GestationResult::SUCCESSFUL, $gestationUpdated->result);
+        $this->assertTrue((bool)$gestationUpdated->success);
         $this->assertNotNull($gestationUpdated->end_date);
         $this->assertEquals('Closed via calving registration.', $gestationUpdated->notes);
     }

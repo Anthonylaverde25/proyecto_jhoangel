@@ -104,4 +104,34 @@ class Caravan extends Model
     {
         return $this->hasMany(CaravanGestation::class);
     }
+
+    /**
+     * Get the lineage of this caravan (parentage).
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne
+     */
+    public function lineage(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(CaravanLineage::class, 'caravan_id');
+    }
+
+    /**
+     * Get the offspring of this caravan as a mother.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function offspringAsMother(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CaravanLineage::class, 'mother_id');
+    }
+
+    /**
+     * Get the offspring of this caravan as a father.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function offspringAsFather(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CaravanLineage::class, 'father_id');
+    }
 }

@@ -12,6 +12,7 @@ use App\Core\Enums\AnimalSex;
 use App\Core\ValueObjects\FemaleReproductiveDetails;
 use App\Core\Entities\GestationEntity;
 use App\Core\Enums\GestationStage;
+use App\Core\ValueObjects\SireEntry;
 
 class CaravanMapper
 {
@@ -41,18 +42,30 @@ class CaravanMapper
                 $model->femaleDetail->arrival_category
             ) : null,
             $model->relationLoaded('gestations') && $model->gestations ? $model->gestations->map(function ($g) {
+                $sires = $g->relationLoaded('sires') && $g->sires ? $g->sires->map(function ($s) {
+                    return new SireEntry(
+                        (int) $s->id,
+                        (string) $s->identification,
+                        (bool) ($s->pivot->is_confirmed ?? false)
+                    );
+                })->toArray() : [];
+
                 return new GestationEntity(
                     $g->id,
                     $g->start_date ? (is_string($g->start_date) ? $g->start_date : $g->start_date->format('Y-m-d')) : null,
                     $g->estimated_due_date ? (is_string($g->estimated_due_date) ? $g->estimated_due_date : $g->estimated_due_date->format('Y-m-d')) : null,
                     $g->is_current,
-                    $g->result,
+                    $g->success !== null ? (bool) $g->success : null,
+                    $g->loss_reason_id ? (int) $g->loss_reason_id : null,
+                    $g->loss_notes,
                     $g->end_date ? (is_string($g->end_date) ? $g->end_date : $g->end_date->format('Y-m-d')) : null,
                     $g->notes,
                     $g->gestation_stage ?? GestationStage::HEAD,
-                    (float) ($g->gestation_months ?? 3.0)
+                    (float) ($g->gestation_months ?? 3.0),
+                    $sires
                 );
-            })->toArray() : []
+            })->toArray() : [],
+            $model->relationLoaded('lineage') && $model->lineage ? LineageMapper::toEntity($model->lineage) : null
         );
     }
 
@@ -83,3 +96,4 @@ class CaravanMapper
         return $model;
     }
 }
+

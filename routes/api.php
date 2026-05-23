@@ -39,6 +39,9 @@ Route::middleware([
     Route::get('/caravans/{id}/weights', [CaravanController::class, 'listWeights']);
     Route::post('/caravans/{id}/weights', [CaravanController::class, 'recordWeight']);
     Route::post('/caravans/bulk-weights', [CaravanController::class, 'bulkRecordWeights']);
+    Route::post('/caravans/bulk-birth', [CaravanController::class, 'bulkBirth']);
+    Route::post('/caravans/{id}/gestation-loss', [CaravanController::class, 'gestationLoss']);
+    Route::patch('/caravans/{id}/wean', [CaravanController::class, 'wean']);
 
     Route::get('/field-mappings/{model}', [FieldMappingController::class, 'index']);
     Route::post('/field-mappings/learn', [FieldMappingController::class, 'learn']);

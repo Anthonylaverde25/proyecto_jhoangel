@@ -4,21 +4,27 @@ declare(strict_types=1);
 
 namespace App\Core\Entities;
 
-use App\Core\Enums\GestationResult;
 use App\Core\Enums\GestationStage;
+use App\Core\ValueObjects\SireEntry;
 
 class GestationEntity
 {
+    /**
+     * @param SireEntry[] $sires
+     */
     public function __construct(
         private ?int $id,
         private ?string $startDate,
         private ?string $estimatedDueDate,
         private bool $isCurrent,
-        private ?GestationResult $result,
+        private ?bool $success,
+        private ?int $lossReasonId,
+        private ?string $lossNotes,
         private ?string $endDate,
         private ?string $notes,
         private GestationStage $gestationStage,
-        private float $gestationMonths
+        private float $gestationMonths,
+        private array $sires = []
     ) {
     }
 
@@ -56,9 +62,19 @@ class GestationEntity
         return $this->isCurrent;
     }
 
-    public function getResult(): ?GestationResult
+    public function getSuccess(): ?bool
     {
-        return $this->result;
+        return $this->success;
+    }
+
+    public function getLossReasonId(): ?int
+    {
+        return $this->lossReasonId;
+    }
+
+    public function getLossNotes(): ?string
+    {
+        return $this->lossNotes;
     }
 
     public function getEndDate(): ?string
@@ -81,13 +97,70 @@ class GestationEntity
         return $this->gestationMonths;
     }
 
-    public function closeGestation(GestationResult $result, string $endDate, ?string $notes = null): void
+    /**
+     * @return SireEntry[]
+     */
+    public function getSires(): array
     {
+        return $this->sires;
+    }
+
+    /**
+     * Get the confirmed sire, if one exists.
+     */
+    public function getConfirmedSire(): ?SireEntry
+    {
+        foreach ($this->sires as $sire) {
+            if ($sire->isConfirmed()) {
+                return $sire;
+            }
+        }
+        return null;
+    }
+
+    public function addSire(SireEntry $sire): void
+    {
+        $this->sires[] = $sire;
+    }
+
+    public function confirmSire(int $sireId): void
+    {
+        foreach ($this->sires as $key => $sire) {
+            if ($sire->getSireId() === $sireId) {
+                $this->sires[$key] = new SireEntry(
+                    $sire->getSireId(),
+                    $sire->getSireIdentification(),
+                    true
+                );
+            } else {
+                $this->sires[$key] = new SireEntry(
+                    $sire->getSireId(),
+                    $sire->getSireIdentification(),
+                    false
+                );
+            }
+        }
+    }
+
+
+    public function closeGestation(
+        bool $success,
+        string $endDate,
+        ?string $notes = null,
+        ?int $lossReasonId = null,
+        ?string $lossNotes = null
+    ): void {
         $this->isCurrent = false;
-        $this->result = $result;
+        $this->success = $success;
         $this->endDate = $endDate;
         if ($notes !== null) {
             $this->notes = $notes;
         }
+
+        if (!$success) {
+            $this->lossReasonId = $lossReasonId;
+            $this->lossNotes = $lossNotes;
+        }
     }
 }
+

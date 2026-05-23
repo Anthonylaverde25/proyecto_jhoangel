@@ -22,7 +22,10 @@ use App\Http\Requests\Caravans\BulkRecordWeightRequest;
 class CaravanController extends Controller
 {
     public function __construct(
-        private readonly CaravanUseCases $caravan
+        private readonly CaravanUseCases $caravan,
+        private readonly \App\Application\UseCases\Caravans\BulkRegisterBirthUseCase $bulkRegisterBirth,
+        private readonly \App\Application\UseCases\Caravans\RegisterGestationLossUseCase $registerGestationLoss,
+        private readonly \App\Application\UseCases\Caravans\WeanCaravanUseCase $weanCaravan
     ) {
     }
 
@@ -172,5 +175,53 @@ class CaravanController extends Controller
         ($this->caravan->bulkRecordWeights)($dto);
 
         return response()->json(['message' => 'Pesajes masivos registrados correctamente'], 201);
+    }
+
+    /**
+     * Registro masivo de partos.
+     */
+    public function bulkBirth(\App\Http\Requests\Caravans\BulkBirthRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+
+        $dtos = array_map(function ($data) {
+            return \App\Application\DTOs\RegisterBirthDTO::fromArray($data);
+        }, $validated['births']);
+
+        $entities = ($this->bulkRegisterBirth)($dtos);
+
+        return response()->json(
+            CaravanResource::collection($entities),
+            201
+        );
+    }
+
+    /**
+     * Registra una pérdida gestacional.
+     */
+    public function gestationLoss(\App\Http\Requests\Caravans\GestationLossRequest $request, int $id): JsonResponse
+    {
+        $validated = $request->validated();
+
+        $entity = ($this->registerGestationLoss)(
+            caravanId: $id,
+            lossReasonId: (int) $validated['loss_reason_id'],
+            lossNotes: $validated['loss_notes'] ?? null,
+            lossDate: $validated['loss_date']
+        );
+
+        return response()->json(
+            new CaravanResource($entity)
+        );
+    }
+
+    /**
+     * Registra el destete de una caravana.
+     */
+    public function wean(int $id): JsonResponse
+    {
+        ($this->weanCaravan)($id);
+
+        return response()->json(null, 204);
     }
 }

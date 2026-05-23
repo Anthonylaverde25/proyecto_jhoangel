@@ -47,8 +47,23 @@ class CaravanResource extends JsonResource
                 'gestation_stage' => $this->resource->getActiveGestation()->getGestationStage()->value,
                 'gestation_months' => $this->resource->getActiveGestation()->getGestationMonths(),
                 'is_current' => $this->resource->getActiveGestation()->isCurrent(),
+                'success' => $this->resource->getActiveGestation()->getSuccess(),
                 'notes' => $this->resource->getActiveGestation()->getNotes(),
+                'sires' => array_map(fn($sire) => [
+                    'id' => $sire->getSireId(),
+                    'identification' => $sire->getSireIdentification(),
+                    'is_confirmed' => $sire->isConfirmed(),
+                ], $this->resource->getActiveGestation()->getSires()),
+            ] : null,
+            'lineage' => $this->resource->getLineage() ? [
+                'mother_id' => $this->resource->getLineage()->getMotherId(),
+                'mother_identification' => $this->resource->getLineage()->getMotherIdentification(),
+                'father_id' => $this->resource->getLineage()->getFatherId(),
+                'father_identification' => $this->resource->getLineage()->getFatherIdentification(),
+                'birth_date' => $this->resource->getLineage()->getBirthDate(),
+                'is_nursing' => $this->resource->getLineage()->isNursing(),
             ] : null,
         ];
     }
 }
+

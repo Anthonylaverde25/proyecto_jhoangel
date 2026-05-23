@@ -6,7 +6,6 @@ namespace App\Core\Entities;
 
 use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
-use App\Core\Enums\GestationResult;
 use App\Core\Enums\GestationStage;
 use App\Core\Exceptions\DomainException;
 use App\Core\ValueObjects\CaravanNumber;
@@ -32,7 +31,8 @@ final class CaravanEntity
         private ?float $currentWeight = null,
         private ?FemaleReproductiveDetails $reproductiveDetails = null,
         /** @var GestationEntity[] */
-        private array $gestations = []
+        private array $gestations = [],
+        private ?LineageEntity $lineage = null
     ) {
         $this->validateTeeth($teeth);
     }
@@ -164,6 +164,21 @@ final class CaravanEntity
         return null;
     }
 
+    public function getLineage(): ?LineageEntity
+    {
+        return $this->lineage;
+    }
+
+    public function recordLineage(LineageEntity $lineage): void
+    {
+        $this->lineage = $lineage;
+    }
+
+    public function isNursing(): bool
+    {
+        return $this->lineage?->isNursing() ?? false;
+    }
+
     public function startNewGestation(?string $startDate, GestationStage $gestationStage, float $gestationMonths): void
     {
         if ($this->sex !== AnimalSex::FEMALE) {
@@ -173,7 +188,7 @@ final class CaravanEntity
         // Close any currently active gestation (in case of data inconsistency or override)
         foreach ($this->gestations as $gestation) {
             if ($gestation->isCurrent()) {
-                $gestation->closeGestation(GestationResult::FAILED, date('Y-m-d'), 'Cerrado automáticamente por nueva gestación.');
+                $gestation->closeGestation(false, date('Y-m-d'), 'Cerrado automáticamente por nueva gestación.');
             }
         }
 
@@ -182,11 +197,14 @@ final class CaravanEntity
             startDate: $startDate,
             estimatedDueDate: null,
             isCurrent: true,
-            result: null,
+            success: null,
+            lossReasonId: null,
+            lossNotes: null,
             endDate: null,
             notes: 'Gestación iniciada automáticamente.',
             gestationStage: $gestationStage,
-            gestationMonths: $gestationMonths
+            gestationMonths: $gestationMonths,
+            sires: []
         );
     }
 
