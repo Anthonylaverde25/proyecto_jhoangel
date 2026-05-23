@@ -46,7 +46,9 @@ return new class extends Migration
         });
 
         // Restricción técnica: teeth debe estar entre 0 y 99
-        DB::statement('ALTER TABLE caravans ADD CONSTRAINT check_teeth_range CHECK (teeth >= 0 AND teeth <= 99)');
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE caravans ADD CONSTRAINT check_teeth_range CHECK (teeth >= 0 AND teeth <= 99)');
+        }
     }
 
     /**

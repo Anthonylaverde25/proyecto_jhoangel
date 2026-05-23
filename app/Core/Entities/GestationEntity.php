@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Entities;
 
 use App\Core\Enums\GestationResult;
+use App\Core\Enums\GestationStage;
 
 class GestationEntity
 {
@@ -15,7 +16,9 @@ class GestationEntity
         private bool $isCurrent,
         private ?GestationResult $result,
         private ?string $endDate,
-        private ?string $notes
+        private ?string $notes,
+        private GestationStage $gestationStage,
+        private float $gestationMonths
     ) {
     }
 
@@ -31,6 +34,20 @@ class GestationEntity
 
     public function getEstimatedDueDate(): ?string
     {
+        if ($this->estimatedDueDate === null && $this->startDate !== null) {
+            try {
+                $startDateObj = new \DateTime($this->startDate);
+                $daysRemaining = (int) round((9.0 - $this->gestationMonths) * 30.4375);
+                if ($daysRemaining < 0) {
+                    $daysRemaining = 0;
+                }
+                $dueDateObj = clone $startDateObj;
+                $dueDateObj->modify("+{$daysRemaining} days");
+                return $dueDateObj->format('Y-m-d');
+            } catch (\Exception $e) {
+                return null;
+            }
+        }
         return $this->estimatedDueDate;
     }
 
@@ -52,6 +69,16 @@ class GestationEntity
     public function getNotes(): ?string
     {
         return $this->notes;
+    }
+
+    public function getGestationStage(): GestationStage
+    {
+        return $this->gestationStage;
+    }
+
+    public function getGestationMonths(): float
+    {
+        return $this->gestationMonths;
     }
 
     public function closeGestation(GestationResult $result, string $endDate, ?string $notes = null): void

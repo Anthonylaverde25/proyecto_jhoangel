@@ -7,6 +7,7 @@ namespace App\Core\Entities;
 use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
 use App\Core\Enums\GestationResult;
+use App\Core\Enums\GestationStage;
 use App\Core\Exceptions\DomainException;
 use App\Core\ValueObjects\CaravanNumber;
 use App\Core\ValueObjects\FemaleReproductiveDetails;
@@ -153,7 +154,17 @@ final class CaravanEntity
         return false;
     }
 
-    public function startNewGestation(?string $startDate): void
+    public function getActiveGestation(): ?GestationEntity
+    {
+        foreach ($this->gestations as $gestation) {
+            if ($gestation->isCurrent()) {
+                return $gestation;
+            }
+        }
+        return null;
+    }
+
+    public function startNewGestation(?string $startDate, GestationStage $gestationStage, float $gestationMonths): void
     {
         if ($this->sex !== AnimalSex::FEMALE) {
             throw new DomainException("Solo las hembras pueden tener procesos de gestación.");
@@ -173,7 +184,9 @@ final class CaravanEntity
             isCurrent: true,
             result: null,
             endDate: null,
-            notes: 'Gestación iniciada automáticamente.'
+            notes: 'Gestación iniciada automáticamente.',
+            gestationStage: $gestationStage,
+            gestationMonths: $gestationMonths
         );
     }
 

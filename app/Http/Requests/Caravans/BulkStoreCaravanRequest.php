@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Http\Requests\Caravans;
 
 use App\Core\Enums\AnimalSex;
+use App\Core\Enums\GestationStage;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
+use Illuminate\Validation\Rule;
 
 class BulkStoreCaravanRequest extends FormRequest
 {
@@ -25,7 +27,7 @@ class BulkStoreCaravanRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
+        $rules = [
             'caravans' => 'required|array|min:1',
             'caravans.*.identification' => 'required|string',
             'caravans.*.category'       => 'nullable|string',
@@ -38,5 +40,34 @@ class BulkStoreCaravanRequest extends FormRequest
             'caravans.*.farm_id'        => 'nullable|integer|exists:farms,id',
             'caravans.*.is_empty'       => 'nullable|boolean',
         ];
+
+        $caravans = $this->input('caravans', []);
+        if (is_array($caravans)) {
+            foreach ($caravans as $index => $caravan) {
+                $rules["caravans.{$index}.gestation_stage"] = [
+                    Rule::requiredIf(function () use ($caravan) {
+                        $isEmpty = isset($caravan['is_empty']) ? filter_var($caravan['is_empty'], FILTER_VALIDATE_BOOLEAN) : null;
+                        $hasMonths = isset($caravan['gestation_months']) && $caravan['gestation_months'] !== '';
+                        return $isEmpty === false && !$hasMonths;
+                    }),
+                    'nullable',
+                    new Enum(GestationStage::class)
+                ];
+
+                $rules["caravans.{$index}.gestation_months"] = [
+                    Rule::requiredIf(function () use ($caravan) {
+                        $isEmpty = isset($caravan['is_empty']) ? filter_var($caravan['is_empty'], FILTER_VALIDATE_BOOLEAN) : null;
+                        $hasStage = isset($caravan['gestation_stage']) && $caravan['gestation_stage'] !== '';
+                        return $isEmpty === false && !$hasStage;
+                    }),
+                    'nullable',
+                    'numeric',
+                    'min:0',
+                    'max:12'
+                ];
+            }
+        }
+
+        return $rules;
     }
 }

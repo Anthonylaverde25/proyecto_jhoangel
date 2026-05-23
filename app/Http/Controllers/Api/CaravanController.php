@@ -56,7 +56,9 @@ class CaravanController extends Controller
             breedId: isset($validated['breed_id']) ? (int) $validated['breed_id'] : null,
             batchId: isset($validated['batch_id']) ? (int) $validated['batch_id'] : null,
             farmId: isset($validated['farm_id']) ? (int) $validated['farm_id'] : null,
-            isEmpty: isset($validated['is_empty']) ? (bool) $validated['is_empty'] : null
+            isEmpty: isset($validated['is_empty']) ? (bool) $validated['is_empty'] : null,
+            gestationStage: $validated['gestation_stage'] ?? null,
+            gestationMonths: isset($validated['gestation_months']) ? (float) $validated['gestation_months'] : null
         );
 
         $result = ($this->caravan->upsert)($dto);
@@ -138,7 +140,9 @@ class CaravanController extends Controller
                 breedId: isset($data['breed_id']) ? (int) $data['breed_id'] : null,
                 batchId: isset($data['batch_id']) ? (int) $data['batch_id'] : null,
                 farmId: isset($data['farm_id']) ? (int) $data['farm_id'] : null,
-                isEmpty: isset($data['is_empty']) ? (bool) $data['is_empty'] : null
+                isEmpty: isset($data['is_empty']) ? (bool) $data['is_empty'] : null,
+                gestationStage: $data['gestation_stage'] ?? null,
+                gestationMonths: isset($data['gestation_months']) ? (float) $data['gestation_months'] : null
             );
         }, $request->input('caravans'));
 

@@ -39,6 +39,8 @@ class EloquentCaravanRepository implements ICaravanRepository
                     'start_date' => $gestation->getStartDate(),
                     'estimated_due_date' => $gestation->getEstimatedDueDate(),
                     'is_current' => $gestation->isCurrent(),
+                    'gestation_stage' => $gestation->getGestationStage()->value,
+                    'gestation_months' => $gestation->getGestationMonths(),
                     'result' => $gestation->getResult()?->value,
                     'end_date' => $gestation->getEndDate(),
                     'notes' => $gestation->getNotes(),

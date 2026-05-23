@@ -11,6 +11,7 @@ use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
 use App\Core\ValueObjects\FemaleReproductiveDetails;
 use App\Core\Entities\GestationEntity;
+use App\Core\Enums\GestationStage;
 
 class CaravanMapper
 {
@@ -47,7 +48,9 @@ class CaravanMapper
                     $g->is_current,
                     $g->result,
                     $g->end_date ? (is_string($g->end_date) ? $g->end_date : $g->end_date->format('Y-m-d')) : null,
-                    $g->notes
+                    $g->notes,
+                    $g->gestation_stage ?? GestationStage::HEAD,
+                    (float) ($g->gestation_months ?? 3.0)
                 );
             })->toArray() : []
         );

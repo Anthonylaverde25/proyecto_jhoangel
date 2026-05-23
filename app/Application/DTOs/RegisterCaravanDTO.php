@@ -19,6 +19,8 @@ final readonly class RegisterCaravanDTO
         public ?int $batchId = null,
         public ?int $farmId = null,
         public ?bool $isEmpty = null,
+        public ?string $gestationStage = null,
+        public ?float $gestationMonths = null,
     ) {
     }
 
@@ -39,6 +41,8 @@ final readonly class RegisterCaravanDTO
             isset($data['batch_id']) ? (int) $data['batch_id'] : null,
             isset($data['farm_id']) ? (int) $data['farm_id'] : null,
             isset($data['is_empty']) ? filter_var($data['is_empty'], FILTER_VALIDATE_BOOLEAN) : null,
+            isset($data['gestation_stage']) ? (string) $data['gestation_stage'] : null,
+            isset($data['gestation_months']) ? (float) $data['gestation_months'] : null,
         );
     }
 }

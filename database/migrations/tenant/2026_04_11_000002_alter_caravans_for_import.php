@@ -37,7 +37,9 @@ return new class extends Migration
         });
 
         // Re-apply teeth constraint
-        DB::statement('ALTER TABLE caravans ADD CONSTRAINT check_teeth_range CHECK (teeth >= 0 AND teeth <= 99)');
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE caravans ADD CONSTRAINT check_teeth_range CHECK (teeth >= 0 AND teeth <= 99)');
+        }
     }
 
     /**
@@ -55,7 +57,9 @@ return new class extends Migration
             ])->change();
         });
 
-        DB::statement('ALTER TABLE caravans ADD CONSTRAINT check_teeth_range CHECK (teeth >= 0 AND teeth <= 99)');
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE caravans ADD CONSTRAINT check_teeth_range CHECK (teeth >= 0 AND teeth <= 99)');
+        }
     }
 
     /**
@@ -63,6 +67,10 @@ return new class extends Migration
      */
     private function dropCheckConstraint(string $table, string $constraint): void
     {
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            return;
+        }
+
         $exists = DB::select(
             "SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS 
              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ? AND CONSTRAINT_TYPE = 'CHECK'",

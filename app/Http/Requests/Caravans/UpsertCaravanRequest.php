@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Http\Requests\Caravans;
 
 use App\Core\Enums\AnimalSex;
+use App\Core\Enums\GestationStage;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
+use Illuminate\Validation\Rule;
 
 class UpsertCaravanRequest extends FormRequest
 {
@@ -36,6 +38,18 @@ class UpsertCaravanRequest extends FormRequest
             'batch_id'       => 'nullable|integer|exists:batches,id',
             'farm_id'        => 'nullable|integer|exists:farms,id',
             'is_empty'       => 'nullable|boolean',
+            'gestation_stage' => [
+                Rule::requiredIf(fn() => $this->input('is_empty') === false && !$this->filled('gestation_months')),
+                'nullable',
+                new Enum(GestationStage::class)
+            ],
+            'gestation_months' => [
+                Rule::requiredIf(fn() => $this->input('is_empty') === false && !$this->filled('gestation_stage')),
+                'nullable',
+                'numeric',
+                'min:0',
+                'max:12'
+            ],
         ];
     }
 }

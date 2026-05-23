@@ -40,6 +40,15 @@ class CaravanResource extends JsonResource
                 'is_empty' => $this->resource->getReproductiveDetails()->isEmpty(),
                 'arrival_category' => $this->resource->getReproductiveDetails()->getArrivalCategory()->value,
             ] : null,
+            'active_gestation' => $this->resource->getActiveGestation() ? [
+                'id' => $this->resource->getActiveGestation()->getId(),
+                'start_date' => $this->resource->getActiveGestation()->getStartDate(),
+                'estimated_due_date' => $this->resource->getActiveGestation()->getEstimatedDueDate(),
+                'gestation_stage' => $this->resource->getActiveGestation()->getGestationStage()->value,
+                'gestation_months' => $this->resource->getActiveGestation()->getGestationMonths(),
+                'is_current' => $this->resource->getActiveGestation()->isCurrent(),
+                'notes' => $this->resource->getActiveGestation()->getNotes(),
+            ] : null,
         ];
     }
 }

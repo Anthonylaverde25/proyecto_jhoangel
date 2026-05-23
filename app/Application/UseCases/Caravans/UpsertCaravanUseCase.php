@@ -14,6 +14,7 @@ use App\Core\Services\CaravanTraceabilityService;
 use App\Core\ValueObjects\CaravanNumber;
 use App\Core\ValueObjects\FemaleReproductiveDetails;
 use App\Core\Enums\AnimalSex;
+use App\Core\Enums\GestationStage;
 
 final class UpsertCaravanUseCase
 {
@@ -79,10 +80,21 @@ final class UpsertCaravanUseCase
             
             $entity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
 
+            // Automatización Gestacional: Si pasa a vacía y tiene gestación activa, cerrarla como EXITOSA (Parto)
+            if ($isEmpty && $entity->hasActiveGestation()) {
+                $endDate = $dto->entryDate ?? date('Y-m-d');
+                $entity->getActiveGestation()->closeGestation(
+                    \App\Core\Enums\GestationResult::SUCCESSFUL,
+                    $endDate,
+                    'Closed via calving registration.'
+                );
+            }
+
             // Automatización Gestacional: Si está preñada y no tiene gestación activa, crear una
             if (!$isEmpty && !$entity->hasActiveGestation()) {
                 $startDate = $dto->entryDate ?? date('Y-m-d');
-                $entity->startNewGestation($startDate);
+                [$stage, $months] = $this->resolveGestationDetails($dto->gestationStage, $dto->gestationMonths);
+                $entity->startNewGestation($startDate, $stage, $months);
             }
         }
 
@@ -133,7 +145,11 @@ final class UpsertCaravanUseCase
             null,
             null,
             $newBatchId,
-            $newCompanyId
+            $newCompanyId,
+            null,
+            null,
+            $entity->getReproductiveDetails(),
+            $entity->getGestations()
         );
 
         if ($newEntity->getSex() === AnimalSex::FEMALE && $category !== null) {
@@ -143,10 +159,21 @@ final class UpsertCaravanUseCase
             
             $newEntity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
 
+            // Automatización Gestacional: Si pasa a vacía y tiene gestación activa, cerrarla como EXITOSA
+            if ($isEmpty && $newEntity->hasActiveGestation()) {
+                $endDate = $dto->entryDate ?? date('Y-m-d');
+                $newEntity->getActiveGestation()->closeGestation(
+                    \App\Core\Enums\GestationResult::SUCCESSFUL,
+                    $endDate,
+                    'Closed via calving registration.'
+                );
+            }
+
             // Automatización Gestacional: Si está preñada y no tiene gestación activa, crear una
             if (!$isEmpty && !$newEntity->hasActiveGestation()) {
                 $startDate = $dto->entryDate ?? date('Y-m-d');
-                $newEntity->startNewGestation($startDate);
+                [$stage, $months] = $this->resolveGestationDetails($dto->gestationStage, $dto->gestationMonths);
+                $newEntity->startNewGestation($startDate, $stage, $months);
             }
         }
 
@@ -214,7 +241,8 @@ final class UpsertCaravanUseCase
             // Automatización Gestacional: Si está preñada y no tiene gestación activa, crear una
             if (!$isEmpty && !$newEntity->hasActiveGestation()) {
                 $startDate = $dto->entryDate ?? date('Y-m-d');
-                $newEntity->startNewGestation($startDate);
+                [$stage, $months] = $this->resolveGestationDetails($dto->gestationStage, $dto->gestationMonths);
+                $newEntity->startNewGestation($startDate, $stage, $months);
             }
         }
 
@@ -241,5 +269,26 @@ final class UpsertCaravanUseCase
         $this->traceabilityService->recordInitialArrival($savedEntity, $activeCompanyId, $dto->farmId);
 
         return new UpsertCaravanResultDTO('created', $savedEntity->getId());
+    }
+
+    /**
+     * Resolve gestation stage and months bidirectionally.
+     *
+     * @return array{0: GestationStage, 1: float}
+     */
+    private function resolveGestationDetails(?string $stageStr, ?float $months): array
+    {
+        if ($months !== null) {
+            $stage = GestationStage::fromMonths($months);
+            return [$stage, $months];
+        }
+
+        if ($stageStr !== null) {
+            $stage = GestationStage::from($stageStr);
+            return [$stage, $stage->toDefaultMonths()];
+        }
+
+        // Fallback defaults
+        return [GestationStage::HEAD, 3.0];
     }
 }
