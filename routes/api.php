@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\WorkTemplateController;
 use App\Http\Controllers\Api\BatchTypeController;
+use App\Http\Controllers\Api\ServiceOrderController;
 use Illuminate\Support\Facades\Route;
 
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -41,6 +42,8 @@ Route::middleware([
     Route::post('/caravans/bulk-weights', [CaravanController::class, 'bulkRecordWeights']);
     Route::post('/caravans/bulk-birth', [CaravanController::class, 'bulkBirth']);
     Route::post('/caravans/{id}/gestation-loss', [CaravanController::class, 'gestationLoss']);
+    Route::post('/caravans/bulk-gestation-diagnosis', [CaravanController::class, 'bulkGestationDiagnosis']);
+    Route::post('/caravans/{id}/gestation-diagnosis', [CaravanController::class, 'registerGestationDiagnosis']);
     Route::patch('/caravans/{id}/wean', [CaravanController::class, 'wean']);
 
     Route::get('/field-mappings/{model}', [FieldMappingController::class, 'index']);
@@ -61,4 +64,17 @@ Route::middleware([
     // Gestión de Plantillas
     Route::get('/template-types', [WorkTemplateController::class, 'types']);
     Route::get('/work-templates', [WorkTemplateController::class, 'index']);
+
+    // Órdenes de Servicio
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/service-orders', [ServiceOrderController::class, 'index']);
+        Route::post('/service-orders', [ServiceOrderController::class, 'store']);
+        Route::get('/service-orders/{id}', [ServiceOrderController::class, 'show']);
+        Route::post('/service-orders/{id}/submit-review', [ServiceOrderController::class, 'submitReview']);
+        Route::post('/service-orders/{id}/review', [ServiceOrderController::class, 'review']);
+        Route::post('/service-orders/{id}/approve', [ServiceOrderController::class, 'approve']);
+        Route::post('/service-orders/{id}/execute', [ServiceOrderController::class, 'execute']);
+        Route::post('/service-orders/{id}/complete', [ServiceOrderController::class, 'complete']);
+        Route::post('/service-orders/{id}/upload-pdf', [ServiceOrderController::class, 'uploadPdf']);
+    });
 });

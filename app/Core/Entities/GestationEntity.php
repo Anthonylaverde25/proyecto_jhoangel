@@ -24,13 +24,19 @@ class GestationEntity
         private ?string $notes,
         private GestationStage $gestationStage,
         private float $gestationMonths,
-        private array $sires = []
+        private array $sires = [],
+        private ?int $serviceOrderId = null
     ) {
     }
 
     public function getId(): ?int
     {
         return $this->id;
+    }
+
+    public function getServiceOrderId(): ?int
+    {
+        return $this->serviceOrderId;
     }
 
     public function getStartDate(): ?string

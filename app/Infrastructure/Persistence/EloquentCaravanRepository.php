@@ -46,6 +46,7 @@ class EloquentCaravanRepository implements ICaravanRepository
                     'loss_notes' => $gestation->getLossNotes(),
                     'end_date' => $gestation->getEndDate(),
                     'notes' => $gestation->getNotes(),
+                    'service_order_id' => $gestation->getServiceOrderId(),
                 ]
             );
 

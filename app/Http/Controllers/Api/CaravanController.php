@@ -25,7 +25,9 @@ class CaravanController extends Controller
         private readonly CaravanUseCases $caravan,
         private readonly \App\Application\UseCases\Caravans\BulkRegisterBirthUseCase $bulkRegisterBirth,
         private readonly \App\Application\UseCases\Caravans\RegisterGestationLossUseCase $registerGestationLoss,
-        private readonly \App\Application\UseCases\Caravans\WeanCaravanUseCase $weanCaravan
+        private readonly \App\Application\UseCases\Caravans\WeanCaravanUseCase $weanCaravan,
+        private readonly \App\Application\UseCases\Caravans\RegisterGestationDiagnosisUseCase $registerGestationDiagnosis,
+        private readonly \App\Application\UseCases\Caravans\BulkRegisterGestationDiagnosisUseCase $bulkRegisterGestationDiagnosis
     ) {
     }
 
@@ -223,5 +225,51 @@ class CaravanController extends Controller
         ($this->weanCaravan)($id);
 
         return response()->json(null, 204);
+    }
+
+    /**
+     * Registra un diagnóstico gestacional (tacto / ecografía) para una caravana.
+     */
+    public function registerGestationDiagnosis(
+        \App\Http\Requests\Caravans\GestationDiagnosisRequest $request,
+        int $id
+    ): JsonResponse {
+        $validated = $request->validated();
+        $validated['caravan_id'] = $id;
+
+        $companyId = (int) $request->header('X-Company-ID');
+
+        try {
+            $dto = \App\Application\DTOs\RegisterGestationDiagnosisDTO::fromArray($validated);
+            $entity = ($this->registerGestationDiagnosis)($dto, $companyId);
+
+            return response()->json(new CaravanResource($entity));
+        } catch (\App\Core\Exceptions\DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    /**
+     * Registers bulk gestation diagnosis for multiple caravans.
+     */
+    public function bulkGestationDiagnosis(
+        \App\Http\Requests\Caravans\BulkGestationDiagnosisRequest $request
+    ): JsonResponse {
+        $validated = $request->validated();
+        $companyId = (int) $request->header('X-Company-ID');
+
+        $dtos = array_map(function ($data) {
+            return \App\Application\DTOs\RegisterGestationDiagnosisDTO::fromArray($data);
+        }, $validated['diagnoses']);
+
+        try {
+            $entities = ($this->bulkRegisterGestationDiagnosis)($dtos, $companyId);
+            return response()->json(
+                CaravanResource::collection($entities),
+                201
+            );
+        } catch (\App\Core\Exceptions\DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 }

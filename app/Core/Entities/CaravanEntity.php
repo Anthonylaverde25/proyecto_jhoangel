@@ -179,8 +179,12 @@ final class CaravanEntity
         return $this->lineage?->isNursing() ?? false;
     }
 
-    public function startNewGestation(?string $startDate, GestationStage $gestationStage, float $gestationMonths): void
-    {
+    public function startNewGestation(
+        ?string $startDate,
+        GestationStage $gestationStage,
+        float $gestationMonths,
+        ?int $serviceOrderId = null
+    ): void {
         if ($this->sex !== AnimalSex::FEMALE) {
             throw new DomainException("Solo las hembras pueden tener procesos de gestación.");
         }
@@ -204,7 +208,8 @@ final class CaravanEntity
             notes: 'Gestación iniciada automáticamente.',
             gestationStage: $gestationStage,
             gestationMonths: $gestationMonths,
-            sires: []
+            sires: [],
+            serviceOrderId: $serviceOrderId
         );
     }
 

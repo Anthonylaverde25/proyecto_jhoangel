@@ -62,7 +62,8 @@ class CaravanMapper
                     $g->notes,
                     $g->gestation_stage ?? GestationStage::HEAD,
                     (float) ($g->gestation_months ?? 3.0),
-                    $sires
+                    $sires,
+                    $g->service_order_id ? (int) $g->service_order_id : null
                 );
             })->toArray() : [],
             $model->relationLoaded('lineage') && $model->lineage ? LineageMapper::toEntity($model->lineage) : null

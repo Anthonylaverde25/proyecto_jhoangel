@@ -27,6 +27,7 @@ class CaravanGestation extends Model
         'loss_notes',
         'end_date',
         'notes',
+        'service_order_id',
     ];
 
     /**
@@ -42,7 +43,16 @@ class CaravanGestation extends Model
         'loss_reason_id' => 'integer',
         'gestation_stage' => GestationStage::class,
         'gestation_months' => 'float',
+        'service_order_id' => 'integer',
     ];
+
+    /**
+     * Get the service order associated with this gestation.
+     */
+    public function serviceOrder(): BelongsTo
+    {
+        return $this->belongsTo(ServiceOrder::class);
+    }
 
     /**
      * Get the caravan (mother) that owns the gestation.

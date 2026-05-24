@@ -16,7 +16,7 @@ trait BelongsToCompany
         static::addGlobalScope('company', function (Builder $builder) {
             $context = app(ICompanyContext::class);
             if ($context->hasCompanyContext()) {
-                $builder->where('company_id', $context->getCompanyId());
+                $builder->where($builder->getModel()->getTable() . '.company_id', $context->getCompanyId());
             }
         });
 

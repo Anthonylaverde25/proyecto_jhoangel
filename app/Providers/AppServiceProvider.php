@@ -33,6 +33,8 @@ use App\Core\Interfaces\ITemplateTypeRepository;
 use App\Infrastructure\Persistence\EloquentTemplateTypeRepository;
 use App\Core\Interfaces\IWorkTemplateRepository;
 use App\Infrastructure\Persistence\EloquentWorkTemplateRepository;
+use App\Core\Interfaces\IServiceOrderRepository;
+use App\Infrastructure\Persistence\EloquentServiceOrderRepository;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -58,6 +60,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(ITemplateTypeRepository::class, EloquentTemplateTypeRepository::class);
         $this->app->bind(IWorkTemplateRepository::class, EloquentWorkTemplateRepository::class);
         $this->app->bind(IBatchTypeRepository::class, \App\Infrastructure\Persistence\EloquentBatchTypeRepository::class);
+        $this->app->bind(IServiceOrderRepository::class, EloquentServiceOrderRepository::class);
         $this->app->bind(IOCRProvider::class, function ($app) {
             $driver = config('services.ocr.driver');
 
