@@ -70,11 +70,9 @@ Route::middleware([
         Route::get('/service-orders', [ServiceOrderController::class, 'index']);
         Route::post('/service-orders', [ServiceOrderController::class, 'store']);
         Route::get('/service-orders/{id}', [ServiceOrderController::class, 'show']);
-        Route::post('/service-orders/{id}/submit-review', [ServiceOrderController::class, 'submitReview']);
-        Route::post('/service-orders/{id}/review', [ServiceOrderController::class, 'review']);
         Route::post('/service-orders/{id}/approve', [ServiceOrderController::class, 'approve']);
-        Route::post('/service-orders/{id}/execute', [ServiceOrderController::class, 'execute']);
         Route::post('/service-orders/{id}/complete', [ServiceOrderController::class, 'complete']);
+        Route::patch('/service-orders/{id}/status', [ServiceOrderController::class, 'updateStatus']);
         Route::post('/service-orders/{id}/upload-pdf', [ServiceOrderController::class, 'uploadPdf']);
     });
 });

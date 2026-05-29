@@ -193,23 +193,7 @@ class ServiceOrderTest extends TestCase
             ]);
         $orderId = $responseCreate->json('id');
 
-        // 2. Submit for review
-        $this->actingAs($this->user, 'sanctum')
-            ->withHeader('X-Company-ID', (string)$this->company->id)
-            ->postJson("http://test.localhost/api/service-orders/{$orderId}/submit-review")
-            ->assertStatus(200)
-            ->assertJsonPath('status', ServiceOrderStatus::PENDING_REVIEW->value);
-
-        // 3. Review pass
-        $this->actingAs($this->user, 'sanctum')
-            ->withHeader('X-Company-ID', (string)$this->company->id)
-            ->postJson("http://test.localhost/api/service-orders/{$orderId}/review", [
-                'approve' => true,
-            ])
-            ->assertStatus(200)
-            ->assertJsonPath('status', ServiceOrderStatus::PENDING_APPROVAL->value);
-
-        // 4. Approve
+        // 2. Approve (de Borrador a Aprobada) - Esto debe transferir físicamente a los animales
         $this->actingAs($this->user, 'sanctum')
             ->withHeader('X-Company-ID', (string)$this->company->id)
             ->postJson("http://test.localhost/api/service-orders/{$orderId}/approve", [
@@ -217,13 +201,6 @@ class ServiceOrderTest extends TestCase
             ])
             ->assertStatus(200)
             ->assertJsonPath('status', ServiceOrderStatus::APPROVED->value);
-
-        // 5. Execute (Mover animales al lote destino)
-        $this->actingAs($this->user, 'sanctum')
-            ->withHeader('X-Company-ID', (string)$this->company->id)
-            ->postJson("http://test.localhost/api/service-orders/{$orderId}/execute")
-            ->assertStatus(200)
-            ->assertJsonPath('status', ServiceOrderStatus::IN_PROGRESS->value);
 
         // Check animal locations updated
         $this->assertEquals($this->targetBatch->id, Caravan::find($this->bull1->id)->batch_id);
@@ -239,14 +216,104 @@ class ServiceOrderTest extends TestCase
             'type'       => 'TRANSFER',
         ]);
 
-        // 6. Complete order
+        // 3. Complete order (de Aprobada a Completada / Success)
         $this->actingAs($this->user, 'sanctum')
             ->withHeader('X-Company-ID', (string)$this->company->id)
             ->postJson("http://test.localhost/api/service-orders/{$orderId}/complete", [
                 'observations' => 'Finished service season.',
             ])
             ->assertStatus(200)
-            ->assertJsonPath('status', ServiceOrderStatus::COMPLETED->value)
+            ->assertJsonPath('status', ServiceOrderStatus::SUCCESS->value)
             ->assertJsonPath('observations', 'Finished service season.');
+    }
+
+    public function test_can_update_status_via_patch_toggle(): void
+    {
+        // 1. Create draft
+        $responseCreate = $this->actingAs($this->user, 'sanctum')
+            ->withHeader('X-Company-ID', (string)$this->company->id)
+            ->postJson('http://test.localhost/api/service-orders', [
+                'batch_id'             => $this->targetBatch->id,
+                'code'                 => 'SO-PATCH-001',
+                'planned_start_date'   => '2026-06-01',
+                'male_caravan_ids'     => [$this->bull1->id],
+                'female_caravan_ids'   => [$this->cow1->id],
+            ]);
+        $orderId = $responseCreate->json('id');
+
+        // 2. Change status to APPROVED via PATCH toggle
+        $this->actingAs($this->user, 'sanctum')
+            ->withHeader('X-Company-ID', (string)$this->company->id)
+            ->patchJson("http://test.localhost/api/service-orders/{$orderId}/status", [
+                'status' => 'APPROVED',
+            ])
+            ->assertStatus(200)
+            ->assertJsonPath('status', ServiceOrderStatus::APPROVED->value);
+
+        // Check animals locations updated physically
+        $this->assertEquals($this->targetBatch->id, Caravan::find($this->bull1->id)->batch_id);
+        $this->assertEquals($this->targetBatch->id, Caravan::find($this->cow1->id)->batch_id);
+
+        // 3. Change status back to DRAFT via PATCH toggle
+        $this->actingAs($this->user, 'sanctum')
+            ->withHeader('X-Company-ID', (string)$this->company->id)
+            ->patchJson("http://test.localhost/api/service-orders/{$orderId}/status", [
+                'status' => 'DRAFT',
+            ])
+            ->assertStatus(200)
+            ->assertJsonPath('status', ServiceOrderStatus::DRAFT->value);
+    }
+
+    public function test_list_returns_all_orders_regardless_of_status(): void
+    {
+        // 1. Create a draft order
+        $responseCreate1 = $this->actingAs($this->user, 'sanctum')
+            ->withHeader('X-Company-ID', (string)$this->company->id)
+            ->postJson('http://test.localhost/api/service-orders', [
+                'batch_id'             => $this->targetBatch->id,
+                'code'                 => 'SO-LIST-ALL-001',
+                'planned_start_date'   => '2026-06-01',
+                'male_caravan_ids'     => [$this->bull1->id],
+                'female_caravan_ids'   => [$this->cow1->id],
+            ]);
+        $orderId1 = $responseCreate1->json('id');
+
+        // 2. Create another draft order and approve it
+        $responseCreate2 = $this->actingAs($this->user, 'sanctum')
+            ->withHeader('X-Company-ID', (string)$this->company->id)
+            ->postJson('http://test.localhost/api/service-orders', [
+                'batch_id'             => $this->targetBatch->id,
+                'code'                 => 'SO-LIST-ALL-002',
+                'planned_start_date'   => '2026-06-01',
+                'male_caravan_ids'     => [$this->bull2->id],
+                'female_caravan_ids'   => [$this->cow2->id],
+            ]);
+        $orderId2 = $responseCreate2->json('id');
+
+        $this->actingAs($this->user, 'sanctum')
+            ->withHeader('X-Company-ID', (string)$this->company->id)
+            ->postJson("http://test.localhost/api/service-orders/{$orderId2}/approve", [
+                'approve' => true,
+            ])
+            ->assertStatus(200);
+
+        // 3. Cancel the first order (which is currently DRAFT) via PATCH toggle
+        $this->actingAs($this->user, 'sanctum')
+            ->withHeader('X-Company-ID', (string)$this->company->id)
+            ->patchJson("http://test.localhost/api/service-orders/{$orderId1}/status", [
+                'status' => 'CANCELLED',
+            ])
+            ->assertStatus(200);
+
+        // 4. Fetch list, verify both orders (APPROVED and CANCELLED) are returned
+        $responseList = $this->actingAs($this->user, 'sanctum')
+            ->withHeader('X-Company-ID', (string)$this->company->id)
+            ->getJson('http://test.localhost/api/service-orders');
+
+        $responseList->assertStatus(200);
+        $orderIds = collect($responseList->json())->pluck('id')->toArray();
+        
+        $this->assertContains($orderId1, $orderIds);
+        $this->assertContains($orderId2, $orderIds);
     }
 }

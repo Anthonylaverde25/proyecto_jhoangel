@@ -156,57 +156,29 @@ final class ServiceOrderEntity
     }
 
     /**
-     * Transition to PENDING_REVIEW (Submit for review)
-     *
-     * @throws ServiceOrderDomainException
-     */
-    public function submitForReview(): void
-    {
-        if ($this->status !== ServiceOrderStatus::DRAFT) {
-            throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::PENDING_REVIEW->value);
-        }
-
-        if (empty($this->maleCaravanIds)) {
-            throw ServiceOrderDomainException::domainError("Cannot submit order for review without bulls");
-        }
-
-        if (empty($this->femaleCaravanIds)) {
-            throw ServiceOrderDomainException::domainError("Cannot submit order for review without females");
-        }
-
-        $this->status = ServiceOrderStatus::PENDING_REVIEW;
-    }
-
-    /**
-     * Transition to PENDING_APPROVAL (Review passed)
-     *
-     * @throws ServiceOrderDomainException
-     */
-    public function reviewPass(int $userId): void
-    {
-        if ($this->status !== ServiceOrderStatus::PENDING_REVIEW) {
-            throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::PENDING_APPROVAL->value);
-        }
-
-        $this->status = ServiceOrderStatus::PENDING_APPROVAL;
-        $this->reviewedByUserId = $userId;
-        $this->reviewedAt = new DateTimeImmutable();
-    }
-
-    /**
      * Transition to APPROVED (Approve order)
      *
      * @throws ServiceOrderDomainException
      */
     public function approve(int $userId): void
     {
-        if ($this->status !== ServiceOrderStatus::PENDING_APPROVAL) {
+        if ($this->status !== ServiceOrderStatus::DRAFT) {
             throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::APPROVED->value);
+        }
+
+        if (empty($this->maleCaravanIds)) {
+            throw ServiceOrderDomainException::domainError("Cannot approve order without bulls");
+        }
+
+        if (empty($this->femaleCaravanIds)) {
+            throw ServiceOrderDomainException::domainError("Cannot approve order without females");
         }
 
         $this->status = ServiceOrderStatus::APPROVED;
         $this->approvedByUserId = $userId;
         $this->approvedAt = new DateTimeImmutable();
+        $this->executedAt = new DateTimeImmutable();
+        $this->actualStartDate = (new DateTimeImmutable())->format('Y-m-d');
     }
 
     /**
@@ -216,8 +188,7 @@ final class ServiceOrderEntity
      */
     public function reject(int $userId, string $reason): void
     {
-        $allowed = [ServiceOrderStatus::PENDING_REVIEW, ServiceOrderStatus::PENDING_APPROVAL];
-        if (!in_array($this->status, $allowed, true)) {
+        if ($this->status !== ServiceOrderStatus::DRAFT) {
             throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::REJECTED->value);
         }
 
@@ -227,45 +198,22 @@ final class ServiceOrderEntity
 
         $this->status = ServiceOrderStatus::REJECTED;
         $this->rejectionReason = $reason;
-        
-        // Log who rejected it
-        if ($this->reviewedByUserId === null) {
-            $this->reviewedByUserId = $userId;
-            $this->reviewedAt = new DateTimeImmutable();
-        } else {
-            $this->approvedByUserId = $userId;
-            $this->approvedAt = new DateTimeImmutable();
-        }
+        $this->reviewedByUserId = $userId;
+        $this->reviewedAt = new DateTimeImmutable();
     }
 
     /**
-     * Transition to IN_PROGRESS (Execute order)
-     *
-     * @throws ServiceOrderDomainException
-     */
-    public function execute(): void
-    {
-        if ($this->status !== ServiceOrderStatus::APPROVED) {
-            throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::IN_PROGRESS->value);
-        }
-
-        $this->status = ServiceOrderStatus::IN_PROGRESS;
-        $this->executedAt = new DateTimeImmutable();
-        $this->actualStartDate = (new DateTimeImmutable())->format('Y-m-d');
-    }
-
-    /**
-     * Transition to COMPLETED
+     * Transition to SUCCESS (Complete)
      *
      * @throws ServiceOrderDomainException
      */
     public function complete(?string $observations = null): void
     {
-        if ($this->status !== ServiceOrderStatus::IN_PROGRESS) {
-            throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::COMPLETED->value);
+        if ($this->status !== ServiceOrderStatus::APPROVED) {
+            throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::SUCCESS->value);
         }
 
-        $this->status = ServiceOrderStatus::COMPLETED;
+        $this->status = ServiceOrderStatus::SUCCESS;
         $this->actualEndDate = (new DateTimeImmutable())->format('Y-m-d');
         if ($observations !== null) {
             $this->observations = $observations;
@@ -281,10 +229,7 @@ final class ServiceOrderEntity
     {
         $allowed = [
             ServiceOrderStatus::DRAFT,
-            ServiceOrderStatus::PENDING_REVIEW,
-            ServiceOrderStatus::PENDING_APPROVAL,
-            ServiceOrderStatus::APPROVED,
-            ServiceOrderStatus::IN_PROGRESS
+            ServiceOrderStatus::APPROVED
         ];
 
         if (!in_array($this->status, $allowed, true)) {
@@ -292,8 +237,47 @@ final class ServiceOrderEntity
         }
 
         $this->status = ServiceOrderStatus::CANCELLED;
-        if ($this->status === ServiceOrderStatus::IN_PROGRESS) {
-            $this->actualEndDate = (new DateTimeImmutable())->format('Y-m-d');
+        $this->actualEndDate = (new DateTimeImmutable())->format('Y-m-d');
+    }
+
+    /**
+     * Change status dynamically based on administrative selection.
+     *
+     * @throws ServiceOrderDomainException
+     */
+    public function changeStatus(ServiceOrderStatus $newStatus, int $userId): void
+    {
+        if ($this->status === $newStatus) {
+            return;
+        }
+
+        if ($newStatus === ServiceOrderStatus::APPROVED) {
+            $this->approve($userId);
+            return;
+        }
+
+        if ($newStatus === ServiceOrderStatus::SUCCESS) {
+            $this->complete();
+            return;
+        }
+
+        if ($newStatus === ServiceOrderStatus::REJECTED) {
+            $this->reject($userId, 'Status updated via administrative patch');
+            return;
+        }
+
+        if ($newStatus === ServiceOrderStatus::CANCELLED) {
+            $this->cancel();
+            return;
+        }
+
+        if ($newStatus === ServiceOrderStatus::DRAFT) {
+            $this->status = ServiceOrderStatus::DRAFT;
+            $this->approvedByUserId = null;
+            $this->approvedAt = null;
+            $this->executedAt = null;
+            $this->actualStartDate = null;
+            $this->actualEndDate = null;
         }
     }
 }

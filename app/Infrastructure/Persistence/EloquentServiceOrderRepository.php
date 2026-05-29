@@ -80,10 +80,7 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
 
         $activeStatuses = [
             ServiceOrderStatus::DRAFT->value,
-            ServiceOrderStatus::PENDING_REVIEW->value,
-            ServiceOrderStatus::PENDING_APPROVAL->value,
             ServiceOrderStatus::APPROVED->value,
-            ServiceOrderStatus::IN_PROGRESS->value
         ];
 
         // Search caravans assigned as males in active service orders

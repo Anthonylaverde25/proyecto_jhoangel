@@ -20,7 +20,7 @@ interface IServiceOrderRepository
 
     /**
      * Check if any of the given caravans are currently involved in an active service order.
-     * Active orders are in status DRAFT, PENDING_REVIEW, PENDING_APPROVAL, APPROVED, or IN_PROGRESS.
+     * Active orders are in status DRAFT or APPROVED.
      * Returns an array of conflicting caravan IDs.
      *
      * @param int[] $caravanIds

@@ -25,7 +25,7 @@ class CreateServiceOrderRequest extends FormRequest
     {
         return [
             'batch_id'             => 'required|integer|exists:batches,id',
-            'code'                 => 'required|string|max:255',
+            'code'                 => 'required|string|max:255|unique:service_orders,code',
             'planned_start_date'   => 'required|date',
             'observations'         => 'nullable|string',
             'male_caravan_ids'     => 'required|array|min:1',

@@ -6,14 +6,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Application\DTOs\ServiceOrders\CreateServiceOrderDTO;
 use App\Application\UseCases\ServiceOrders\CreateServiceOrderUseCase;
-use App\Application\UseCases\ServiceOrders\SubmitServiceOrderReviewUseCase;
-use App\Application\UseCases\ServiceOrders\ReviewServiceOrderUseCase;
 use App\Application\UseCases\ServiceOrders\ApproveServiceOrderUseCase;
-use App\Application\UseCases\ServiceOrders\ExecuteServiceOrderUseCase;
 use App\Application\UseCases\ServiceOrders\CompleteServiceOrderUseCase;
+use App\Application\UseCases\ServiceOrders\UpdateServiceOrderStatusUseCase;
 use App\Application\UseCases\ServiceOrders\GetServiceOrderUseCase;
 use App\Application\UseCases\ServiceOrders\ListServiceOrdersUseCase;
 use App\Core\Exceptions\ServiceOrderDomainException;
+use App\Core\Enums\ServiceOrderStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CreateServiceOrderRequest;
 use App\Http\Requests\ReviewServiceOrderRequest;
@@ -26,11 +25,9 @@ class ServiceOrderController extends Controller
 {
     public function __construct(
         private readonly CreateServiceOrderUseCase $createUseCase,
-        private readonly SubmitServiceOrderReviewUseCase $submitReviewUseCase,
-        private readonly ReviewServiceOrderUseCase $reviewUseCase,
         private readonly ApproveServiceOrderUseCase $approveUseCase,
-        private readonly ExecuteServiceOrderUseCase $executeUseCase,
         private readonly CompleteServiceOrderUseCase $completeUseCase,
+        private readonly UpdateServiceOrderStatusUseCase $updateStatusUseCase,
         private readonly GetServiceOrderUseCase $getUseCase,
         private readonly ListServiceOrdersUseCase $listUseCase
     ) {
@@ -75,34 +72,6 @@ class ServiceOrderController extends Controller
         return response()->json(new ServiceOrderResource($entity));
     }
 
-    public function submitReview(Request $request, int $id): JsonResponse
-    {
-        $companyId = (int) $request->header('X-Company-ID');
-        $userId = (int) Auth::id();
-
-        try {
-            $entity = ($this->submitReviewUseCase)($id, $companyId, $userId);
-            return response()->json(new ServiceOrderResource($entity));
-        } catch (ServiceOrderDomainException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-    }
-
-    public function review(ReviewServiceOrderRequest $request, int $id): JsonResponse
-    {
-        $companyId = (int) $request->header('X-Company-ID');
-        $userId = (int) Auth::id();
-        $approve = (bool) $request->input('approve');
-        $reason = $request->input('reason');
-
-        try {
-            $entity = ($this->reviewUseCase)($id, $companyId, $userId, $approve, $reason);
-            return response()->json(new ServiceOrderResource($entity));
-        } catch (ServiceOrderDomainException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-    }
-
     public function approve(ReviewServiceOrderRequest $request, int $id): JsonResponse
     {
         $companyId = (int) $request->header('X-Company-ID');
@@ -118,19 +87,6 @@ class ServiceOrderController extends Controller
         }
     }
 
-    public function execute(Request $request, int $id): JsonResponse
-    {
-        $companyId = (int) $request->header('X-Company-ID');
-        $userId = (int) Auth::id();
-
-        try {
-            $entity = ($this->executeUseCase)($id, $companyId, $userId);
-            return response()->json(new ServiceOrderResource($entity));
-        } catch (ServiceOrderDomainException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-    }
-
     public function complete(Request $request, int $id): JsonResponse
     {
         $companyId = (int) $request->header('X-Company-ID');
@@ -139,6 +95,29 @@ class ServiceOrderController extends Controller
 
         try {
             $entity = ($this->completeUseCase)($id, $companyId, $userId, $observations);
+            return response()->json(new ServiceOrderResource($entity));
+        } catch (ServiceOrderDomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    public function updateStatus(Request $request, int $id): JsonResponse
+    {
+        $companyId = (int) $request->header('X-Company-ID');
+        $userId = (int) Auth::id();
+        $statusStr = $request->input('status');
+
+        if (!$statusStr) {
+            return response()->json(['message' => 'Status is required'], 422);
+        }
+
+        $newStatus = ServiceOrderStatus::tryFrom(strtoupper($statusStr));
+        if ($newStatus === null) {
+            return response()->json(['message' => 'Invalid status provided'], 422);
+        }
+
+        try {
+            $entity = ($this->updateStatusUseCase)($id, $companyId, $userId, $newStatus);
             return response()->json(new ServiceOrderResource($entity));
         } catch (ServiceOrderDomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);

@@ -144,12 +144,6 @@ class LivestockHierarchySeeder extends Seeder
                             $isEmpty = true;
                             $hasActive = false;
 
-                            if ($roll <= 20) {
-                                // 20% probabilidad: Gestación activa
-                                $isEmpty = false;
-                                $hasActive = true;
-                            }
-
                             // Crear detalles reproductivos de la hembra
                             DB::table('female_caravan_details')->insert([
                                 'caravan_id' => $caravanId,
@@ -158,22 +152,6 @@ class LivestockHierarchySeeder extends Seeder
                                 'created_at' => now(),
                                 'updated_at' => now(),
                             ]);
-
-                            // Historial de Gestaciones Pasadas o Activas
-                            if ($hasActive) {
-                                DB::table('caravan_gestations')->insert([
-                                    'caravan_id' => $caravanId,
-                                    'start_date' => now()->subMonths(rand(1, 5))->format('Y-m-d'),
-                                    'estimated_due_date' => now()->addMonths(rand(1, 4))->format('Y-m-d'),
-                                    'is_current' => true,
-                                    'success' => null,
-                                    'gestation_stage' => 'body',
-                                    'gestation_months' => (float) rand(2, 6),
-                                    'notes' => 'Gestación activa de prueba.',
-                                    'created_at' => now(),
-                                    'updated_at' => now(),
-                                ]);
-                            }
 
                             // 30% probabilidad de gestación pasada terminada en pérdida
                             if ($roll > 20 && $roll <= 50 && !empty($lossReasons)) {
@@ -267,45 +245,13 @@ class LivestockHierarchySeeder extends Seeder
             'updated_at' => now(),
         ]);
 
-        // Detalles reproductivos: no vacía
+        // Detalles reproductivos: vacía (sin gestación activa inicial)
         DB::table('female_caravan_details')->insert([
             'caravan_id' => $vacaPreg1Id,
-            'is_empty' => false,
+            'is_empty' => true,
             'arrival_category' => 'vaca',
             'created_at' => now(),
             'updated_at' => now(),
-        ]);
-
-        // Gestación activa
-        $gestation1Id = DB::table('caravan_gestations')->insertGetId([
-            'caravan_id' => $vacaPreg1Id,
-            'start_date' => now()->subMonths(4)->format('Y-m-d'),
-            'estimated_due_date' => now()->addMonths(5)->format('Y-m-d'),
-            'is_current' => true,
-            'success' => null,
-            'gestation_stage' => 'body',
-            'gestation_months' => 4.0,
-            'notes' => 'Gestación activa bajo monta colectiva.',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        // Asociar padres potenciales a la gestación
-        DB::table('gestation_sires')->insert([
-            [
-                'gestation_id' => $gestation1Id,
-                'sire_id' => $toroPot1Id,
-                'is_confirmed' => false,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'gestation_id' => $gestation1Id,
-                'sire_id' => $toroPot2Id,
-                'is_confirmed' => false,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]
         ]);
 
 

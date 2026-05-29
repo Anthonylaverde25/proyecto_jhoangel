@@ -18,6 +18,7 @@ class TenantDatabaseSeeder extends Seeder
     {
         $this->call([
             UserSeeder::class,
+            DocumentStatusSeeder::class,
             GestationLossReasonSeeder::class,
             CaravanFieldMappingSeeder::class,
             BreedSeeder::class,
