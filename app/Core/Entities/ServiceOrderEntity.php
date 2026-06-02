@@ -37,8 +37,29 @@ final class ServiceOrderEntity
         private array $femaleCaravanIds = [],
         private array $history = [],
         private ?DateTimeInterface $createdAt = null,
-        private ?DateTimeInterface $updatedAt = null
+        private ?DateTimeInterface $updatedAt = null,
+        private string $serviceType = 'single',
+        private bool $isControlledService = false,
+        private array $femaleSireAssignments = []
     ) {
+    }
+
+    public function getServiceType(): string
+    {
+        return $this->serviceType;
+    }
+
+    public function isControlledService(): bool
+    {
+        return $this->isControlledService;
+    }
+
+    /**
+     * @return array
+     */
+    public function getFemaleSireAssignments(): array
+    {
+        return $this->femaleSireAssignments;
     }
 
     public function getId(): ?int
@@ -172,6 +193,15 @@ final class ServiceOrderEntity
 
         if (empty($this->femaleCaravanIds)) {
             throw ServiceOrderDomainException::domainError("Cannot approve order without females");
+        }
+
+        if ($this->isControlledService) {
+            $assignedFemales = array_column($this->femaleSireAssignments, 'female_caravan_id');
+            foreach ($this->femaleCaravanIds as $femaleId) {
+                if (!in_array($femaleId, $assignedFemales, true)) {
+                    throw ServiceOrderDomainException::domainError("All females must be assigned a sire in a controlled service");
+                }
+            }
         }
 
         $this->status = ServiceOrderStatus::APPROVED;

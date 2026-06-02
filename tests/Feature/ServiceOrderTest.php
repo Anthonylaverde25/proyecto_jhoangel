@@ -316,4 +316,116 @@ class ServiceOrderTest extends TestCase
         $this->assertContains($orderId1, $orderIds);
         $this->assertContains($orderId2, $orderIds);
     }
+
+    public function test_can_create_multi_sire_cooperative_service_order(): void
+    {
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->withHeader('X-Company-ID', (string)$this->company->id)
+            ->postJson('http://test.localhost/api/service-orders', [
+                'batch_id'             => $this->targetBatch->id,
+                'code'                 => 'SO-MULTI-COOP',
+                'planned_start_date'   => '2026-06-01',
+                'male_caravan_ids'     => [$this->bull1->id, $this->bull2->id],
+                'female_caravan_ids'   => [$this->cow1->id, $this->cow2->id],
+                'service_type'         => 'multi',
+                'is_controlled_service'=> false,
+            ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonPath('service_type', 'multi');
+        $response->assertJsonPath('is_controlled_service', false);
+
+        $this->assertDatabaseHas('service_orders', [
+            'code'                  => 'SO-MULTI-COOP',
+            'service_type'          => 'multi',
+            'is_controlled_service' => false,
+        ]);
+    }
+
+    public function test_can_create_multi_sire_controlled_service_order(): void
+    {
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->withHeader('X-Company-ID', (string)$this->company->id)
+            ->postJson('http://test.localhost/api/service-orders', [
+                'batch_id'             => $this->targetBatch->id,
+                'code'                 => 'SO-MULTI-CONT',
+                'planned_start_date'   => '2026-06-01',
+                'male_caravan_ids'     => [$this->bull1->id, $this->bull2->id],
+                'female_caravan_ids'   => [$this->cow1->id, $this->cow2->id],
+                'service_type'         => 'multi',
+                'is_controlled_service'=> true,
+                'female_sire_assignments' => [
+                    [
+                        'female_caravan_id' => $this->cow1->id,
+                        'assigned_male_caravan_id' => $this->bull1->id,
+                    ],
+                    [
+                        'female_caravan_id' => $this->cow2->id,
+                        'assigned_male_caravan_id' => $this->bull2->id,
+                    ]
+                ]
+            ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonPath('service_type', 'multi');
+        $response->assertJsonPath('is_controlled_service', true);
+
+        $this->assertDatabaseHas('service_orders', [
+            'code'                  => 'SO-MULTI-CONT',
+            'service_type'          => 'multi',
+            'is_controlled_service' => true,
+        ]);
+
+        $this->assertDatabaseHas('service_order_females', [
+            'female_caravan_id'        => $this->cow1->id,
+            'assigned_male_caravan_id' => $this->bull1->id,
+        ]);
+
+        $this->assertDatabaseHas('service_order_females', [
+            'female_caravan_id'        => $this->cow2->id,
+            'assigned_male_caravan_id' => $this->bull2->id,
+        ]);
+    }
+
+    public function test_cannot_create_controlled_service_order_without_assignments(): void
+    {
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->withHeader('X-Company-ID', (string)$this->company->id)
+            ->postJson('http://test.localhost/api/service-orders', [
+                'batch_id'             => $this->targetBatch->id,
+                'code'                 => 'SO-MULTI-FAIL-1',
+                'planned_start_date'   => '2026-06-01',
+                'male_caravan_ids'     => [$this->bull1->id, $this->bull2->id],
+                'female_caravan_ids'   => [$this->cow1->id, $this->cow2->id],
+                'service_type'         => 'multi',
+                'is_controlled_service'=> true,
+                // Missing female_sire_assignments
+            ]);
+
+        $response->assertStatus(422);
+    }
+
+    public function test_cannot_create_controlled_service_order_with_missing_female_assignments(): void
+    {
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->withHeader('X-Company-ID', (string)$this->company->id)
+            ->postJson('http://test.localhost/api/service-orders', [
+                'batch_id'             => $this->targetBatch->id,
+                'code'                 => 'SO-MULTI-FAIL-2',
+                'planned_start_date'   => '2026-06-01',
+                'male_caravan_ids'     => [$this->bull1->id, $this->bull2->id],
+                'female_caravan_ids'   => [$this->cow1->id, $this->cow2->id],
+                'service_type'         => 'multi',
+                'is_controlled_service'=> true,
+                'female_sire_assignments' => [
+                    [
+                        'female_caravan_id' => $this->cow1->id,
+                        'assigned_male_caravan_id' => $this->bull1->id,
+                    ],
+                    // cow2 is missing
+                ]
+            ]);
+
+        $response->assertStatus(422);
+    }
 }

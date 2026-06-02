@@ -51,4 +51,14 @@ interface ICaravanRepository
      * @return bool
      */
     public function delete(int $id): bool;
+
+    /**
+     * @return \App\Core\Entities\BirthHistoryEntity[]
+     */
+    public function findBirthHistory(): array;
+
+    /**
+     * Update the batch assignment and optionally the category of a caravan.
+     */
+    public function updateBatchAndCategory(int $caravanId, int $batchId, ?string $category): void;
 }

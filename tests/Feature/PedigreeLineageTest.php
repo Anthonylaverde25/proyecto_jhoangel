@@ -194,6 +194,9 @@ class PedigreeLineageTest extends TestCase
 
     public function test_can_wean_calf(): void
     {
+        $batch = \App\Models\Batch::first();
+        $this->assertNotNull($batch);
+
         // 1. Setup mother and calf with lineage
         $mother = Caravan::create([
             'company_id' => $this->company->id,
@@ -207,7 +210,7 @@ class PedigreeLineageTest extends TestCase
             'company_id' => $this->company->id,
             'identification' => 'CALF-03',
             'sex' => AnimalSex::MALE,
-            'category' => AnimalCategory::NOVILLITO,
+            'category' => AnimalCategory::TERNERO,
             'teeth' => 0,
         ]);
 
@@ -219,7 +222,13 @@ class PedigreeLineageTest extends TestCase
         ]);
 
         // 2. Call wean endpoint
-        $response = $this->patchJson("http://test.localhost/api/caravans/{$calf->id}/wean");
+        $response = $this->patchJson("http://test.localhost/api/caravans/{$calf->id}/wean", [
+            'target_batch_id' => $batch->id,
+            'weaning_date' => '2026-05-30',
+            'weaning_weight' => 180.5,
+            'new_category' => 'novillito',
+            'notes' => 'Weaning in test'
+        ]);
 
         $response->assertStatus(204);
 
@@ -227,9 +236,121 @@ class PedigreeLineageTest extends TestCase
         $lineage->refresh();
         $this->assertFalse($lineage->is_nursing);
 
-        // 4. Subsequent weaning call should fail (422 / 500 containing message or specific domain exception)
-        $responseDuplicate = $this->patchJson("http://test.localhost/api/caravans/{$calf->id}/wean");
+        // 4. Verify batch and category changed
+        $calf->refresh();
+        $this->assertEquals($batch->id, $calf->batch_id);
+        $this->assertEquals(AnimalCategory::NOVILLITO, $calf->category);
+
+        // 5. Verify weight is recorded in caravan_weights
+        $weight = \App\Models\CaravanWeight::where('caravan_id', $calf->id)->first();
+        $this->assertNotNull($weight);
+        $this->assertEquals(180.5, $weight->weight);
+        $this->assertTrue((bool)$weight->current);
+
+        // 6. Verify movement is recorded in caravan_movements
+        $movement = \App\Models\CaravanMovement::where('caravan_id', $calf->id)->first();
+        $this->assertNotNull($movement);
+        $this->assertEquals('WEANING', $movement->type);
+        $this->assertEquals('Weaning in test', $movement->observations);
+
+        // 7. Subsequent weaning call should fail
+        $responseDuplicate = $this->patchJson("http://test.localhost/api/caravans/{$calf->id}/wean", [
+            'target_batch_id' => $batch->id,
+            'weaning_date' => '2026-05-30',
+            'weaning_weight' => 180.5
+        ]);
         $responseDuplicate->assertStatus(500); // Because we throw a DomainException from Use Case
+    }
+
+    public function test_can_bulk_wean_calves(): void
+    {
+        $batch = \App\Models\Batch::first();
+        $this->assertNotNull($batch);
+
+        // Setup two calves with lineages
+        $mother = Caravan::create([
+            'company_id' => $this->company->id,
+            'identification' => 'MOTHER-BULK',
+            'sex' => AnimalSex::FEMALE,
+            'category' => AnimalCategory::VACA,
+            'teeth' => 6,
+        ]);
+
+        $calf1 = Caravan::create([
+            'company_id' => $this->company->id,
+            'identification' => 'CALF-BULK-1',
+            'sex' => AnimalSex::MALE,
+            'category' => AnimalCategory::TERNERO,
+            'teeth' => 0,
+        ]);
+
+        $calf2 = Caravan::create([
+            'company_id' => $this->company->id,
+            'identification' => 'CALF-BULK-2',
+            'sex' => AnimalSex::FEMALE,
+            'category' => AnimalCategory::TERNERA,
+            'teeth' => 0,
+        ]);
+
+        $lineage1 = CaravanLineage::create([
+            'caravan_id' => $calf1->id,
+            'mother_id' => $mother->id,
+            'birth_date' => '2026-05-01',
+            'is_nursing' => true,
+        ]);
+
+        $lineage2 = CaravanLineage::create([
+            'caravan_id' => $calf2->id,
+            'mother_id' => $mother->id,
+            'birth_date' => '2026-05-01',
+            'is_nursing' => true,
+        ]);
+
+        // Call bulk-wean endpoint
+        $response = $this->postJson("http://test.localhost/api/caravans/bulk-wean", [
+            'weanings' => [
+                [
+                    'caravan_id' => $calf1->id,
+                    'target_batch_id' => $batch->id,
+                    'weaning_date' => '2026-05-30',
+                    'weaning_weight' => 190.0,
+                    'new_category' => 'novillito',
+                    'notes' => 'Bulk weaning calf 1'
+                ],
+                [
+                    'caravan_id' => $calf2->id,
+                    'target_batch_id' => $batch->id,
+                    'weaning_date' => '2026-05-30',
+                    'weaning_weight' => 175.0,
+                    'new_category' => 'vaquillona',
+                    'notes' => 'Bulk weaning calf 2'
+                ]
+            ]
+        ]);
+
+        $response->assertStatus(204);
+
+        // Verify both are weaned
+        $lineage1->refresh();
+        $lineage2->refresh();
+        $this->assertFalse($lineage1->is_nursing);
+        $this->assertFalse($lineage2->is_nursing);
+
+        // Verify batch and category changed
+        $calf1->refresh();
+        $calf2->refresh();
+        $this->assertEquals($batch->id, $calf1->batch_id);
+        $this->assertEquals(AnimalCategory::NOVILLITO, $calf1->category);
+        $this->assertEquals($batch->id, $calf2->batch_id);
+        $this->assertEquals(AnimalCategory::VAQUILLONA, $calf2->category);
+
+        // Verify weights registered
+        $weight1 = \App\Models\CaravanWeight::where('caravan_id', $calf1->id)->first();
+        $weight2 = \App\Models\CaravanWeight::where('caravan_id', $calf2->id)->first();
+        $this->assertNotNull($weight1);
+        $this->assertEquals(190.0, $weight1->weight);
+        $this->assertNotNull($weight2);
+        $this->assertEquals(175.0, $weight2->weight);
     }
 
     public function test_can_register_birth_inheriting_sire_from_gestation(): void
@@ -352,6 +473,95 @@ class PedigreeLineageTest extends TestCase
         $lineage = CaravanLineage::where('caravan_id', $calf->id)->first();
         $this->assertNotNull($lineage);
         $this->assertNull($lineage->father_id);
+    }
+
+    public function test_can_wean_calf_to_own_batch_resolving_company_renspa(): void
+    {
+        // 1. Create own batch (farm_id = null)
+        $batchType = \App\Models\BatchType::where('code', 'OPERATIONAL')->first();
+        $ownBatch = \App\Models\Batch::create([
+            'company_id' => $this->company->id,
+            'name' => 'OWN-BATCH-TEST',
+            'farm_id' => null,
+            'batch_type_id' => $batchType->id,
+        ]);
+
+        // 2. Setup mother and calf with lineage
+        $mother = Caravan::create([
+            'company_id' => $this->company->id,
+            'identification' => 'MOTHER-OWN',
+            'sex' => AnimalSex::FEMALE,
+            'category' => AnimalCategory::VAQUILLONA,
+            'teeth' => 4,
+        ]);
+
+        $calf = Caravan::create([
+            'company_id' => $this->company->id,
+            'identification' => 'CALF-OWN',
+            'sex' => AnimalSex::MALE,
+            'category' => AnimalCategory::TERNERO,
+            'teeth' => 0,
+        ]);
+
+        $lineage = CaravanLineage::create([
+            'caravan_id' => $calf->id,
+            'mother_id' => $mother->id,
+            'birth_date' => '2026-05-01',
+            'is_nursing' => true,
+        ]);
+
+        // 3. Call wean endpoint targeting the own batch
+        $response = $this->patchJson("http://test.localhost/api/caravans/{$calf->id}/wean", [
+            'target_batch_id' => $ownBatch->id,
+            'weaning_date' => '2026-05-30',
+            'weaning_weight' => 195.0,
+            'new_category' => 'novillito',
+            'notes' => 'Weaned to own batch'
+        ]);
+
+        $response->assertStatus(204);
+
+        // 4. Verify batch and category changed
+        $calf->refresh();
+        $this->assertEquals($ownBatch->id, $calf->batch_id);
+
+        // 5. Verify movement is recorded with company's renspa
+        $movement = \App\Models\CaravanMovement::where('caravan_id', $calf->id)
+            ->where('type', 'WEANING')
+            ->first();
+        $this->assertNotNull($movement);
+        $this->assertEquals($this->company->renspa, $movement->renspa);
+    }
+
+    public function test_service_order_transfer_to_own_batch_resolves_company_renspa(): void
+    {
+        // 1. Create own batch
+        $batchType = \App\Models\BatchType::where('code', 'OPERATIONAL')->first();
+        $ownBatch = \App\Models\Batch::create([
+            'company_id' => $this->company->id,
+            'name' => 'OWN-BATCH-SO',
+            'farm_id' => null,
+            'batch_type_id' => $batchType->id,
+        ]);
+
+        $calf = Caravan::create([
+            'company_id' => $this->company->id,
+            'identification' => 'CALF-SO',
+            'sex' => AnimalSex::MALE,
+            'category' => AnimalCategory::NOVILLITO,
+            'teeth' => 2,
+        ]);
+
+        // 2. Call moveAnimalsToBatch directly in EloquentServiceOrderRepository
+        $repo = $this->app->make(\App\Infrastructure\Persistence\EloquentServiceOrderRepository::class);
+        $repo->moveAnimalsToBatch([$calf->id], $ownBatch->id, $this->company->id, 1);
+
+        // 3. Verify movement created with company's renspa
+        $movement = \App\Models\CaravanMovement::where('caravan_id', $calf->id)
+            ->where('type', 'TRANSFER')
+            ->first();
+        $this->assertNotNull($movement);
+        $this->assertEquals($this->company->renspa, $movement->renspa);
     }
 }
 

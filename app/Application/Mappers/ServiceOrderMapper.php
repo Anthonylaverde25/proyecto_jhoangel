@@ -19,8 +19,17 @@ class ServiceOrderMapper
         }
 
         $femaleIds = [];
+        $femaleSireAssignments = [];
         if ($model->relationLoaded('females') && $model->females !== null) {
             $femaleIds = $model->females->pluck('id')->map(fn($id) => (int)$id)->toArray();
+            foreach ($model->females as $female) {
+                if (isset($female->pivot) && $female->pivot->assigned_male_caravan_id !== null) {
+                    $femaleSireAssignments[] = [
+                        'female_caravan_id' => (int) $female->id,
+                        'assigned_male_caravan_id' => (int) $female->pivot->assigned_male_caravan_id,
+                    ];
+                }
+            }
         }
 
         $historyEntities = [];
@@ -67,7 +76,10 @@ class ServiceOrderMapper
             femaleCaravanIds: $femaleIds,
             history: $historyEntities,
             createdAt: $model->created_at,
-            updatedAt: $model->updated_at
+            updatedAt: $model->updated_at,
+            serviceType: $model->service_type ?? 'single',
+            isControlledService: (bool) ($model->is_controlled_service ?? false),
+            femaleSireAssignments: $femaleSireAssignments
         );
     }
 
@@ -92,6 +104,8 @@ class ServiceOrderMapper
         $model->actual_end_date = $entity->getActualEndDate();
         $model->observations = $entity->getObservations();
         $model->rejection_reason = $entity->getRejectionReason();
+        $model->service_type = $entity->getServiceType();
+        $model->is_controlled_service = $entity->isControlledService();
 
         return $model;
     }

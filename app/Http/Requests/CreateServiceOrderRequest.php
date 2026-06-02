@@ -32,6 +32,11 @@ class CreateServiceOrderRequest extends FormRequest
             'male_caravan_ids.*'   => 'required|integer|exists:caravans,id',
             'female_caravan_ids'   => 'required|array|min:1',
             'female_caravan_ids.*' => 'required|integer|exists:caravans,id',
+            'service_type'                                        => 'sometimes|string|in:single,rotation,multi',
+            'is_controlled_service'                               => 'sometimes|boolean',
+            'female_sire_assignments'                             => 'required_if:is_controlled_service,true|array',
+            'female_sire_assignments.*.female_caravan_id'          => 'required|integer|exists:caravans,id',
+            'female_sire_assignments.*.assigned_male_caravan_id'   => 'required|integer|exists:caravans,id',
         ];
     }
 }

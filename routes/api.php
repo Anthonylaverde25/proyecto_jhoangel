@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\WorkTemplateController;
 use App\Http\Controllers\Api\BatchTypeController;
 use App\Http\Controllers\Api\ServiceOrderController;
+use App\Http\Controllers\Api\BirthController;
 use Illuminate\Support\Facades\Route;
 
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -45,6 +46,8 @@ Route::middleware([
     Route::post('/caravans/bulk-gestation-diagnosis', [CaravanController::class, 'bulkGestationDiagnosis']);
     Route::post('/caravans/{id}/gestation-diagnosis', [CaravanController::class, 'registerGestationDiagnosis']);
     Route::patch('/caravans/{id}/wean', [CaravanController::class, 'wean']);
+    Route::post('/caravans/bulk-wean', [CaravanController::class, 'bulkWean']);
+    Route::get('/caravans/births-history', [BirthController::class, 'index']);
 
     Route::get('/field-mappings/{model}', [FieldMappingController::class, 'index']);
     Route::post('/field-mappings/learn', [FieldMappingController::class, 'learn']);

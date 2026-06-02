@@ -33,6 +33,8 @@ class ServiceOrder extends Model
         'actual_end_date',
         'observations',
         'rejection_reason',
+        'service_type',
+        'is_controlled_service',
     ];
 
     /**
@@ -50,6 +52,7 @@ class ServiceOrder extends Model
         'planned_start_date' => 'date:Y-m-d',
         'actual_start_date' => 'date:Y-m-d',
         'actual_end_date' => 'date:Y-m-d',
+        'is_controlled_service' => 'boolean',
     ];
 
     public function batch(): BelongsTo
@@ -81,6 +84,7 @@ class ServiceOrder extends Model
     public function females(): BelongsToMany
     {
         return $this->belongsToMany(Caravan::class, 'service_order_females', 'service_order_id', 'female_caravan_id')
+            ->withPivot('assigned_male_caravan_id')
             ->withTimestamps();
     }
 

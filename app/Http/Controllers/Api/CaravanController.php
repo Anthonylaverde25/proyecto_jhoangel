@@ -13,11 +13,15 @@ use App\Http\Resources\CaravanMovementResource;
 use App\Http\Resources\CaravanWeightResource;
 use App\Application\DTOs\RecordCaravanWeightDTO;
 use App\Application\DTOs\BulkRecordCaravanWeightDTO;
+use App\Application\DTOs\WeanCaravanDTO;
+use App\Application\DTOs\BulkWeanDTO;
 use App\Core\Enums\AnimalSex;
 use App\Http\Requests\Caravans\UpsertCaravanRequest;
 use App\Http\Requests\Caravans\RecordCaravanWeightRequest;
 use App\Http\Requests\Caravans\BulkStoreCaravanRequest;
 use App\Http\Requests\Caravans\BulkRecordWeightRequest;
+use App\Http\Requests\Caravans\WeanCaravanRequest;
+use App\Http\Requests\Caravans\BulkWeanRequest;
 
 class CaravanController extends Controller
 {
@@ -26,6 +30,7 @@ class CaravanController extends Controller
         private readonly \App\Application\UseCases\Caravans\BulkRegisterBirthUseCase $bulkRegisterBirth,
         private readonly \App\Application\UseCases\Caravans\RegisterGestationLossUseCase $registerGestationLoss,
         private readonly \App\Application\UseCases\Caravans\WeanCaravanUseCase $weanCaravan,
+        private readonly \App\Application\UseCases\Caravans\BulkWeanCaravansUseCase $bulkWeanCaravans,
         private readonly \App\Application\UseCases\Caravans\RegisterGestationDiagnosisUseCase $registerGestationDiagnosis,
         private readonly \App\Application\UseCases\Caravans\BulkRegisterGestationDiagnosisUseCase $bulkRegisterGestationDiagnosis
     ) {
@@ -220,9 +225,36 @@ class CaravanController extends Controller
     /**
      * Registra el destete de una caravana.
      */
-    public function wean(int $id): JsonResponse
+    public function wean(WeanCaravanRequest $request, int $id): JsonResponse
     {
-        ($this->weanCaravan)($id);
+        $validated = $request->validated();
+        $dto = new WeanCaravanDTO(
+            caravanId: $id,
+            targetBatchId: (int) $validated['target_batch_id'],
+            weaningDate: $validated['weaning_date'],
+            weaningWeight: (float) $validated['weaning_weight'],
+            newCategory: $validated['new_category'] ?? null,
+            notes: $validated['notes'] ?? null
+        );
+
+        ($this->weanCaravan)($dto);
+
+        return response()->json(null, 204);
+    }
+
+    /**
+     * Registra el destete masivo de caravanas.
+     */
+    public function bulkWean(BulkWeanRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $dtos = array_map(
+            fn($data) => WeanCaravanDTO::fromArray($data),
+            $validated['weanings']
+        );
+
+        $dto = new BulkWeanDTO($dtos);
+        ($this->bulkWeanCaravans)($dto);
 
         return response()->json(null, 204);
     }

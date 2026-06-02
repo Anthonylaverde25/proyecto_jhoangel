@@ -112,5 +112,45 @@ class EloquentCaravanRepository implements ICaravanRepository
 
         return $avg !== null ? (float) $avg : null;
     }
+
+    public function findBirthHistory(): array
+    {
+        $gestations = \App\Models\CaravanGestation::where('success', true)
+            ->with(['caravan', 'offspring.caravan.batch'])
+            ->get();
+
+        $history = [];
+        foreach ($gestations as $g) {
+            foreach ($g->offspring as $lineage) {
+                if ($lineage->caravan === null) {
+                    continue;
+                }
+
+                $history[] = new \App\Core\Entities\BirthHistoryEntity(
+                    gestationId: (int) $g->id,
+                    motherId: (int) $g->caravan_id,
+                    motherIdentification: (string) ($g->caravan?->identification ?? ''),
+                    birthDate: $g->end_date ? $g->end_date->format('Y-m-d') : '',
+                    notes: $g->notes,
+                    calfId: (int) $lineage->caravan_id,
+                    calfIdentification: (string) ($lineage->caravan?->identification ?? ''),
+                    isNursing: (bool) $lineage->is_nursing,
+                    calfSex: $lineage->caravan?->sex?->value,
+                    calfBatchName: $lineage->caravan?->batch?->name
+                );
+            }
+        }
+
+        return $history;
+    }
+
+    public function updateBatchAndCategory(int $caravanId, int $batchId, ?string $category): void
+    {
+        $data = ['batch_id' => $batchId];
+        if ($category !== null) {
+            $data['category'] = $category;
+        }
+        Caravan::where('id', $caravanId)->update($data);
+    }
 }
 

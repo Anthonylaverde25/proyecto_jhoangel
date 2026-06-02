@@ -60,7 +60,35 @@ final class CreateServiceOrderUseCase
             }
         }
 
-        // 3. Instantiate Entity in DRAFT state
+        // 3. Multi-Toro / Controlled Service Validations
+        if ($dto->serviceType === 'multi' && $dto->isControlledService) {
+            $assignedFemales = [];
+            foreach ($dto->femaleSireAssignments as $assignment) {
+                $femaleId = isset($assignment['female_caravan_id']) ? (int) $assignment['female_caravan_id'] : null;
+                $maleId = isset($assignment['assigned_male_caravan_id']) ? (int) $assignment['assigned_male_caravan_id'] : null;
+
+                if ($femaleId === null || $maleId === null) {
+                    throw ServiceOrderDomainException::domainError("Invalid structure for female-sire assignments");
+                }
+
+                if (!in_array($femaleId, $dto->femaleCaravanIds, true)) {
+                    throw ServiceOrderDomainException::domainError("Assigned female with ID {$femaleId} is not in the list of females of this order");
+                }
+
+                if (!in_array($maleId, $dto->maleCaravanIds, true)) {
+                    throw ServiceOrderDomainException::domainError("Assigned sire with ID {$maleId} is not in the list of bulls of this order");
+                }
+
+                $assignedFemales[] = $femaleId;
+            }
+
+            $uniqueAssignedFemales = array_unique($assignedFemales);
+            if (count($uniqueAssignedFemales) !== count($dto->femaleCaravanIds)) {
+                throw ServiceOrderDomainException::domainError("All females must be assigned a sire in a controlled service");
+            }
+        }
+
+        // 4. Instantiate Entity in DRAFT state
         $entity = new ServiceOrderEntity(
             id: null,
             companyId: $dto->companyId,
@@ -71,10 +99,13 @@ final class CreateServiceOrderUseCase
             plannedStartDate: $dto->plannedStartDate,
             observations: $dto->observations,
             maleCaravanIds: $dto->maleCaravanIds,
-            femaleCaravanIds: $dto->femaleCaravanIds
+            femaleCaravanIds: $dto->femaleCaravanIds,
+            serviceType: $dto->serviceType,
+            isControlledService: $dto->isControlledService,
+            femaleSireAssignments: $dto->femaleSireAssignments
         );
 
-        // 4. Persist
+        // 5. Persist
         return $this->repository->save($entity, $dto->requestedByUserId);
     }
 }

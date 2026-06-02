@@ -40,7 +40,18 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
 
             $femalePivotData = [];
             foreach ($entity->getFemaleCaravanIds() as $femaleId) {
-                $femalePivotData[$femaleId] = ['company_id' => $model->company_id];
+                $pivotData = ['company_id' => $model->company_id];
+
+                if ($entity->isControlledService()) {
+                    foreach ($entity->getFemaleSireAssignments() as $assignment) {
+                        if ((int)$assignment['female_caravan_id'] === (int)$femaleId) {
+                            $pivotData['assigned_male_caravan_id'] = (int)$assignment['assigned_male_caravan_id'];
+                            break;
+                        }
+                    }
+                }
+
+                $femalePivotData[$femaleId] = $pivotData;
             }
             $model->females()->sync($femalePivotData);
 
@@ -133,12 +144,22 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
             // Get target farm's renspa
             $renspa = '';
             $batch = DB::table('batches')
-                ->join('farms', 'batches.farm_id', '=', 'farms.id')
+                ->leftJoin('farms', 'batches.farm_id', '=', 'farms.id')
                 ->where('batches.id', $batchId)
-                ->select('farms.renspa')
+                ->select('farms.renspa as farm_renspa', 'batches.company_id')
                 ->first();
             if ($batch !== null) {
-                $renspa = $batch->renspa ?? '';
+                if ($batch->farm_renspa !== null && $batch->farm_renspa !== '') {
+                    $renspa = $batch->farm_renspa;
+                } else {
+                    $company = DB::table('companies')
+                        ->where('id', $batch->company_id)
+                        ->select('renspa')
+                        ->first();
+                    if ($company !== null) {
+                        $renspa = $company->renspa ?? '';
+                    }
+                }
             }
 
             $movements = [];
