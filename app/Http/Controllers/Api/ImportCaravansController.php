@@ -26,19 +26,29 @@ class ImportCaravansController extends Controller
     public function __invoke(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'rows'                  => 'required|array|min:1',
-            'rows.*.identification' => 'required|string',
-            'rows.*.category'       => 'nullable|string',
-            'rows.*.teeth'          => 'nullable|string',
-            'rows.*.entry_weight'   => 'nullable|string',
-            'rows.*.exit_weight'    => 'nullable|string',
-            'rows.*.breed'          => 'nullable|string',
-            'rows.*.sex'            => 'nullable|string',
-            'rows.*.entry_date'     => 'nullable|string',
-            'work_type'             => 'nullable|string|in:entry,update,exit',
-            'batch_id'              => 'nullable|integer|exists:batches,id',
-            'farm_id'               => 'nullable|integer|exists:farms,id',
-            'batch_name'            => 'nullable|string',
+            'rows'                        => 'required|array|min:1',
+            'rows.*.identification'       => 'required|string',
+            'rows.*.category'             => 'nullable|string',
+            'rows.*.teeth'                => 'nullable|string',
+            'rows.*.entry_weight'         => 'nullable|string',
+            'rows.*.exit_weight'          => 'nullable|string',
+            'rows.*.breed'                => 'nullable|string',
+            'rows.*.sex'                  => 'nullable|string',
+            'rows.*.entry_date'           => 'nullable|string',
+            'rows.*.is_empty'             => 'nullable',
+            'rows.*.gestational_stage'    => 'nullable|string',
+            'rows.*.estadioestimado'       => 'nullable|string',
+            'rows.*.estadio_estimado'     => 'nullable|string',
+            'rows.*.diagnostico'          => 'nullable|string',
+            'rows.*.diagnstico'           => 'nullable|string',
+            'rows.*.observaciones'        => 'nullable|string',
+            'rows.*.observations'         => 'nullable|string',
+            'work_type'                   => 'nullable|string|in:entry,update,exit',
+            'batch_id'                    => 'nullable|integer|exists:batches,id',
+            'farm_id'                     => 'nullable|integer|exists:farms,id',
+            'batch_name'                  => 'nullable|string',
+            'empty_destination_batch_id'  => 'nullable|integer|exists:batches,id',
+            'service_order_id'            => 'nullable|integer|exists:service_orders,id',
         ]);
 
         $dto = new ImportCaravansDTO(
@@ -48,6 +58,8 @@ class ImportCaravansController extends Controller
             batchId: $validated['batch_id'] ?? null,
             farmId: $validated['farm_id'] ?? null,
             batchName: $validated['batch_name'] ?? null,
+            emptyDestinationBatchId: $validated['empty_destination_batch_id'] ?? null,
+            serviceOrderId: $validated['service_order_id'] ?? null,
         );
 
         $result = ($this->caravan->import)($dto);

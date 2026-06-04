@@ -43,6 +43,16 @@ class OCRNormalizationService
      */
     public function normalize(string $value, ?string $targetField = null): string
     {
+        // Extract selection option if the value contains selected/unselected tags
+        if (str_contains($value, ':selected:')) {
+            if (preg_match('/(?:^|:unselected:)\s*([^:]+?)\s*:selected:/ui', $value, $matches)) {
+                $value = trim($matches[1]);
+            }
+        } elseif (str_contains($value, ':unselected:')) {
+            // If it has checkbox markers but none is selected, treat it as empty
+            return '';
+        }
+
         // 1. Core Cleanup (Remove OCR Noise)
         $cleanValue = $this->basicCleanup($value);
 

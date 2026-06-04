@@ -43,6 +43,7 @@ class AzureOCRProvider implements IOCRProvider
             throw new \RuntimeException('Failed to submit document to Azure.');
         }
 
+
         $operationUrl = $response->header('Operation-Location');
         if (!$operationUrl) {
             throw new \RuntimeException('Operation-Location header not found.');
@@ -69,6 +70,8 @@ class AzureOCRProvider implements IOCRProvider
         }
 
         $analyzeResult = $resultResponse->json('analyzeResult');
+        Log::info('Azure OCR Response Model', ['raw_json' => $analyzeResult['tables']]);
+
         return [
             'tables' => $this->parseTables($analyzeResult['tables'] ?? []),
             'metadata' => $this->parseKeyValuePairs($analyzeResult['keyValuePairs'] ?? []),

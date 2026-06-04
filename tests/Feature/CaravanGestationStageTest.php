@@ -251,4 +251,89 @@ class CaravanGestationStageTest extends TestCase
         $this->assertNotNull($gestationUpdated->end_date);
         $this->assertEquals('Closed via calving registration.', $gestationUpdated->notes);
     }
+
+    public function test_can_import_caravans_with_gestations_and_service_order(): void
+    {
+        // 1. Create a provider, farm and a batch (safely using firstOrCreate)
+        $provider = \App\Models\Provider::firstOrCreate(
+            ['cuit' => '30-12345678-9'],
+            ['name' => 'Test Provider', 'is_active' => true]
+        );
+
+        $farm = \App\Models\Farm::firstOrCreate(
+            ['renspa' => '12.345.6.78910/11'],
+            [
+                'name' => 'Test Farm',
+                'provider_id' => $provider->id,
+                'is_active' => true,
+            ]
+        );
+
+        $batch = \App\Models\Batch::firstOrCreate(
+            ['company_id' => $this->company->id, 'name' => 'Lote 5'],
+            [
+                'farm_id' => $farm->id,
+                'is_active' => true,
+            ]
+        );
+
+        // 2. Create a service order associated with the batch
+        $so = \App\Models\ServiceOrder::create([
+            'company_id' => $this->company->id,
+            'batch_id' => $batch->id,
+            'code' => 'SO-TEST-123',
+            'status' => 'approved',
+            'service_type' => 'IATF',
+            'planned_start_date' => date('Y-m-d'),
+        ]);
+
+        // 3. Perform import of a pregnant cow
+        $response = $this->postJson('http://test.localhost/api/caravans/import', [
+            'work_type' => 'update',
+            'service_order_id' => $so->id,
+            'rows' => [
+                [
+                    'identification' => 'IMP-COW-1',
+                    'category' => 'vaca',
+                    'sex' => 'H',
+                    'teeth' => '4',
+                    'diagnostico' => 'Preñada',
+                    'estadioestimado' => 'cuerpo',
+                ]
+            ]
+        ]);
+
+        $response->assertStatus(201);
+
+        $caravan = Caravan::where('identification', 'IMP-COW-1')->first();
+        $this->assertNotNull($caravan);
+
+        $gestation = CaravanGestation::where('caravan_id', $caravan->id)->first();
+        $this->assertNotNull($gestation);
+        $this->assertEquals(GestationStage::BODY, $gestation->gestation_stage);
+        $this->assertEquals(2.0, $gestation->gestation_months);
+        $this->assertEquals($so->id, $gestation->service_order_id);
+        $this->assertTrue((bool)$gestation->is_current);
+
+        // 3. Import empty diagnosis to close gestation
+        $responseEmpty = $this->postJson('http://test.localhost/api/caravans/import', [
+            'work_type' => 'update',
+            'rows' => [
+                [
+                    'identification' => 'IMP-COW-1',
+                    'category' => 'vaca',
+                    'sex' => 'H',
+                    'teeth' => '4',
+                    'diagnostico' => 'Vacía',
+                ]
+            ]
+        ]);
+
+        $responseEmpty->assertStatus(201);
+
+        $gestationClosed = CaravanGestation::where('caravan_id', $caravan->id)->first();
+        $this->assertFalse((bool)$gestationClosed->is_current);
+        $this->assertTrue((bool)$gestationClosed->success);
+        $this->assertEquals('Closed via empty gestation diagnosis on batch import.', $gestationClosed->notes);
+    }
 }

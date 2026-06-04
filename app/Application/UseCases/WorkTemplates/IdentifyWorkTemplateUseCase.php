@@ -4,19 +4,21 @@ declare(strict_types=1);
 
 namespace App\Application\UseCases\WorkTemplates;
 
-use App\Core\Interfaces\IWorkTemplateRepository;
+use App\Application\Services\WorkTemplateIdentificationService;
+use App\Application\Services\OCRTemplateDataProcessor;
 use App\Core\Services\WorkdayCodeGenerator;
 use App\Infrastructure\OCR\OCRProviderFactory;
-use App\Models\Provider;
-use App\Models\Farm;
-use App\Models\Batch;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 
 final class IdentifyWorkTemplateUseCase
 {
     public function __construct(
-        private readonly IWorkTemplateRepository $repository,
-        private readonly WorkdayCodeGenerator $workdayCodeGenerator
+        private readonly WorkTemplateIdentificationService $identificationService,
+        private readonly OCRTemplateDataProcessor $templateDataProcessor,
+        private readonly WorkdayCodeGenerator $workdayCodeGenerator,
+        private readonly \App\Application\UseCases\FieldMappings\FieldMappingUseCases $fieldMappings,
+        private readonly \App\Application\Services\OCRNormalizationService $normalizationService
     ) {
     }
 
@@ -31,116 +33,64 @@ final class IdentifyWorkTemplateUseCase
     public function __invoke(UploadedFile $file, int $companyId, ?string $providerName = null): array
     {
         // 1. Resolve OCR Provider and Analyze Document
+        // por defecto el provedor de servicio es azure 
         $ocrProvider = OCRProviderFactory::make($providerName);
         $analysisResult = $ocrProvider->analyze($file);
 
-        $tables = $analysisResult['tables'] ?? $analysisResult;
-        $metadata = $analysisResult['metadata'] ?? [];
+        // ─── LOG PARA VER LOS DATOS DESESTRUCTURADOS ───
+        Log::info("Datos desestructurados de la imagen (OCR)", [
+            'tables'   => $analysisResult['tables']   ?? [],
+            'metadata' => $analysisResult['metadata'] ?? []
+        ]);
 
-        // 2. Extract Template Code
-        $templateCode = null;
+        // 2. Delegate template identification and context resolution to the application service
+        $resolution = $this->identificationService->identify($analysisResult, $companyId, $file);
 
-        // Try extracting from KVPs first
-        foreach ($metadata as $key => $val) {
-            $cleanKey = str_replace('_', '', strtolower($key));
-            if ($cleanKey === 'templatecode') {
-                $templateCode = trim($val);
-                break;
-            }
-        }
+        Log::info("Resultado de la Identificación de Plantilla", [
+            'plantilla_detectada' => $resolution['identified_template'] ? [
+                'id'    => $resolution['identified_template']->getId(),
+                'code'  => $resolution['identified_template']->getCode(),
+                'title' => $resolution['identified_template']->getTitle(),
+            ] : 'Ninguna coincidencia',
+            'contexto_resuelto'   => $resolution['context']
+        ]);
 
-        // Try extracting from the first table
-        if (!$templateCode && !empty($tables)) {
-            $firstTable = $tables[0];
-            $templateCodeColumn = null;
-            foreach ($firstTable['headers'] as $header) {
-                $cleanHeader = str_replace('_', '', strtolower($header));
-                if ($cleanHeader === 'templatecode') {
-                    $templateCodeColumn = $header;
-                    break;
+        // 3. Map and normalize tables columns/rows for the frontend interactive table edit
+        $tables = $analysisResult['tables'] ?? [];
+        $targetModel = 'caravans';
+
+        foreach ($tables as &$table) {
+            $fieldRes = ($this->fieldMappings->resolve)($table['headers'] ?? [], $targetModel);
+            $table['field_mapping'] = $fieldRes['mapped'];
+            $table['unresolved_headers'] = $fieldRes['unresolved'];
+
+            // Re-map rows using resolved field names (keeping value/confidence structure)
+            $table['mapped_rows'] = array_map(function (array $row) use ($fieldRes): array {
+                $mappedRow = [];
+                foreach ($row as $header => $data) {
+                    $targetField = $fieldRes['mapped'][$header] ?? $header;
+                    
+                    // Normalize the value based on the target field
+                    $normalizedValue = $this->normalizationService->normalize(
+                        (string)($data['value'] ?? ''), 
+                        $targetField
+                    );
+
+                    $mappedRow[$targetField] = [
+                        'value' => $normalizedValue,
+                        'confidence' => $data['confidence'] ?? 1.0
+                    ];
                 }
-            }
-
-            if ($templateCodeColumn && !empty($firstTable['rows'])) {
-                $firstRow = $firstTable['rows'][0];
-                $templateCode = trim($firstRow[$templateCodeColumn]['value'] ?? '');
-            }
+                return $mappedRow;
+            }, $table['rows'] ?? []);
         }
-
-        // 3. Retrieve identified template
-        $identifiedTemplate = null;
-        if ($templateCode) {
-            $templates = $this->repository->findBy([
-                'company_id' => $companyId,
-                'code'       => $templateCode,
-            ]);
-
-            if (!empty($templates)) {
-                $identifiedTemplate = $templates[0];
-            }
-        }
-
-        // 4. Resolve Context Metadata (cuit, renspa, lote)
-        // Check first table for header metadata in case KVP is empty
-        if (empty(array_filter($metadata)) && isset($tables[0])) {
-            $firstTable = $tables[0];
-            $hasHeaderKeywords = false;
-            foreach ($firstTable['headers'] as $h) {
-                if (in_array($h, ['cuit', 'renspa', 'lote', 'alias', 'establecimiento'])) {
-                    $hasHeaderKeywords = true;
-                    break;
-                }
-            }
-
-            if ($hasHeaderKeywords && !empty($firstTable['rows'])) {
-                $row = $firstTable['rows'][0];
-                foreach ($firstTable['headers'] as $h) {
-                    if (isset($row[$h]['value'])) {
-                        $metadata[$h] = $row[$h]['value'];
-                    }
-                }
-            }
-        }
-
-        $cuit = $metadata['cuit'] ?? null;
-        $renspa = $metadata['renspa'] ?? null;
-        $lote = $metadata['lote'] ?? $metadata['alias'] ?? null;
-
-        $provider = null;
-        $farm = null;
-        $batch = null;
-
-        if ($cuit) {
-            $cleanCuit = preg_replace('/[^0-9]/', '', $cuit);
-            $provider = Provider::whereRaw("REPLACE(cuit, '-', '') = ?", [$cleanCuit])->first();
-        }
-
-        if ($provider && $renspa) {
-            $cleanRenspa = preg_replace('/[^a-zA-Z0-9]/', '', $renspa);
-            $farm = Farm::where('provider_id', $provider->id)
-                ->whereRaw("REPLACE(REPLACE(renspa, '.', ''), '/', '') = ?", [$cleanRenspa])
-                ->first();
-        }
-
-        if ($farm && $lote) {
-            $batch = Batch::where('farm_id', $farm->id)
-                ->where('name', $lote)
-                ->first();
-        }
-
-        $contextDto = [
-            'cuit' => $cuit,
-            'renspa' => $renspa,
-            'lote' => $lote,
-            'provider_id' => $provider?->id,
-            'farm_id' => $farm?->id,
-            'batch_id' => $batch?->id,
-        ];
+        unset($table);
 
         return [
-            'identified_template' => $identifiedTemplate,
-            'context'             => $contextDto,
+            'identified_template'    => $resolution['identified_template'],
+            'context'                => $resolution['context'],
             'suggested_workday_code' => $this->workdayCodeGenerator->generateForDate(new \DateTime()),
+            'data'                   => $tables,
         ];
     }
 }

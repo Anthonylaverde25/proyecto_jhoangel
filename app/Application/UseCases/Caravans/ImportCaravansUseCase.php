@@ -114,7 +114,7 @@ final class ImportCaravansUseCase
                 $existingEntity = $this->repository->findByIdentification($identification);
 
                 if ($existingEntity !== null) {
-                    $this->updateCaravan($existingEntity, $row, $allBreeds, $batchId);
+                    $this->updateCaravan($existingEntity, $row, $allBreeds, $batchId, $dto->emptyDestinationBatchId, $dto->serviceOrderId);
                     $imported++;
                     if ($existingEntity->getId()) {
                         $processedCaravanIds[] = $existingEntity->getId();
@@ -127,6 +127,17 @@ final class ImportCaravansUseCase
                 if ($globalEntity !== null) {
                     $oldCompanyId = $globalEntity->getCompanyId();
                     
+                    $isEmpty = false;
+                    if ($globalEntity->getSex() === \App\Core\Enums\AnimalSex::FEMALE) {
+                        $diagnosisRaw = $row['diagnostico'] ?? $row['diagnstico'] ?? null;
+                        if ($diagnosisRaw !== null) {
+                            $isEmpty = str_contains(strtolower((string)$diagnosisRaw), 'vac');
+                        } else {
+                            $isEmpty = isset($row['is_empty']) ? filter_var($row['is_empty'], FILTER_VALIDATE_BOOLEAN) : false;
+                        }
+                    }
+                    $assignedBatchId = ($isEmpty && $dto->emptyDestinationBatchId) ? $dto->emptyDestinationBatchId : $batchId;
+
                     // Crear nueva instancia de entidad para la nueva compañía (Transferencia)
                     $transferEntity = new CaravanEntity(
                         $globalEntity->getId(),
@@ -140,11 +151,11 @@ final class ImportCaravansUseCase
                         $globalEntity->getSex(),
                         $globalEntity->getEntryDate(),
                         null,
-                        $batchId,
+                        $assignedBatchId,
                         $activeCompanyId
                     );
 
-                    $this->updateCaravan($transferEntity, $row, $allBreeds, $batchId);
+                    $this->updateCaravan($transferEntity, $row, $allBreeds, $assignedBatchId, $dto->emptyDestinationBatchId, $dto->serviceOrderId);
                     $savedTransfer = $this->repository->save($transferEntity);
                     
                     if ($oldCompanyId && $activeCompanyId) {
@@ -182,6 +193,19 @@ final class ImportCaravansUseCase
                     }
                 }
 
+                $isEmpty = false;
+                if ($sex === \App\Core\Enums\AnimalSex::FEMALE && $category !== null) {
+                    $diagnosisRaw = $row['diagnostico'] ?? $row['diagnstico'] ?? null;
+                    if ($diagnosisRaw !== null) {
+                        $normalizedDiag = strtolower(trim((string)$diagnosisRaw));
+                        $isEmpty = str_contains($normalizedDiag, 'vac') || str_contains($normalizedDiag, 'empty') || $normalizedDiag === 'empty';
+                    } else {
+                        $isEmpty = isset($row['is_empty']) ? filter_var($row['is_empty'], FILTER_VALIDATE_BOOLEAN) : false;
+                    }
+                }
+
+                $assignedBatchId = ($isEmpty && $dto->emptyDestinationBatchId) ? $dto->emptyDestinationBatchId : $batchId;
+
                 $entity = new CaravanEntity(
                     id: null,
                     identification: $identification,
@@ -194,13 +218,20 @@ final class ImportCaravansUseCase
                     sex: $sex,
                     entryDate: $entryDate,
                     createdAt: null,
-                    batchId: $batchId,
+                    batchId: $assignedBatchId,
                     companyId: $activeCompanyId
                 );
 
                 if ($sex === \App\Core\Enums\AnimalSex::FEMALE && $category !== null) {
-                    $isEmpty = isset($row['is_empty']) ? filter_var($row['is_empty'], FILTER_VALIDATE_BOOLEAN) : true;
                     $entity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $category));
+                    
+                    if (!$isEmpty) {
+                        $stageRaw = $row['gestational_stage'] ?? $row['estadio_estimado'] ?? $row['estadioestimado'] ?? null;
+                        $monthsRaw = isset($row['gestation_months']) ? (float)$row['gestation_months'] : null;
+                        [$stage, $months] = $this->resolveGestationDetails($stageRaw, $monthsRaw);
+                        $startDate = $entryDate ? $entryDate->format('Y-m-d') : date('Y-m-d');
+                        $entity->startNewGestation($startDate, $stage, $months, $dto->serviceOrderId);
+                    }
                 }
 
                 $savedEntity = $this->repository->save($entity);
@@ -235,8 +266,14 @@ final class ImportCaravansUseCase
         ];
     }
 
-    private function updateCaravan(CaravanEntity $entity, array $row, array &$allBreeds, ?int $batchId): void
-    {
+    private function updateCaravan(
+        CaravanEntity $entity,
+        array $row,
+        array &$allBreeds,
+        ?int $batchId,
+        ?int $emptyDestinationBatchId = null,
+        ?int $serviceOrderId = null
+    ): void {
         $category = $entity->getCategory();
         if (isset($row['category']) && (string)$row['category'] !== '') {
             $category = CaravanValueParser::parseCategory((string)$row['category']) ?? $category;
@@ -278,14 +315,48 @@ final class ImportCaravansUseCase
             }
         }
 
-        $entity->updateDetails($category, $teeth, $entryWeight, $exitWeight, $breed, $sex, $entryDate, $batchId, $breedId);
+        $isEmpty = false;
+        if ($sex === \App\Core\Enums\AnimalSex::FEMALE && $category !== null) {
+            $currentDetails = $entity->getReproductiveDetails();
+            $diagnosisRaw = $row['diagnostico'] ?? $row['diagnstico'] ?? null;
+            if ($diagnosisRaw !== null) {
+                $normalizedDiag = strtolower(trim((string)$diagnosisRaw));
+                $isEmpty = str_contains($normalizedDiag, 'vac') || str_contains($normalizedDiag, 'empty') || $normalizedDiag === 'empty';
+            } else {
+                $isEmpty = isset($row['is_empty']) ? filter_var($row['is_empty'], FILTER_VALIDATE_BOOLEAN) : ($currentDetails?->isEmpty() ?? false);
+            }
+        }
+
+        $assignedBatchId = ($isEmpty && $emptyDestinationBatchId) ? $emptyDestinationBatchId : $batchId;
+
+        $entity->updateDetails($category, $teeth, $entryWeight, $exitWeight, $breed, $sex, $entryDate, $assignedBatchId, $breedId);
 
         if ($sex === \App\Core\Enums\AnimalSex::FEMALE && $category !== null) {
             $currentDetails = $entity->getReproductiveDetails();
-            $isEmpty = isset($row['is_empty']) ? filter_var($row['is_empty'], FILTER_VALIDATE_BOOLEAN) : ($currentDetails?->isEmpty() ?? true);
             $arrivalCategory = $currentDetails?->getArrivalCategory() ?? $category;
             
             $entity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
+
+            // Gestation Automation: If empty and has active gestation, close it as SUCCESSFUL (calving)
+            if ($isEmpty && $entity->hasActiveGestation()) {
+                $endDate = $entryDate ? $entryDate->format('Y-m-d') : date('Y-m-d');
+                $entity->getActiveGestation()->closeGestation(
+                    true,
+                    $endDate,
+                    'Closed via empty gestation diagnosis on batch import.'
+                );
+            }
+
+            // Gestation Automation: If pregnant and does not have active gestation, start one
+            if (!$isEmpty) {
+                if (!$entity->hasActiveGestation()) {
+                    $startDate = $entryDate ? $entryDate->format('Y-m-d') : date('Y-m-d');
+                    $stageRaw = $row['gestational_stage'] ?? $row['estadio_estimado'] ?? $row['estadioestimado'] ?? null;
+                    $monthsRaw = isset($row['gestation_months']) ? (float)$row['gestation_months'] : null;
+                    [$stage, $months] = $this->resolveGestationDetails($stageRaw, $monthsRaw);
+                    $entity->startNewGestation($startDate, $stage, $months, $serviceOrderId);
+                }
+            }
         }
 
         $this->repository->save($entity);
@@ -314,5 +385,40 @@ final class ImportCaravansUseCase
         }
 
         return ['id' => $breedId, 'name' => $breed];
+    }
+
+    /**
+     * Resolve gestation stage and months bidirectionally.
+     *
+     * @param string|null $stageStr
+     * @param float|null $months
+     * @return array{0: \App\Core\Enums\GestationStage, 1: float}
+     */
+    private function resolveGestationDetails(?string $stageStr, ?float $months): array
+    {
+        if ($months !== null) {
+            $stage = \App\Core\Enums\GestationStage::fromMonths($months);
+            return [$stage, $months];
+        }
+
+        if ($stageStr !== null) {
+            $normalizedStage = strtolower(trim($stageStr));
+            if (str_contains($normalizedStage, 'cabeza') || str_contains($normalizedStage, 'head') || str_contains($normalizedStage, 'cobeza')) {
+                $stage = \App\Core\Enums\GestationStage::HEAD;
+            } elseif (str_contains($normalizedStage, 'cuerpo') || str_contains($normalizedStage, 'body')) {
+                $stage = \App\Core\Enums\GestationStage::BODY;
+            } elseif (str_contains($normalizedStage, 'cola') || str_contains($normalizedStage, 'tail')) {
+                $stage = \App\Core\Enums\GestationStage::TAIL;
+            } else {
+                try {
+                    $stage = \App\Core\Enums\GestationStage::from(strtoupper($stageStr));
+                } catch (\ValueError) {
+                    $stage = \App\Core\Enums\GestationStage::HEAD;
+                }
+            }
+            return [$stage, $stage->toDefaultMonths()];
+        }
+
+        return [\App\Core\Enums\GestationStage::HEAD, 3.0];
     }
 }

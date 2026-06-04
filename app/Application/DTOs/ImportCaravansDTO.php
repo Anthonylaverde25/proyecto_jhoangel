@@ -17,6 +17,8 @@ final readonly class ImportCaravansDTO
         public ?int $batchId = null,
         public ?int $farmId = null,
         public ?string $batchName = null,
+        public ?int $emptyDestinationBatchId = null,
+        public ?int $serviceOrderId = null,
     ) {
     }
 }

@@ -51,6 +51,7 @@ final class WorkTemplateIdentifyController extends Controller
                 'identified_template' => $identifiedTemplate ? new WorkTemplateResource($identifiedTemplate) : null,
                 'context' => $result['context'],
                 'suggested_workday_code' => $result['suggested_workday_code'],
+                'data' => $result['data'] ?? [],
             ]);
 
         } catch (\Exception $e) {
