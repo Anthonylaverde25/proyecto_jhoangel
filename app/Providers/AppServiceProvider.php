@@ -29,8 +29,6 @@ use App\Core\Interfaces\IActivityRepository;
 use App\Infrastructure\Persistence\EloquentActivityRepository;
 use App\Core\Interfaces\ICaravanWeightRepository;
 use App\Infrastructure\Persistence\EloquentCaravanWeightRepository;
-use App\Core\Interfaces\ITemplateTypeRepository;
-use App\Infrastructure\Persistence\EloquentTemplateTypeRepository;
 use App\Core\Interfaces\IWorkTemplateRepository;
 use App\Infrastructure\Persistence\EloquentWorkTemplateRepository;
 use App\Core\Interfaces\IServiceOrderRepository;
@@ -57,7 +55,6 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(IBreedRepository::class, \App\Infrastructure\Persistence\EloquentBreedRepository::class);
         $this->app->bind(ICaravanMovementRepository::class, EloquentCaravanMovementRepository::class);
         $this->app->bind(IActivityRepository::class, EloquentActivityRepository::class);
-        $this->app->bind(ITemplateTypeRepository::class, EloquentTemplateTypeRepository::class);
         $this->app->bind(IWorkTemplateRepository::class, EloquentWorkTemplateRepository::class);
         $this->app->bind(IBatchTypeRepository::class, \App\Infrastructure\Persistence\EloquentBatchTypeRepository::class);
         $this->app->bind(IServiceOrderRepository::class, EloquentServiceOrderRepository::class);

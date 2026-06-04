@@ -9,15 +9,13 @@ final class WorkTemplateEntity
     public function __construct(
         private readonly ?int $id,
         private readonly int $companyId,
-        private readonly int $typeId,
+        private string $category,
         private string $title,
         private ?string $description = null,
         private ?array $schemaDefinition = null,
         private string $status = 'active',
-        private ?\DateTimeInterface $createdAt = null,
-        private ?string $typeName = null,
-        private ?string $typeColor = null,
-        private ?string $typeIcon = null
+        private ?string $code = null,
+        private ?\DateTimeInterface $createdAt = null
     ) {
     }
 
@@ -31,9 +29,9 @@ final class WorkTemplateEntity
         return $this->companyId;
     }
 
-    public function getTypeId(): int
+    public function getCategory(): string
     {
-        return $this->typeId;
+        return $this->category;
     }
 
     public function getTitle(): string
@@ -56,23 +54,13 @@ final class WorkTemplateEntity
         return $this->status;
     }
 
+    public function getCode(): ?string
+    {
+        return $this->code;
+    }
+
     public function getCreatedAt(): ?\DateTimeInterface
     {
         return $this->createdAt;
-    }
-
-    public function getTypeName(): ?string
-    {
-        return $this->typeName;
-    }
-
-    public function getTypeColor(): ?string
-    {
-        return $this->typeColor;
-    }
-
-    public function getTypeIcon(): ?string
-    {
-        return $this->typeIcon;
     }
 }

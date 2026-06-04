@@ -6,7 +6,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Application\UseCases\WorkTemplates\WorkTemplateUseCases;
 use App\Http\Controllers\Controller;
-use App\Http\Resources\TemplateTypeResource;
 use App\Http\Resources\WorkTemplateResource;
 use App\Core\Interfaces\ICompanyContext;
 use Illuminate\Http\JsonResponse;
@@ -18,24 +17,6 @@ class WorkTemplateController extends Controller
         private readonly WorkTemplateUseCases $useCases,
         private readonly ICompanyContext $companyContext
     ) {
-    }
-
-    /**
-     * Lista los tipos de plantilla disponibles para la empresa.
-     */
-    public function types(): JsonResponse
-    {
-        $companyId = $this->companyContext->getCompanyId();
-        
-        if (!$companyId) {
-            return response()->json(['message' => 'No company context found'], 403);
-        }
-
-        $entities = ($this->useCases->listTypes)($companyId);
-        
-        return response()->json(
-            TemplateTypeResource::collection($entities)
-        );
     }
 
     /**
@@ -53,6 +34,28 @@ class WorkTemplateController extends Controller
         
         return response()->json(
             WorkTemplateResource::collection($entities)
+        );
+    }
+
+    /**
+     * Obtiene una plantilla de trabajo específica por su código.
+     */
+    public function show(string $code): JsonResponse
+    {
+        $companyId = $this->companyContext->getCompanyId();
+
+        if (!$companyId) {
+            return response()->json(['message' => 'No company context found'], 403);
+        }
+
+        $entity = ($this->useCases->findTemplateByCode)($companyId, $code);
+
+        if (!$entity) {
+            return response()->json(['message' => 'Work template not found'], 404);
+        }
+
+        return response()->json(
+            new WorkTemplateResource($entity)
         );
     }
 }

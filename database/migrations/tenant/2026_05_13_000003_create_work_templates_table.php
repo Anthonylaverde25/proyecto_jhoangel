@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -14,7 +16,7 @@ return new class extends Migration
         Schema::create('work_templates', function (Blueprint $table) {
             $table->id();
             $table->foreignId('company_id')->constrained()->onDelete('cascade');
-            $table->foreignId('type_id')->constrained('template_types')->onDelete('cascade');
+            $table->string('category')->default('ENTRY');
             $table->string('title');
             $table->text('description')->nullable();
             $table->json('schema_definition')->nullable(); // Para guardar los campos dinámicos

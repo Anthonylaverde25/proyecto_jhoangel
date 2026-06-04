@@ -92,9 +92,10 @@ class ServiceOrderController extends Controller
         $companyId = (int) $request->header('X-Company-ID');
         $userId = (int) Auth::id();
         $observations = $request->input('observations');
+        $targetBatchId = $request->has('target_batch_id') ? (int) $request->input('target_batch_id') : null;
 
         try {
-            $entity = ($this->completeUseCase)($id, $companyId, $userId, $observations);
+            $entity = ($this->completeUseCase)($id, $companyId, $userId, $observations, $targetBatchId);
             return response()->json(new ServiceOrderResource($entity));
         } catch (ServiceOrderDomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);

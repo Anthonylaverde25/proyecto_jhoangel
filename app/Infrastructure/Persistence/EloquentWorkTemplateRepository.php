@@ -13,15 +13,14 @@ class EloquentWorkTemplateRepository implements IWorkTemplateRepository
 {
     public function findAll(): array
     {
-        return WorkTemplate::with('type')->get()
+        return WorkTemplate::all()
             ->map(fn (WorkTemplate $model) => WorkTemplateMapper::toEntity($model))
             ->toArray();
     }
 
     public function findByCompanyId(int $companyId): array
     {
-        return WorkTemplate::with('type')
-            ->where('company_id', $companyId)
+        return WorkTemplate::where('company_id', $companyId)
             ->get()
             ->map(fn (WorkTemplate $model) => WorkTemplateMapper::toEntity($model))
             ->toArray();
@@ -29,7 +28,7 @@ class EloquentWorkTemplateRepository implements IWorkTemplateRepository
 
     public function find($id): ?WorkTemplateEntity
     {
-        $model = WorkTemplate::with('type')->find($id);
+        $model = WorkTemplate::find($id);
         return $model ? WorkTemplateMapper::toEntity($model) : null;
     }
 
@@ -40,7 +39,7 @@ class EloquentWorkTemplateRepository implements IWorkTemplateRepository
 
     public function findBy(array $criteria): array
     {
-        $query = WorkTemplate::with('type');
+        $query = WorkTemplate::query();
         foreach ($criteria as $field => $value) {
             $query->where($field, $value);
         }

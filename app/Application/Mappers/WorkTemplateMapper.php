@@ -14,15 +14,13 @@ class WorkTemplateMapper
         return new WorkTemplateEntity(
             $model->id,
             $model->company_id,
-            (int) $model->type_id,
+            $model->category,
             $model->title,
             $model->description,
             $model->schema_definition,
             $model->status,
-            $model->created_at,
-            $model->type?->name,
-            $model->type?->color,
-            $model->type?->icon
+            $model->code,
+            $model->created_at
         );
     }
 
@@ -33,11 +31,12 @@ class WorkTemplateMapper
         }
 
         $model->company_id = $entity->getCompanyId();
-        $model->type_id = $entity->getTypeId();
+        $model->category = $entity->getCategory();
         $model->title = $entity->getTitle();
         $model->description = $entity->getDescription();
         $model->schema_definition = $entity->getSchemaDefinition();
         $model->status = $entity->getStatus();
+        $model->code = $entity->getCode();
 
         return $model;
     }

@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\BatchController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\WorkTemplateController;
+use App\Http\Controllers\Api\WorkTemplateIdentifyController;
 use App\Http\Controllers\Api\BatchTypeController;
 use App\Http\Controllers\Api\ServiceOrderController;
 use App\Http\Controllers\Api\BirthController;
@@ -65,8 +66,9 @@ Route::middleware([
     Route::get('/batch-types', [BatchTypeController::class, 'index']);
 
     // Gestión de Plantillas
-    Route::get('/template-types', [WorkTemplateController::class, 'types']);
     Route::get('/work-templates', [WorkTemplateController::class, 'index']);
+    Route::post('/work-templates/identify', WorkTemplateIdentifyController::class);
+    Route::get('/work-templates/{code}', [WorkTemplateController::class, 'show']);
 
     // Órdenes de Servicio
     Route::middleware('auth:sanctum')->group(function () {

@@ -216,15 +216,19 @@ class ServiceOrderTest extends TestCase
             'type'       => 'TRANSFER',
         ]);
 
-        // 3. Complete order (de Aprobada a Completada / Success)
+        // 3. Complete order (de Aprobada a Completada / Success) with transfer of empty cows
         $this->actingAs($this->user, 'sanctum')
             ->withHeader('X-Company-ID', (string)$this->company->id)
             ->postJson("http://test.localhost/api/service-orders/{$orderId}/complete", [
                 'observations' => 'Finished service season.',
+                'target_batch_id' => $this->sourceBatch->id,
             ])
             ->assertStatus(200)
             ->assertJsonPath('status', ServiceOrderStatus::SUCCESS->value)
             ->assertJsonPath('observations', 'Finished service season.');
+
+        // Verify that cow1 was transferred back to sourceBatch because it was empty
+        $this->assertEquals($this->sourceBatch->id, Caravan::find($this->cow1->id)->batch_id);
     }
 
     public function test_can_update_status_via_patch_toggle(): void

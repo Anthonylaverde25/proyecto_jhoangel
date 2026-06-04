@@ -25,7 +25,7 @@ class TenantDatabaseSeeder extends Seeder
             LivestockHierarchySeeder::class,
             ActivitySeeder::class,
             BatchWeightSeeder::class,
-            TemplateTypeSeeder::class,
+            WorkTemplateSeeder::class,
             BatchTypeSeeder::class,
         ]);
     }

@@ -14,21 +14,16 @@ class WorkTemplate extends Model
 
     protected $fillable = [
         'company_id',
-        'type_id',
+        'category',
         'title',
         'description',
         'schema_definition',
         'status',
+        'code',
     ];
 
     protected $casts = [
         'company_id' => 'integer',
-        'type_id' => 'integer',
         'schema_definition' => 'array',
     ];
-
-    public function type(): BelongsTo
-    {
-        return $this->belongsTo(TemplateType::class, 'type_id');
-    }
 }

@@ -22,11 +22,9 @@ class WorkTemplateResource extends JsonResource
             'id' => $this->resource->getId(),
             'title' => $this->resource->getTitle(),
             'description' => $this->resource->getDescription(),
-            'type_id' => $this->resource->getTypeId(),
-            'type_name' => $this->resource->getTypeName(),
-            'type_color' => $this->resource->getTypeColor(),
-            'type_icon' => $this->resource->getTypeIcon(),
+            'category' => $this->resource->getCategory(),
             'status' => $this->resource->getStatus(),
+            'code' => $this->resource->getCode(),
             'schema_definition' => $this->resource->getSchemaDefinition(),
             'created_at' => $this->resource->getCreatedAt()?->format('Y-m-d H:i:s'),
         ];
