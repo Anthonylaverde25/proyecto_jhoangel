@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Application\DTOs\ImportCaravansDTO;
 use App\Application\UseCases\Caravans\CaravanUseCases;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Caravans\ImportCaravansRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,36 +21,12 @@ class ImportCaravansController extends Controller
     /**
      * Import mapped rows from OCR analysis into the caravans table.
      *
-     * @param Request $request
+     * @param ImportCaravansRequest $request
      * @return JsonResponse
      */
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(ImportCaravansRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'rows'                        => 'required|array|min:1',
-            'rows.*.identification'       => 'required|string',
-            'rows.*.category'             => 'nullable|string',
-            'rows.*.teeth'                => 'nullable|string',
-            'rows.*.entry_weight'         => 'nullable|string',
-            'rows.*.exit_weight'          => 'nullable|string',
-            'rows.*.breed'                => 'nullable|string',
-            'rows.*.sex'                  => 'nullable|string',
-            'rows.*.entry_date'           => 'nullable|string',
-            'rows.*.is_empty'             => 'nullable',
-            'rows.*.gestational_stage'    => 'nullable|string',
-            'rows.*.estadioestimado'       => 'nullable|string',
-            'rows.*.estadio_estimado'     => 'nullable|string',
-            'rows.*.diagnostico'          => 'nullable|string',
-            'rows.*.diagnstico'           => 'nullable|string',
-            'rows.*.observaciones'        => 'nullable|string',
-            'rows.*.observations'         => 'nullable|string',
-            'work_type'                   => 'nullable|string|in:entry,update,exit',
-            'batch_id'                    => 'nullable|integer|exists:batches,id',
-            'farm_id'                     => 'nullable|integer|exists:farms,id',
-            'batch_name'                  => 'nullable|string',
-            'empty_destination_batch_id'  => 'nullable|integer|exists:batches,id',
-            'service_order_id'            => 'nullable|integer|exists:service_orders,id',
-        ]);
+        $validated = $request->validated();
 
         $dto = new ImportCaravansDTO(
             rows: $validated['rows'],

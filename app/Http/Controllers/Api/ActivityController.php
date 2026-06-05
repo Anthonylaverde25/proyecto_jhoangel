@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ActivityResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Http\Requests\Activities\ToggleActivityRequest;
 
 class ActivityController extends Controller
 {
@@ -21,10 +22,11 @@ class ActivityController extends Controller
         return response()->json(ActivityResource::collection($activities));
     }
 
-    public function toggle(Request $request, int $id, ToggleCompanyActivityUseCase $useCase): JsonResponse
+    public function toggle(ToggleActivityRequest $request, int $id, ToggleCompanyActivityUseCase $useCase): JsonResponse
     {
         $companyId = (int) $request->header('X-Company-ID');
-        $isEnabled = (bool) $request->input('is_enabled', true);
+        $validated = $request->validated();
+        $isEnabled = isset($validated['is_enabled']) ? (bool) $validated['is_enabled'] : true;
 
         $useCase($companyId, $id, $isEnabled);
 

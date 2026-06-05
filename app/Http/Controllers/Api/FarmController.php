@@ -11,6 +11,8 @@ use App\Http\Resources\FarmResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+use App\Http\Requests\Farms\CreateFarmRequest;
+
 class FarmController extends Controller
 {
     public function __construct(
@@ -46,14 +48,9 @@ class FarmController extends Controller
     /**
      * Crea una nueva granja vinculada a un proveedor.
      */
-    public function store(Request $request): JsonResponse
+    public function store(CreateFarmRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'name'        => 'required|string|max:255',
-            'renspa'      => 'required|string|unique:farms,renspa|max:255',
-            'location'    => 'nullable|string|max:500',
-            'provider_id' => 'required|integer|exists:providers,id',
-        ]);
+        $validated = $request->validated();
 
         $dto = CreateFarmDTO::fromArray($validated);
         $entity = ($this->farm->create)($dto);

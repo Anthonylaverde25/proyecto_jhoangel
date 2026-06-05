@@ -11,6 +11,8 @@ use App\Http\Resources\ProviderResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+use App\Http\Requests\Providers\CreateProviderRequest;
+
 class ProviderController extends Controller
 {
     public function __construct(
@@ -45,20 +47,9 @@ class ProviderController extends Controller
     /**
      * Crea un nuevo proveedor.
      */
-    public function store(Request $request): JsonResponse
+    public function store(CreateProviderRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'name'            => 'required|string|max:255',
-            'commercial_name' => 'nullable|string|max:255',
-            'cuit'            => 'required|string|max:20|unique:providers,cuit',
-            'location'        => 'nullable|string|max:500',
-            'email'           => 'nullable|email|max:255',
-            'phone'           => 'nullable|string|max:50',
-            'farms'           => 'nullable|array',
-            'farms.*.name'    => 'required|string|max:255',
-            'farms.*.renspa'  => 'required|string|distinct|unique:farms,renspa|max:255',
-            'farms.*.location'=> 'nullable|string|max:500',
-        ]);
+        $validated = $request->validated();
 
         $dto = CreateProviderDTO::fromArray($validated);
         $entity = ($this->provider->create)($dto);

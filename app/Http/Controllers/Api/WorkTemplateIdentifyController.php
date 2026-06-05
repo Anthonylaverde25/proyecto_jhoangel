@@ -11,6 +11,8 @@ use App\Http\Resources\WorkTemplateResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+use App\Http\Requests\WorkTemplates\IdentifyWorkTemplateRequest;
+
 final class WorkTemplateIdentifyController extends Controller
 {
     public function __construct(
@@ -22,15 +24,11 @@ final class WorkTemplateIdentifyController extends Controller
     /**
      * Handle the incoming request to identify a work template via OCR.
      *
-     * @param Request $request
+     * @param IdentifyWorkTemplateRequest $request
      * @return JsonResponse
      */
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(IdentifyWorkTemplateRequest $request): JsonResponse
     {
-        $request->validate([
-            'document' => 'required|file|mimes:pdf,png,jpg,jpeg,tiff|max:20480',
-            'provider' => 'nullable|string|in:azure,google',
-        ]);
 
         $companyId = $this->companyContext->getCompanyId();
 

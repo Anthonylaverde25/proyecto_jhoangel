@@ -10,6 +10,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
+use App\Http\Requests\Analysis\AnalyzeDocumentRequest;
+
 class DocumentAnalysisController extends Controller
 {
     public function __construct(
@@ -22,10 +24,10 @@ class DocumentAnalysisController extends Controller
     /**
      * Analyze a document using the configured OCR provider (Azure or Google).
      *
-     * @param Request $request
+     * @param AnalyzeDocumentRequest $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function __invoke(Request $request)
+    public function __invoke(AnalyzeDocumentRequest $request)
     {
         // Diagnostic for GET requests
         if ($request->isMethod('get')) {
@@ -39,11 +41,6 @@ class DocumentAnalysisController extends Controller
                 ]
             ]);
         }
-
-        $request->validate([
-            'document' => 'required|file|mimes:pdf,png,jpg,jpeg,tiff|max:20480', // Max 20MB
-            'provider' => 'nullable|string|in:azure,google',
-        ]);
 
         try {
             $file = $request->file('document');

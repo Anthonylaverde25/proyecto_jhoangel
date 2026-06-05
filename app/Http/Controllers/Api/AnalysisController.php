@@ -9,19 +9,18 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
+use App\Http\Requests\Analysis\AnalyzeTableRequest;
+
 class AnalysisController extends Controller
 {
     /**
      * Analyze a handwritten table image using Gemini 1.5 Flash.
      *
-     * @param Request $request
+     * @param AnalyzeTableRequest $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function __invoke(Request $request)
+    public function __invoke(AnalyzeTableRequest $request)
     {
-        $request->validate([
-            'image' => 'required|image|max:10240', // Max 10MB
-        ]);
 
         $apiKey = config('services.gemini.key');
         if (!$apiKey) {

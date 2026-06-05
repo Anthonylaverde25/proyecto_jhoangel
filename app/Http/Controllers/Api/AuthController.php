@@ -11,18 +11,17 @@ use App\Application\Mappers\UserMapper;
 use App\Http\Resources\UserResource;
 use App\Http\Resources\CompanyResource;
 
+use App\Http\Requests\Auth\LoginRequest;
+
 class AuthController extends Controller
 {
     public function __construct(
         private readonly LoginUseCase $loginUseCase
     ) {}
 
-    public function login(Request $request)
+    public function login(LoginRequest $request)
     {
-        $credentials = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
-        ]);
+        $credentials = $request->validated();
 
         $authResult = ($this->loginUseCase)($credentials);
 

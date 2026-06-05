@@ -16,6 +16,9 @@ use App\Core\Enums\ServiceOrderStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CreateServiceOrderRequest;
 use App\Http\Requests\ReviewServiceOrderRequest;
+use App\Http\Requests\ServiceOrders\CompleteServiceOrderRequest;
+use App\Http\Requests\ServiceOrders\UpdateServiceOrderStatusRequest;
+use App\Http\Requests\ServiceOrders\UploadServiceOrderPdfRequest;
 use App\Http\Resources\ServiceOrderResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -87,12 +90,13 @@ class ServiceOrderController extends Controller
         }
     }
 
-    public function complete(Request $request, int $id): JsonResponse
+    public function complete(CompleteServiceOrderRequest $request, int $id): JsonResponse
     {
         $companyId = (int) $request->header('X-Company-ID');
         $userId = (int) Auth::id();
-        $observations = $request->input('observations');
-        $targetBatchId = $request->has('target_batch_id') ? (int) $request->input('target_batch_id') : null;
+        $validated = $request->validated();
+        $observations = $validated['observations'] ?? null;
+        $targetBatchId = isset($validated['target_batch_id']) ? (int) $validated['target_batch_id'] : null;
 
         try {
             $entity = ($this->completeUseCase)($id, $companyId, $userId, $observations, $targetBatchId);
@@ -102,15 +106,12 @@ class ServiceOrderController extends Controller
         }
     }
 
-    public function updateStatus(Request $request, int $id): JsonResponse
+    public function updateStatus(UpdateServiceOrderStatusRequest $request, int $id): JsonResponse
     {
         $companyId = (int) $request->header('X-Company-ID');
         $userId = (int) Auth::id();
-        $statusStr = $request->input('status');
-
-        if (!$statusStr) {
-            return response()->json(['message' => 'Status is required'], 422);
-        }
+        $validated = $request->validated();
+        $statusStr = $validated['status'];
 
         $newStatus = ServiceOrderStatus::tryFrom(strtoupper($statusStr));
         if ($newStatus === null) {
@@ -125,12 +126,8 @@ class ServiceOrderController extends Controller
         }
     }
 
-    public function uploadPdf(Request $request, int $id): JsonResponse
+    public function uploadPdf(UploadServiceOrderPdfRequest $request, int $id): JsonResponse
     {
-        $request->validate([
-            'pdf' => 'required|file|mimes:pdf|max:10240',
-        ]);
-
         $file = $request->file('pdf');
         $fileName = 'SO-' . $id . '-' . time() . '.pdf';
         

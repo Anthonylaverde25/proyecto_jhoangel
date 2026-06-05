@@ -11,6 +11,8 @@ use App\Http\Resources\BatchResource;
 use App\Http\Resources\BatchWeightResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Http\Requests\Batches\CreateBatchRequest;
+use App\Http\Requests\Batches\ChangeBatchActivityRequest;
 
 class BatchController extends Controller
 {
@@ -43,7 +45,7 @@ class BatchController extends Controller
         );
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(CreateBatchRequest $request): JsonResponse
     {
         \Illuminate\Support\Facades\Log::info('Store batch request data', [
             'headers' => $request->headers->all(),
@@ -51,20 +53,7 @@ class BatchController extends Controller
         ]);
 
         try {
-            $companyId = (int) $request->header('X-Company-ID');
-
-            $validated = $request->validate([
-                'name'          => 'required|string|max:255',
-                'farm_id'       => 'nullable|integer|exists:farms,id',
-                'activity_id'   => 'nullable|integer|exists:activities,id',
-                'weight'        => 'nullable|numeric|min:0',
-                'observaciones' => 'nullable|string',
-                'batch_type_id' => [
-                    'required',
-                    'integer',
-                    \Illuminate\Validation\Rule::exists('batch_types', 'id')->where('company_id', $companyId),
-                ],
-            ]);
+            $validated = $request->validated();
         } catch (\Illuminate\Validation\ValidationException $e) {
             \Illuminate\Support\Facades\Log::error('Validation failed for batch creation', [
                 'errors' => $e->errors(),
@@ -106,15 +95,9 @@ class BatchController extends Controller
         return response()->json(new BatchResource($entity));
     }
 
-    /**
-     * Cambia la actividad de un lote específico.
-     */
-    public function changeActivity(Request $request, int $id): JsonResponse
+    public function changeActivity(ChangeBatchActivityRequest $request, int $id): JsonResponse
     {
-        $validated = $request->validate([
-            'activity_id' => 'required|integer|exists:activities,id',
-            'weight' => 'nullable|numeric|min:0',
-        ]);
+        $validated = $request->validated();
 
         $weight = isset($validated['weight']) ? (float) $validated['weight'] : null;
 

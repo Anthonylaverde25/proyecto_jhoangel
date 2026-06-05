@@ -10,6 +10,8 @@ use App\Models\FieldMapping;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+use App\Http\Requests\FieldMappings\LearnFieldMappingRequest;
+
 class FieldMappingController extends Controller
 {
     public function __construct(
@@ -39,17 +41,12 @@ class FieldMappingController extends Controller
     /**
      * Learn a new field alias from manual user assignment.
      *
-     * @param Request                  $request
-     * @param LearnFieldMappingUseCase $learnUseCase
+     * @param LearnFieldMappingRequest $request
      * @return JsonResponse
      */
-    public function learn(Request $request): JsonResponse
+    public function learn(LearnFieldMappingRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'alias_name'   => 'required|string|max:255',
-            'target_field' => 'required|string|max:255',
-            'target_model' => 'required|string|max:255',
-        ]);
+        $validated = $request->validated();
 
         ($this->fieldMappings->learn)(
             $validated['alias_name'],
