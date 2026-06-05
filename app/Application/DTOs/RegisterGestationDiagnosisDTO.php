@@ -13,7 +13,8 @@ final readonly class RegisterGestationDiagnosisDTO
         public ?string $gestationStage = null,
         public ?float $gestationMonths = null,
         public ?int $confirmedSireId = null,
-        public ?string $diagnosisDate = null
+        public ?string $diagnosisDate = null,
+        public ?int $emptyDestinationBatchId = null
     ) {
     }
 
@@ -30,7 +31,8 @@ final readonly class RegisterGestationDiagnosisDTO
             gestationStage: isset($data['gestation_stage']) ? (string) $data['gestation_stage'] : null,
             gestationMonths: isset($data['gestation_months']) ? (float) $data['gestation_months'] : null,
             confirmedSireId: isset($data['confirmed_sire_id']) ? (int) $data['confirmed_sire_id'] : null,
-            diagnosisDate: isset($data['diagnosis_date']) ? (string) $data['diagnosis_date'] : null
+            diagnosisDate: isset($data['diagnosis_date']) ? (string) $data['diagnosis_date'] : null,
+            emptyDestinationBatchId: isset($data['empty_destination_batch_id']) ? (int) $data['empty_destination_batch_id'] : null
         );
     }
 }

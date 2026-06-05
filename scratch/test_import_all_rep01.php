@@ -71,6 +71,40 @@ $dto = new ImportOCRGestationDiagnosisDTO(
     diagnosisDate: '2026-06-05'
 );
 
+// 1. Reset all 5 caravans to the Service Order's batch initially
+\DB::table('caravans')
+    ->whereIn('id', $caravanIds)
+    ->update(['batch_id' => $serviceOrder->batch_id]);
+
+// 2. Find or create a separate destination batch for empty cows
+$targetBatch = \DB::table('batches')
+    ->where('company_id', $companyId)
+    ->where('id', '!=', $serviceOrder->batch_id)
+    ->first();
+
+if (!$targetBatch) {
+    $targetBatchId = \DB::table('batches')->insertGetId([
+        'company_id' => $companyId,
+        'name' => 'Lote Vacias Test',
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+} else {
+    $targetBatchId = $targetBatch->id;
+}
+
+echo "Service Order Batch ID: {$serviceOrder->batch_id}\n";
+echo "Target Batch ID for Empty Cows: {$targetBatchId}\n\n";
+
+// Create DTO with emptyDestinationBatchId
+$dto = new ImportOCRGestationDiagnosisDTO(
+    rows: $dto->rows,
+    serviceOrderId: $dto->serviceOrderId,
+    diagnosisDate: $dto->diagnosisDate,
+    emptyDestinationBatchId: $targetBatchId
+);
+
 $result = $useCase($dto, $companyId);
 
 echo "Import Result:\n";
@@ -81,3 +115,13 @@ echo "Final gestation count: " . $gestations->count() . "\n";
 foreach ($gestations as $g) {
     echo "Caravan: {$g->caravan?->identification} | Current: " . ($g->is_current ? 'YES' : 'NO') . " | Stage: " . ($g->gestation_stage?->value ?? 'NULL') . "\n";
 }
+
+echo "\nFinal Caravans Batch Status:\n";
+$caravans = \DB::table('caravans')
+    ->whereIn('id', $caravanIds)
+    ->get();
+foreach ($caravans as $c) {
+    $status = ($c->batch_id == $targetBatchId) ? "MOVED to Empty Batch" : "KEPT in Service Order Batch";
+    echo "Caravan: {$c->identification} | Batch ID: {$c->batch_id} -> {$status}\n";
+}
+

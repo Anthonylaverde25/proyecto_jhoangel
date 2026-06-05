@@ -61,4 +61,10 @@ interface ICaravanRepository
      * Update the batch assignment and optionally the category of a caravan.
      */
     public function updateBatchAndCategory(int $caravanId, int $batchId, ?string $category): void;
+
+    /**
+     * @param int $batchId
+     * @return CaravanEntity[]
+     */
+    public function findGestatingByBatch(int $batchId): array;
 }

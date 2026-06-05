@@ -26,6 +26,7 @@ class ImportOCRGestationRequest extends FormRequest
             'rows.*.observations'           => 'nullable|string|max:500',
             'service_order_id'              => 'required|integer|exists:service_orders,id',
             'diagnosis_date'                => 'nullable|date_format:Y-m-d',
+            'empty_cows_batch_id'           => 'nullable|integer|exists:batches,id',
         ];
     }
 

@@ -141,7 +141,9 @@ final class ImportOCRGestationTest extends TestCase
 
         // Check database
         $this->femaleCaravan->refresh();
-        $this->assertFalse((bool)$this->femaleCaravan->is_empty); // Pregnant now
+        $this->femaleCaravan->load('femaleDetail');
+        $this->assertNotNull($this->femaleCaravan->femaleDetail);
+        $this->assertFalse($this->femaleCaravan->femaleDetail->is_empty); // Pregnant now
 
         $gestation = CaravanGestation::where('caravan_id', $this->femaleCaravan->id)->first();
         $this->assertNotNull($gestation);
@@ -167,5 +169,50 @@ final class ImportOCRGestationTest extends TestCase
 
         $response->assertStatus(422);
         $response->assertJsonValidationErrors(['service_order_id']);
+    }
+
+    public function test_can_import_gestation_ocr_empty_diagnosis_with_batch_relocation(): void
+    {
+        // 1. Create target batch for empty cows
+        $emptyCowsBatch = Batch::create([
+            'company_id' => $this->company->id,
+            'name' => 'Lote Vacías Destino',
+            'is_active' => true,
+        ]);
+
+        // 2. Set the caravan's initial batch to the service order's batch
+        $this->femaleCaravan->update([
+            'batch_id' => $this->serviceOrder->batch_id,
+            'is_empty' => false,
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->withHeaders(['X-Company-Id' => (string) $this->company->id])
+            ->postJson('http://test.localhost/api/caravans/import-gestation-ocr', [
+                'service_order_id'    => $this->serviceOrder->id,
+                'diagnosis_date'      => '2026-06-05',
+                'empty_cows_batch_id' => $emptyCowsBatch->id,
+                'rows'                => [
+                    [
+                        'identification'  => 'CAR-6-3-466',
+                        'diagnostico'     => 'EMPTY',
+                        'gestation_stage' => null,
+                    ]
+                ]
+            ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonPath('status', 'success');
+        $response->assertJsonPath('data.processed', 1);
+
+        // 3. Verify caravan is marked empty and moved to the destination batch
+        $this->femaleCaravan->refresh();
+        $this->femaleCaravan->load('femaleDetail');
+        $this->assertNotNull($this->femaleCaravan->femaleDetail);
+        $this->assertTrue($this->femaleCaravan->femaleDetail->is_empty);
+        $this->assertEquals($emptyCowsBatch->id, $this->femaleCaravan->batch_id);
+
+        // 4. Verify no gestation record was created
+        $this->assertEquals(0, CaravanGestation::where('caravan_id', $this->femaleCaravan->id)->count());
     }
 }

@@ -46,6 +46,7 @@ final class ImportOCRGestationController extends Controller
             rows: $validated['rows'],
             serviceOrderId: (int) $validated['service_order_id'],
             diagnosisDate: $validated['diagnosis_date'] ?? null,
+            emptyDestinationBatchId: isset($validated['empty_cows_batch_id']) ? (int) $validated['empty_cows_batch_id'] : null,
         );
 
         try {

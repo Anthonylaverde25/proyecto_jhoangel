@@ -104,7 +104,8 @@ final class ImportGestationDiagnosisFromOCRUseCase
                         gestationStage: $gestationStage,
                         gestationMonths: null,
                         confirmedSireId: null,
-                        diagnosisDate: $diagnosisDate
+                        diagnosisDate: $diagnosisDate,
+                        emptyDestinationBatchId: $dto->emptyDestinationBatchId
                     );
 
                     ($this->registerDiagnosis)($diagnosisDto, $companyId);

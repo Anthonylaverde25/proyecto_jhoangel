@@ -273,6 +273,14 @@ final class CaravanEntity
     }
 
     /**
+     * Mueve el animal a un nuevo lote.
+     */
+    public function moveToBatch(int $batchId): void
+    {
+        $this->batchId = $batchId;
+    }
+
+    /**
      * Calcula la ganancia de peso total.
      */
     public function calculateWeightGain(): ?float
@@ -284,3 +292,4 @@ final class CaravanEntity
         return $this->exitWeight - $this->entryWeight;
     }
 }
+

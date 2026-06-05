@@ -16,11 +16,13 @@ final readonly class ImportOCRGestationDiagnosisDTO
      * @param array<int, array{identification: string, diagnostico: string, gestation_stage?: string|null, observations?: string|null}> $rows
      * @param int $serviceOrderId Required for traceability
      * @param string|null $diagnosisDate Defaults to today if not provided
+     * @param int|null $emptyDestinationBatchId Destination batch ID for empty cows
      */
     public function __construct(
         public array  $rows,
         public int    $serviceOrderId,
         public ?string $diagnosisDate = null,
+        public ?int   $emptyDestinationBatchId = null,
     ) {
     }
 }

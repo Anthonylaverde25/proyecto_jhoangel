@@ -304,4 +304,16 @@ class CaravanController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
     }
+
+    /**
+     * Lista las caravanas gestantes pertenecientes a un lote.
+     */
+    public function gestatingByBatch(int $id): JsonResponse
+    {
+        $entities = ($this->caravan->listGestatingByBatch)($id);
+        
+        return response()->json(
+            CaravanResource::collection($entities)
+        );
+    }
 }

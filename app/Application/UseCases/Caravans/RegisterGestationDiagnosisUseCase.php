@@ -77,6 +77,11 @@ final class RegisterGestationDiagnosisUseCase
             $category = $caravan->getCategory() ?? AnimalCategory::VACA;
             $caravan->recordFemaleDetails(new FemaleReproductiveDetails(true, $category));
 
+            // Relocate to the empty destination batch if provided
+            if ($dto->emptyDestinationBatchId !== null) {
+                $caravan->moveToBatch($dto->emptyDestinationBatchId);
+            }
+
             // Close active gestation if exists
             if ($caravan->hasActiveGestation()) {
                 $activeGestation = $caravan->getActiveGestation();

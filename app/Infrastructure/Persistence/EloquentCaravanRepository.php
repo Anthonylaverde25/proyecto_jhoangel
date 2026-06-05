@@ -152,5 +152,17 @@ class EloquentCaravanRepository implements ICaravanRepository
         }
         Caravan::where('id', $caravanId)->update($data);
     }
+
+    public function findGestatingByBatch(int $batchId): array
+    {
+        $models = Caravan::with(['breedRelation', 'batch', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])
+            ->where('batch_id', $batchId)
+            ->whereHas('gestations', function ($query) {
+                $query->where('is_current', true);
+            })
+            ->get();
+            
+        return $models->map(fn($model) => CaravanMapper::toEntity($model))->toArray();
+    }
 }
 
