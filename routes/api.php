@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\DocumentAnalysisController;
 use App\Http\Controllers\Api\CaravanController;
 use App\Http\Controllers\Api\FieldMappingController;
 use App\Http\Controllers\Api\ImportCaravansController;
+use App\Http\Controllers\Api\ImportOCRGestationController;
 use App\Http\Controllers\Api\ProviderController;
 use App\Http\Controllers\Api\FarmController;
 use App\Http\Controllers\Api\BatchController;
@@ -34,6 +35,7 @@ Route::middleware([
     Route::post('/analyze-table', AnalysisController::class);
     Route::match(['get', 'post'], '/test/azure-layout', DocumentAnalysisController::class);
     Route::post('/caravans/import', ImportCaravansController::class);
+    Route::post('/caravans/import-gestation-ocr', ImportOCRGestationController::class);
     Route::get('/caravans', [CaravanController::class, 'index']);
     Route::post('/caravans', [CaravanController::class, 'upsert']);
     Route::post('/caravans/bulk', [CaravanController::class, 'bulkStore']);

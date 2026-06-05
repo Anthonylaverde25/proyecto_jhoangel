@@ -15,10 +15,17 @@ class LivestockHierarchySeeder extends Seeder
     public function run(): void
     {
         // 1. Limpiar tablas para permitir re-ejecución (idempotencia)
+        DB::table('service_order_females')->delete();
+        DB::table('service_order_males')->delete();
+        DB::table('service_orders')->delete();
+        DB::table('caravan_gestations')->delete();
+        DB::table('female_caravan_details')->delete();
         DB::table('caravans')->delete();
         DB::table('batches')->delete();
         DB::table('farms')->delete();
         DB::table('providers')->delete();
+
+        $serviceOrderData = null;
 
         // Obtener razas disponibles
         $breedIds = DB::table('breeds')->pluck('id')->toArray();
@@ -113,80 +120,127 @@ class LivestockHierarchySeeder extends Seeder
 
                 // 4. Crear Caravanas (5 por lote)
                 foreach ($batchIds as $batchId) {
-                    for ($i = 1; $i <= 5; $i++) {
-                        $sex = rand(0, 1) ? 'M' : 'H';
-                        $category = $categories[array_rand($categories)];
-                        
-                        // Si el sexo es macho, no puede ser vaca/vaquillona. Si es hembra, no puede ser novillo/toro.
-                        if ($sex === 'M') {
-                            $category = in_array($category, ['toro', 'novillo', 'novillito', 'ternero']) ? $category : 'novillo';
-                        } else {
-                            $category = in_array($category, ['vaca', 'vaca_vacia', 'vaquillona', 'ternera']) ? $category : 'vaca';
-                        }
+                    $isTrebolRecria = ($index === 0 && $farmId === $farm1Id && $batchId === $batch2Id);
 
-                        $caravanId = DB::table('caravans')->insertGetId([
-                            'company_id' => $companyId,
-                            'batch_id' => $batchId,
-                            'identification' => 'CAR-' . $batchId . '-' . $i . '-' . rand(100, 999),
-                            'category' => $category,
-                            'breed_id' => !empty($breedIds) ? $breedIds[array_rand($breedIds)] : null,
-                            'sex' => $sex,
-                            'teeth' => rand(0, 8),
-                            'entry_weight' => rand(150, 450) + (rand(0, 99) / 100),
-                            'entry_date' => now()->subDays(rand(1, 365)),
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]);
+                    if ($isTrebolRecria) {
+                        $specificCaravans = [
+                            ['ident' => 'CAR-2-1-274', 'cat' => 'vaca'],
+                            ['ident' => 'CAR-2-2-413', 'cat' => 'vaca_vacia'],
+                            ['ident' => 'CAR-2-3-240', 'cat' => 'vaca'],
+                            ['ident' => 'CAR-2-4-388', 'cat' => 'vaca'],
+                            ['ident' => 'CAR-2-5-569', 'cat' => 'vaca'],
+                        ];
 
-                        // Lógica reproductiva para hembras
-                        if ($sex === 'H') {
-                            $roll = rand(1, 100);
-                            $isEmpty = true;
-                            $hasActive = false;
+                        $femaleIdsForServiceOrder = [];
 
-                            // Crear detalles reproductivos de la hembra
-                            DB::table('female_caravan_details')->insert([
-                                'caravan_id' => $caravanId,
-                                'is_empty' => $isEmpty,
-                                'arrival_category' => $category,
+                        foreach ($specificCaravans as $sc) {
+                            $caravanId = DB::table('caravans')->insertGetId([
+                                'company_id' => $companyId,
+                                'batch_id' => $batchId,
+                                'identification' => $sc['ident'],
+                                'category' => $sc['cat'],
+                                'breed_id' => !empty($breedIds) ? $breedIds[array_rand($breedIds)] : null,
+                                'sex' => 'H',
+                                'teeth' => rand(2, 6),
+                                'entry_weight' => rand(280, 350) + (rand(0, 99) / 100),
+                                'entry_date' => now()->subDays(rand(100, 300)),
                                 'created_at' => now(),
                                 'updated_at' => now(),
                             ]);
 
-                            // 30% probabilidad de gestación pasada terminada en pérdida
-                            if ($roll > 20 && $roll <= 50 && !empty($lossReasons)) {
-                                DB::table('caravan_gestations')->insert([
-                                    'caravan_id' => $caravanId,
-                                    'start_date' => now()->subMonths(9)->format('Y-m-d'),
-                                    'estimated_due_date' => now()->subMonths(4)->format('Y-m-d'),
-                                    'is_current' => false,
-                                    'success' => false,
-                                    'end_date' => now()->subMonths(5)->format('Y-m-d'),
-                                    'loss_reason_id' => $lossReasons[array_rand($lossReasons)],
-                                    'loss_notes' => 'Pérdida gestacional aleatoria en lote.',
-                                    'gestation_stage' => 'body',
-                                    'gestation_months' => 4.0,
-                                    'notes' => 'Gestación histórica fallida.',
-                                    'created_at' => now(),
-                                    'updated_at' => now(),
-                                ]);
+                            DB::table('female_caravan_details')->insert([
+                                'caravan_id' => $caravanId,
+                                'is_empty' => true,
+                                'arrival_category' => $sc['cat'],
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+
+                            $femaleIdsForServiceOrder[] = $caravanId;
+                        }
+
+                        // Save details to create Service Order at the end of the seeder
+                        $serviceOrderData = [
+                            'company_id' => $companyId,
+                            'batch_id' => $batchId,
+                            'female_ids' => $femaleIdsForServiceOrder
+                        ];
+                    } else {
+                        for ($i = 1; $i <= 5; $i++) {
+                            $sex = rand(0, 1) ? 'M' : 'H';
+                            $category = $categories[array_rand($categories)];
+                            
+                            // Si el sexo es macho, no puede ser vaca/vaquillona. Si es hembra, no puede ser novillo/toro.
+                            if ($sex === 'M') {
+                                $category = in_array($category, ['toro', 'novillo', 'novillito', 'ternero']) ? $category : 'novillo';
+                            } else {
+                                $category = in_array($category, ['vaca', 'vaca_vacia', 'vaquillona', 'ternera']) ? $category : 'vaca';
                             }
 
-                            // 20% probabilidad de gestación pasada exitosa
-                            if ($roll > 50 && $roll <= 70) {
-                                DB::table('caravan_gestations')->insert([
+                            $caravanId = DB::table('caravans')->insertGetId([
+                                'company_id' => $companyId,
+                                'batch_id' => $batchId,
+                                'identification' => 'CAR-' . $batchId . '-' . $i . '-' . rand(100, 999),
+                                'category' => $category,
+                                'breed_id' => !empty($breedIds) ? $breedIds[array_rand($breedIds)] : null,
+                                'sex' => $sex,
+                                'teeth' => rand(0, 8),
+                                'entry_weight' => rand(150, 450) + (rand(0, 99) / 100),
+                                'entry_date' => now()->subDays(rand(1, 365)),
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+
+                            // Lógica reproductiva para hembras
+                            if ($sex === 'H') {
+                                $roll = rand(1, 100);
+                                $isEmpty = true;
+                                $hasActive = false;
+
+                                // Crear detalles reproductivos de la hembra
+                                DB::table('female_caravan_details')->insert([
                                     'caravan_id' => $caravanId,
-                                    'start_date' => now()->subMonths(11)->format('Y-m-d'),
-                                    'estimated_due_date' => now()->subMonths(2)->format('Y-m-d'),
-                                    'is_current' => false,
-                                    'success' => true,
-                                    'end_date' => now()->subMonths(2)->format('Y-m-d'),
-                                    'gestation_stage' => 'head',
-                                    'gestation_months' => 9.0,
-                                    'notes' => 'Parición exitosa anterior.',
+                                    'is_empty' => $isEmpty,
+                                    'arrival_category' => $category,
                                     'created_at' => now(),
                                     'updated_at' => now(),
                                 ]);
+
+                                // 30% probabilidad de gestación pasada terminada en pérdida
+                                if ($roll > 20 && $roll <= 50 && !empty($lossReasons)) {
+                                    DB::table('caravan_gestations')->insert([
+                                        'caravan_id' => $caravanId,
+                                        'start_date' => now()->subMonths(9)->format('Y-m-d'),
+                                        'estimated_due_date' => now()->subMonths(4)->format('Y-m-d'),
+                                        'is_current' => false,
+                                        'success' => false,
+                                        'end_date' => now()->subMonths(5)->format('Y-m-d'),
+                                        'loss_reason_id' => $lossReasons[array_rand($lossReasons)],
+                                        'loss_notes' => 'Pérdida gestacional aleatoria en lote.',
+                                        'gestation_stage' => 'body',
+                                        'gestation_months' => 4.0,
+                                        'notes' => 'Gestación histórica fallida.',
+                                        'created_at' => now(),
+                                        'updated_at' => now(),
+                                    ]);
+                                }
+
+                                // 20% probabilidad de gestación pasada exitosa
+                                if ($roll > 50 && $roll <= 70) {
+                                    DB::table('caravan_gestations')->insert([
+                                        'caravan_id' => $caravanId,
+                                        'start_date' => now()->subMonths(11)->format('Y-m-d'),
+                                        'estimated_due_date' => now()->subMonths(2)->format('Y-m-d'),
+                                        'is_current' => false,
+                                        'success' => true,
+                                        'end_date' => now()->subMonths(2)->format('Y-m-d'),
+                                        'gestation_stage' => 'head',
+                                        'gestation_months' => 9.0,
+                                        'notes' => 'Parición exitosa anterior.',
+                                        'created_at' => now(),
+                                        'updated_at' => now(),
+                                    ]);
+                                }
                             }
                         }
                     }
@@ -394,5 +448,66 @@ class LivestockHierarchySeeder extends Seeder
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        // Seed specific Service Order from PDF Planilla_De_REP-01_SO-20260605-105950-7238_V4.pdf
+        if ($serviceOrderData) {
+            $userId = DB::table('users')->first()?->id;
+
+            // Find or create a bull for the Service Order
+            $bullId = DB::table('caravans')
+                ->where('company_id', $serviceOrderData['company_id'])
+                ->where('category', 'toro')
+                ->value('id');
+
+            if (!$bullId) {
+                $bullId = DB::table('caravans')->insertGetId([
+                    'company_id' => $serviceOrderData['company_id'],
+                    'batch_id' => $serviceOrderData['batch_id'],
+                    'identification' => 'TORO-REP-01',
+                    'category' => 'toro',
+                    'breed_id' => !empty($breedIds) ? $breedIds[0] : null,
+                    'sex' => 'M',
+                    'teeth' => 4,
+                    'entry_weight' => 550.0,
+                    'entry_date' => now()->subMonths(6),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            $serviceOrderId = DB::table('service_orders')->insertGetId([
+                'company_id' => $serviceOrderData['company_id'],
+                'batch_id' => $serviceOrderData['batch_id'],
+                'code' => 'SO-20260605-105950-7238',
+                'status' => 'APPROVED',
+                'service_type' => 'single',
+                'is_controlled_service' => false,
+                'requested_by_user_id' => $userId,
+                'planned_start_date' => now()->subDays(30)->format('Y-m-d'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            // Associate the females to the Service Order
+            foreach ($serviceOrderData['female_ids'] as $femaleId) {
+                DB::table('service_order_females')->insert([
+                    'company_id' => $serviceOrderData['company_id'],
+                    'service_order_id' => $serviceOrderId,
+                    'female_caravan_id' => $femaleId,
+                    'assigned_male_caravan_id' => $bullId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            // Associate the male/sire to the Service Order
+            DB::table('service_order_males')->insert([
+                'company_id' => $serviceOrderData['company_id'],
+                'service_order_id' => $serviceOrderId,
+                'male_caravan_id' => $bullId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
     }
 }

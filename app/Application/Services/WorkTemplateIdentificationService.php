@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\Log;
 final class WorkTemplateIdentificationService
 {
     public function __construct(
-        private readonly IWorkTemplateRepository $repository
+        private readonly IWorkTemplateRepository $repository,
+        private readonly OCRServiceOrderResolver $serviceOrderResolver
     ) {
     }
 
@@ -48,8 +49,8 @@ final class WorkTemplateIdentificationService
             }
         }
 
-        Log::info('Azure OCR Response Model', ['templateCode' => $templateCode]);
-        Log::info('identifiedTemplate', ['identifiedTemplate' => $identifiedTemplate]);
+        // Log::info('Azure OCR Response Model', ['templateCode' => $templateCode]);
+        // Log::info('identifiedTemplate', ['identifiedTemplate' => $identifiedTemplate]);
 
         // 3. Resolve Context Metadata (cuit, renspa, lote, establecimiento, fecha, service_order)
         $metadata = $this->enrichMetadataFromTables($metadata, $tables);
@@ -83,7 +84,18 @@ final class WorkTemplateIdentificationService
         }
 
         // 4. Resolve Service Order from OCR metadata, tables, or filename fallback
-        $serviceOrder = $this->resolveServiceOrder($metadata, $tables, $file, $companyId);
+        $serviceOrder = $this->serviceOrderResolver->resolve([
+            'metadata' => $metadata,
+            'tables' => $tables,
+        ], $file, $companyId);
+
+        $serviceOrderCode = $serviceOrder?->code;
+        if (!$serviceOrderCode) {
+            $serviceOrderCode = $this->serviceOrderResolver->resolveCandidateCode([
+                'metadata' => $metadata,
+                'tables' => $tables,
+            ], $file);
+        }
 
         $contextDto = [
             'cuit'                => $cuit,
@@ -94,7 +106,7 @@ final class WorkTemplateIdentificationService
             'provider_id'         => $provider?->id,
             'farm_id'             => $farm?->id,
             'batch_id'            => $batch?->id,
-            'service_order_code'  => $serviceOrder?->code,
+            'service_order_code'  => $serviceOrderCode,
             'service_order_id'    => $serviceOrder?->id,
         ];
 
@@ -201,66 +213,6 @@ final class WorkTemplateIdentificationService
         return $metadata;
     }
 
-    /**
-     * Resolve the Service Order from OCR metadata, tables, or filename fallback.
-     *
-     * @param array $metadata
-     * @param array $tables
-     * @param UploadedFile|null $file
-     * @param int $companyId
-     * @return ServiceOrder|null
-     */
-    private function resolveServiceOrder(array $metadata, array $tables, ?UploadedFile $file, int $companyId): ?ServiceOrder
-    {
-        $serviceOrderCode = null;
 
-        // 1. Search in resolved metadata KVPs
-        foreach ($metadata as $key => $value) {
-            $cleanKey = str_replace(['_', ' '], '', strtolower($key));
-            if (in_array($cleanKey, ['serviceorder', 'serviceordercode', 'ordendeservicio'])) {
-                $serviceOrderCode = trim((string)$value);
-                break;
-            }
-        }
-
-        // 2. Search in table column headers (first and second tables)
-        if (!$serviceOrderCode) {
-            foreach ($tables as $table) {
-                $soColumn = null;
-                foreach ($table['headers'] ?? [] as $h) {
-                    $cleanH = str_replace(['_', ' '], '', strtolower($h));
-                    if (in_array($cleanH, ['serviceorder', 'serviceordercode', 'ordendeservicio'])) {
-                        $soColumn = $h;
-                        break;
-                    }
-                }
-
-                if ($soColumn && !empty($table['rows'])) {
-                    $candidate = trim((string)($table['rows'][0][$soColumn]['value'] ?? ''));
-                    if ($candidate !== '') {
-                        $serviceOrderCode = $candidate;
-                        break;
-                    }
-                }
-            }
-        }
-
-        // 3. Fallback: Search in the filename (pattern SO-XXXXX)
-        if (!$serviceOrderCode && $file) {
-            $filename = $file->getClientOriginalName();
-            if (preg_match('/(SO-[A-Za-z0-9-]+)/', $filename, $matches)) {
-                $serviceOrderCode = $matches[1];
-            }
-        }
-
-        if ($serviceOrderCode) {
-            Log::info("WorkTemplateIdentificationService: Resolved Service Order Code from OCR: {$serviceOrderCode}");
-            return ServiceOrder::where('code', $serviceOrderCode)
-                ->where('company_id', $companyId)
-                ->first();
-        }
-
-        return null;
-    }
 }
 
