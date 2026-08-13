@@ -41,6 +41,7 @@ Route::middleware([
     Route::post('/caravans/bulk', [CaravanController::class, 'bulkStore']);
     Route::get('/caravans/movements', [CaravanController::class, 'allMovements']);
     Route::get('/caravans/{id}/movements', [CaravanController::class, 'movements']);
+    Route::get('/caravans/{id}/pedigree', [CaravanController::class, 'pedigree']);
     Route::get('/caravans/{id}/weights', [CaravanController::class, 'listWeights']);
     Route::post('/caravans/{id}/weights', [CaravanController::class, 'recordWeight']);
     Route::post('/caravans/bulk-weights', [CaravanController::class, 'bulkRecordWeights']);
@@ -50,7 +51,10 @@ Route::middleware([
     Route::post('/caravans/{id}/gestation-diagnosis', [CaravanController::class, 'registerGestationDiagnosis']);
     Route::patch('/caravans/{id}/wean', [CaravanController::class, 'wean']);
     Route::post('/caravans/bulk-wean', [CaravanController::class, 'bulkWean']);
+    Route::post('/caravans/bulk-transfer', [CaravanController::class, 'bulkTransfer']);
     Route::get('/caravans/births-history', [BirthController::class, 'index']);
+    Route::get('/caravans/pending-sires', [BirthController::class, 'pendingSires']);
+    Route::patch('/caravans/{calfId}/assign-sire', [BirthController::class, 'assignSire']);
 
     Route::get('/field-mappings/{model}', [FieldMappingController::class, 'index']);
     Route::post('/field-mappings/learn', [FieldMappingController::class, 'learn']);
@@ -58,10 +62,12 @@ Route::middleware([
     // Jerarquía de Lotes
     Route::apiResource('providers', ProviderController::class)->only(['index', 'store', 'show']);
     Route::apiResource('farms', FarmController::class)->only(['index', 'store', 'show']);
+    Route::get('/batches/reserve', [BatchController::class, 'reserve']);
     Route::apiResource('batches', BatchController::class)->only(['index', 'store', 'show']);
     Route::patch('/batches/{id}/activity', [BatchController::class, 'changeActivity']);
     Route::get('/batches/{id}/weights', [BatchController::class, 'getWeightHistory']);
     Route::get('/batches/{id}/gestating-caravans', [CaravanController::class, 'gestatingByBatch']);
+
 
     Route::get('/breeds', [BreedController::class, 'index']);
     Route::get('/activities', [ActivityController::class, 'index']);

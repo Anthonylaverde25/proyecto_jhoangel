@@ -32,4 +32,7 @@ interface IBatchTypeRepository
      * @return BatchTypeEntity|null
      */
     public function findByCodeAndCompany(string $code, int $companyId): ?BatchTypeEntity;
+
+    public function findByCode(string $code): ?BatchTypeEntity;
 }
+

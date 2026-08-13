@@ -22,7 +22,8 @@ final class BatchEntity
         private ?int $caravansCount = null,
         private ?int $batchTypeId = null,
         private ?string $batchTypeName = null,
-        private ?string $batchTypeCode = null
+        private ?string $batchTypeCode = null,
+        private bool $isSystem = false
     ) {
     }
 
@@ -152,4 +153,10 @@ final class BatchEntity
     {
         $this->batchTypeId = $batchTypeId;
     }
+
+    public function isSystem(): bool
+    {
+        return $this->isSystem;
+    }
 }
+

@@ -93,4 +93,17 @@ class EloquentBatchRepository implements IBatchRepository
             ->map(fn (\App\Models\BatchWeight $model) => \App\Application\Mappers\BatchWeightMapper::toEntity($model))
             ->toArray();
     }
+
+    public function findSystemBatchByType(string $typeCode): ?BatchEntity
+    {
+        $model = Batch::with(['farm.provider', 'batchType'])
+            ->where('is_system', true)
+            ->whereHas('batchType', function ($q) use ($typeCode) {
+                $q->where('code', $typeCode);
+            })
+            ->first();
+
+        return $model ? BatchMapper::toEntity($model) : null;
+    }
 }
+

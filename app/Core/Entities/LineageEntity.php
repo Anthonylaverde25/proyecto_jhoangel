@@ -13,11 +13,14 @@ final class LineageEntity
         private readonly int $caravanId,
         private readonly int $motherId,
         private readonly ?string $motherIdentification,
-        private readonly ?int $fatherId,
-        private readonly ?string $fatherIdentification,
+        private ?int $fatherId,
+        private ?string $fatherIdentification,
         private readonly ?int $gestationId,
         private readonly string $birthDate,
-        private bool $isNursing = true
+        private bool $isNursing = true,
+        private readonly ?\DateTimeInterface $sireAssignedAt = null,
+        private readonly ?string $sireIdentificationMethod = null,
+        private readonly ?string $sireNotes = null
     ) {
         if ($this->caravanId === $this->motherId) {
             throw new InvalidArgumentException("An animal cannot be its own mother.");
@@ -70,6 +73,30 @@ final class LineageEntity
     public function isNursing(): bool
     {
         return $this->isNursing;
+    }
+
+    public function getSireAssignedAt(): ?\DateTimeInterface
+    {
+        return $this->sireAssignedAt;
+    }
+
+    public function getSireIdentificationMethod(): ?string
+    {
+        return $this->sireIdentificationMethod;
+    }
+
+    public function getSireNotes(): ?string
+    {
+        return $this->sireNotes;
+    }
+
+    /**
+     * Returns true if this lineage record has no assigned sire (father_id is null).
+     * Used to identify pending sire assignments after deferred birth registration.
+     */
+    public function hasPendingSire(): bool
+    {
+        return $this->fatherId === null;
     }
 
     public function wean(): void

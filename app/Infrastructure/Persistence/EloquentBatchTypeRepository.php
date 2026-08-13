@@ -33,4 +33,11 @@ class EloquentBatchTypeRepository implements IBatchTypeRepository
             ->first();
         return $model ? BatchTypeMapper::toEntity($model) : null;
     }
+
+    public function findByCode(string $code): ?BatchTypeEntity
+    {
+        $model = BatchType::where('code', $code)->first();
+        return $model ? BatchTypeMapper::toEntity($model) : null;
+    }
 }
+

@@ -26,18 +26,24 @@ class CaravanLineage extends Model
         'gestation_id',
         'birth_date',
         'is_nursing',
+        'sire_assigned_at',
+        'sire_identification_method',
+        'sire_notes',
     ];
 
     /**
      * @var array<string, string>
      */
     protected $casts = [
-        'caravan_id' => 'integer',
-        'mother_id' => 'integer',
-        'father_id' => 'integer',
-        'gestation_id' => 'integer',
-        'birth_date' => 'date:Y-m-d',
-        'is_nursing' => 'boolean',
+        'caravan_id'                 => 'integer',
+        'mother_id'                  => 'integer',
+        'father_id'                  => 'integer',
+        'gestation_id'               => 'integer',
+        'birth_date'                 => 'date:Y-m-d',
+        'is_nursing'                 => 'boolean',
+        'sire_assigned_at'           => 'datetime',
+        'sire_identification_method' => 'string',
+        'sire_notes'                 => 'string',
     ];
 
     /**

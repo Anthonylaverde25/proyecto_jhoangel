@@ -22,10 +22,13 @@ class LineageMapper
             $model->father_id ? (int) $model->father_id : null,
             $model->relationLoaded('father') && $model->father ? (string) $model->father->identification : null,
             $model->gestation_id ? (int) $model->gestation_id : null,
-            $model->birth_date instanceof \DateTimeInterface 
-                ? $model->birth_date->format('Y-m-d') 
+            $model->birth_date instanceof \DateTimeInterface
+                ? $model->birth_date->format('Y-m-d')
                 : (string) $model->birth_date,
-            (bool) $model->is_nursing
+            (bool) $model->is_nursing,
+            $model->sire_assigned_at instanceof \DateTimeInterface ? $model->sire_assigned_at : null,
+            $model->sire_identification_method ? (string) $model->sire_identification_method : null,
+            $model->sire_notes ? (string) $model->sire_notes : null
         );
     }
 
@@ -38,12 +41,15 @@ class LineageMapper
             $model = new CaravanLineage();
         }
 
-        $model->caravan_id = $entity->getCaravanId();
-        $model->mother_id = $entity->getMotherId();
-        $model->father_id = $entity->getFatherId();
-        $model->gestation_id = $entity->getGestationId();
-        $model->birth_date = $entity->getBirthDate();
-        $model->is_nursing = $entity->isNursing();
+        $model->caravan_id                 = $entity->getCaravanId();
+        $model->mother_id                  = $entity->getMotherId();
+        $model->father_id                  = $entity->getFatherId();
+        $model->gestation_id               = $entity->getGestationId();
+        $model->birth_date                 = $entity->getBirthDate();
+        $model->is_nursing                 = $entity->isNursing();
+        $model->sire_assigned_at           = $entity->getSireAssignedAt();
+        $model->sire_identification_method = $entity->getSireIdentificationMethod();
+        $model->sire_notes                 = $entity->getSireNotes();
 
         return $model;
     }

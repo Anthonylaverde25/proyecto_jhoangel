@@ -21,6 +21,7 @@ class Batch extends Model
         'current_weight',
         'observaciones',
         'is_active',
+        'is_system',
         'batch_type_id'
     ];
 
@@ -29,6 +30,7 @@ class Batch extends Model
         'activity_id' => 'integer',
         'current_weight' => 'float',
         'is_active' => 'boolean',
+        'is_system' => 'boolean',
     ];
 
     public function activity(): BelongsTo
@@ -48,7 +50,7 @@ class Batch extends Model
 
     public function batchType(): BelongsTo
     {
-      return $this->belongsTo(BatchType::class);
+        return $this->belongsTo(BatchType::class);
     }
 
     public function scopeOperational($query)
@@ -60,14 +62,26 @@ class Batch extends Model
 
     public function scopeQuarantine($query)
     {
-        return $query->whereHas('type', function ($q) {
+        return $query->whereHas('batchType', function ($q) {
             $q->where('code', 'QUARANTINE');
         });
     }
 
-   public function isInQuarantine():bool
-   {
-    return $this->batchType?->code === 'QUARANTINE' ?? false;
-   }
+    public function scopeReserve($query)
+    {
+        return $query->whereHas('batchType', function ($q) {
+            $q->where('code', 'RESERVE');
+        });
+    }
+
+    public function isInQuarantine(): bool
+    {
+        return $this->batchType?->code === 'QUARANTINE' ?? false;
+    }
+
+    public function isSystem(): bool
+    {
+        return (bool) $this->is_system;
+    }
 
 }

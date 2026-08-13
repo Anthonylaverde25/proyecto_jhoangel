@@ -22,6 +22,12 @@ use App\Http\Requests\Caravans\BulkStoreCaravanRequest;
 use App\Http\Requests\Caravans\BulkRecordWeightRequest;
 use App\Http\Requests\Caravans\WeanCaravanRequest;
 use App\Http\Requests\Caravans\BulkWeanRequest;
+use App\Application\UseCases\Caravans\GetCaravanPedigreeUseCase;
+use App\Http\Resources\CaravanPedigreeResource;
+use App\Application\DTOs\BulkTransferCaravansDTO;
+use App\Http\Requests\Caravans\BulkTransferCaravansRequest;
+use App\Application\UseCases\Caravans\BulkTransferCaravansUseCase;
+
 
 class CaravanController extends Controller
 {
@@ -32,8 +38,23 @@ class CaravanController extends Controller
         private readonly \App\Application\UseCases\Caravans\WeanCaravanUseCase $weanCaravan,
         private readonly \App\Application\UseCases\Caravans\BulkWeanCaravansUseCase $bulkWeanCaravans,
         private readonly \App\Application\UseCases\Caravans\RegisterGestationDiagnosisUseCase $registerGestationDiagnosis,
-        private readonly \App\Application\UseCases\Caravans\BulkRegisterGestationDiagnosisUseCase $bulkRegisterGestationDiagnosis
+        private readonly \App\Application\UseCases\Caravans\BulkRegisterGestationDiagnosisUseCase $bulkRegisterGestationDiagnosis,
+        private readonly GetCaravanPedigreeUseCase $getCaravanPedigree,
+        private readonly BulkTransferCaravansUseCase $bulkTransferCaravans
     ) {
+    }
+
+
+    /**
+     * Devuelve el análisis de pedigree 3G y consanguinidad de una caravana específica.
+     */
+    public function pedigree(int $id): JsonResponse
+    {
+        $data = ($this->getCaravanPedigree)($id);
+
+        return response()->json(
+            new CaravanPedigreeResource($data)
+        );
     }
 
     /**
@@ -316,4 +337,21 @@ class CaravanController extends Controller
             CaravanResource::collection($entities)
         );
     }
+
+    /**
+     * Transfiere múltiples caravanas a un lote de destino o al Lote Reserva del Sistema.
+     */
+    public function bulkTransfer(BulkTransferCaravansRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $dto = BulkTransferCaravansDTO::fromArray($validated);
+
+        try {
+            $result = ($this->bulkTransferCaravans)($dto);
+            return response()->json($result, 200);
+        } catch (\App\Core\Exceptions\DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
 }
+

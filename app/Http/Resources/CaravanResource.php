@@ -62,6 +62,9 @@ class CaravanResource extends JsonResource
                 'father_identification' => $this->resource->getLineage()->getFatherIdentification(),
                 'birth_date' => $this->resource->getLineage()->getBirthDate(),
                 'is_nursing' => $this->resource->getLineage()->isNursing(),
+                'sire_assigned_at' => $this->resource->getLineage()->getSireAssignedAt()?->format('Y-m-d H:i:s'),
+                'sire_identification_method' => $this->resource->getLineage()->getSireIdentificationMethod(),
+                'sire_notes' => $this->resource->getLineage()->getSireNotes(),
             ] : null,
         ];
     }

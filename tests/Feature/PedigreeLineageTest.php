@@ -563,6 +563,58 @@ class PedigreeLineageTest extends TestCase
         $this->assertNotNull($movement);
         $this->assertEquals($this->company->renspa, $movement->renspa);
     }
+
+    public function test_can_get_single_caravan_pedigree_and_inbreeding_breakdown(): void
+    {
+        // 1. Create Sire and Dam with lineage
+        $sire = Caravan::create([
+            'company_id' => $this->company->id,
+            'identification' => 'SIRE-TEST-01',
+            'sex' => AnimalSex::MALE,
+            'category' => AnimalCategory::TORO,
+            'teeth' => 8,
+        ]);
+
+        $dam = Caravan::create([
+            'company_id' => $this->company->id,
+            'identification' => 'DAM-TEST-01',
+            'sex' => AnimalSex::FEMALE,
+            'category' => AnimalCategory::VACA,
+            'teeth' => 6,
+        ]);
+
+        $calf = Caravan::create([
+            'company_id' => $this->company->id,
+            'identification' => 'CALF-TEST-01',
+            'sex' => AnimalSex::MALE,
+            'category' => AnimalCategory::TERNERO,
+            'teeth' => 0,
+        ]);
+
+        CaravanLineage::create([
+            'caravan_id' => $calf->id,
+            'father_id' => $sire->id,
+            'mother_id' => $dam->id,
+            'birth_date' => '2026-06-01',
+            'is_nursing' => false,
+        ]);
+
+        // 2. Call GET /caravans/{id}/pedigree
+        $response = $this->getJson("http://test.localhost/api/caravans/{$calf->id}/pedigree");
+
+        $response->assertStatus(200);
+        $response->assertJsonStructure([
+            'caravan' => ['id', 'identification', 'category', 'sex'],
+            'inbreeding' => ['fx', 'risk', 'risk_label', 'is_exogamous', 'common_ancestors', 'zootechnical_verdict'],
+            'tree' => ['father', 'mother', 'pgs', 'pgd', 'mgs', 'mgd', 'pps', 'ppd', 'pms', 'pmd', 'mps', 'mpd', 'mms', 'mmd'],
+            'offspring',
+        ]);
+
+        $this->assertEquals('CALF-TEST-01', $response->json('caravan.identification'));
+        $this->assertEquals('SIRE-TEST-01', $response->json('tree.father.identification'));
+        $this->assertEquals('DAM-TEST-01', $response->json('tree.mother.identification'));
+    }
 }
+
 
 

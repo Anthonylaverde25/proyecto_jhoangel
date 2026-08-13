@@ -12,6 +12,8 @@ final class BatchUseCases
         public readonly FindBatchUseCase $find,
         public readonly ChangeBatchActivityUseCase $changeActivity,
         public readonly GetBatchWeightHistoryUseCase $getWeights,
+        public readonly GetOrCreateReserveBatchUseCase $getOrCreateReserve,
     ) {
     }
 }
+

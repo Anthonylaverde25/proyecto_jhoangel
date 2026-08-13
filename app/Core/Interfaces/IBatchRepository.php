@@ -29,4 +29,7 @@ interface IBatchRepository
     public function addWeight(int $batchId, float $weight, string $type, \DateTimeInterface $date, ?int $activityId = null): void;
 
     public function getWeights(int $batchId): array;
+
+    public function findSystemBatchByType(string $typeCode): ?BatchEntity;
 }
+

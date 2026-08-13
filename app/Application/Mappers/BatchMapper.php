@@ -27,7 +27,8 @@ class BatchMapper
             null, // caravansCount
             $model->batch_type_id ? (int) $model->batch_type_id : null,
             $model->batchType?->name,
-            $model->batchType?->code
+            $model->batchType?->code,
+            (bool) $model->is_system
         );
 
         if ($model->relationLoaded('farm') && $model->farm) {
@@ -54,8 +55,10 @@ class BatchMapper
         $model->current_weight = $entity->getCurrentWeight();
         $model->observaciones = $entity->getObservaciones();
         $model->is_active = $entity->isActive();
+        $model->is_system = $entity->isSystem();
         $model->batch_type_id = $entity->getBatchTypeId();
 
         return $model;
     }
+
 }

@@ -105,4 +105,15 @@ class BatchController extends Controller
 
         return response()->json(new BatchResource($entity));
     }
+
+    /**
+     * Obtiene o aprovisiona el Lote Reserva del Sistema (Lote Reserva | Animales Apartados).
+     */
+    public function reserve(): JsonResponse
+    {
+        $entity = ($this->batch->getOrCreateReserve)();
+
+        return response()->json(new BatchResource($entity));
+    }
 }
+

@@ -17,7 +17,7 @@ class BatchTypeSeeder extends Seeder
         foreach ($companies as $c) {
 
             // Operational
-            BatchType::firstOrCreate(
+            BatchType::withoutGlobalScopes()->firstOrCreate(
                 [
                     'company_id' => $c->id,
                     'code' => 'OPERATIONAL',
@@ -32,7 +32,7 @@ class BatchTypeSeeder extends Seeder
             );
 
             // Quarantine
-            BatchType::firstOrCreate(
+            BatchType::withoutGlobalScopes()->firstOrCreate(
                 [
                     'company_id' => $c->id,
                     'code' => 'QUARANTINE',
@@ -47,7 +47,7 @@ class BatchTypeSeeder extends Seeder
             );
 
             // Domestic Consumption
-            BatchType::firstOrCreate(
+            BatchType::withoutGlobalScopes()->firstOrCreate(
                 [
                     'company_id' => $c->id,
                     'code' => 'INTERNAL_CONSUMPTION',
@@ -62,7 +62,7 @@ class BatchTypeSeeder extends Seeder
             );
 
             // Internal Death
-            BatchType::firstOrCreate(
+            BatchType::withoutGlobalScopes()->firstOrCreate(
                 [
                     'company_id' => $c->id,
                     'code' => 'INTERNAL_DEATH',
@@ -75,6 +75,22 @@ class BatchTypeSeeder extends Seeder
                     'is_active' => true,
                 ]
             );
+
+            // Reserve / Isolated Animals (System Batch Type)
+            BatchType::withoutGlobalScopes()->firstOrCreate(
+                [
+                    'company_id' => $c->id,
+                    'code' => 'RESERVE',
+                ],
+                [
+                    'name' => 'Reserva / Apartados',
+                    'description' => 'Lote interno del sistema para animales apartados y reserva genética',
+                    'icon' => 'heroicons-outline:archive-box',
+                    'color' => '#6366f1',
+                    'is_active' => true,
+                ]
+            );
+
         }
     }
 }

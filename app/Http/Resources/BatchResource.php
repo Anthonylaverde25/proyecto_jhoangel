@@ -30,10 +30,12 @@ class BatchResource extends JsonResource
             'activity_name' => $this->resource->getActivityName(),
             'current_weight'=> $this->resource->getCurrentWeight(),
             'is_active'     => $this->resource->isActive(),
+            'is_system'    => $this->resource->isSystem(),
             'batch_type_id'   => $this->resource->getBatchTypeId(),
             'batch_type_name' => $this->resource->getBatchTypeName(),
             'batch_type_code' => $this->resource->getBatchTypeCode(),
             'created_at'    => $this->resource->getCreatedAt()?->format('Y-m-d H:i:s'),
         ];
+
     }
 }
