@@ -32,7 +32,7 @@ final class CompleteServiceOrderUseCase
             foreach ($entity->getFemaleCaravanIds() as $femaleId) {
                 $caravan = $this->caravanRepository->findById($femaleId);
                 if ($caravan !== null && !$caravan->hasActiveGestation()) {
-                    $this->caravanRepository->updateBatchAndCategory($femaleId, $targetBatchId, $caravan->getCategory()?->value);
+                    $this->caravanRepository->updateBatchAndCategory($femaleId, $targetBatchId, $caravan->getCategoryId(), $caravan->getSubcategoryId());
                 }
             }
         }

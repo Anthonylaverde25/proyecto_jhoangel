@@ -8,6 +8,7 @@ use App\Application\DTOs\RegisterCaravanDTO;
 use App\Application\DTOs\UpsertCaravanResultDTO;
 use App\Core\Entities\CaravanEntity;
 use App\Core\Enums\AnimalCategory;
+use App\Core\Interfaces\IAnimalCategoryRepository;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Interfaces\ICompanyContext;
 use App\Core\Services\CaravanTraceabilityService;
@@ -23,7 +24,8 @@ final class UpsertCaravanUseCase
         private readonly ICompanyContext $companyContext,
         private readonly CaravanTraceabilityService $traceabilityService,
         private readonly \App\Core\Services\BatchWeightService $batchWeightService,
-        private readonly RecordCaravanWeightUseCase $recordCaravanWeightUseCase
+        private readonly RecordCaravanWeightUseCase $recordCaravanWeightUseCase,
+        private readonly IAnimalCategoryRepository $animalCategoryRepository
     ) {
     }
 
@@ -34,7 +36,7 @@ final class UpsertCaravanUseCase
         
         // 1. Buscar en la compañía actual
         $existingEntity = $this->caravanRepository->findByIdentification($identification);
-        $category = $dto->category !== null ? AnimalCategory::from($dto->category) : null;
+        $category = $dto->category !== null ? AnimalCategory::tryFrom($dto->category) : null;
 
         if ($existingEntity !== null) {
             return $this->handleUpdate($existingEntity, $dto, $category);
@@ -62,21 +64,30 @@ final class UpsertCaravanUseCase
         $preservedEntryWeight = $entity->getEntryWeight() ?? $newWeight;
 
         $entity->updateDetails(
-            $category,
             (int) $dto->teeth,
             $preservedEntryWeight,
             null,
-            $dto->breed,
             $dto->sex,
             null,
             $newBatchId,
-            $dto->breedId
+            $dto->breedId,
+            $dto->colorId,
+            $dto->categoryId,
+            $dto->subcategoryId
         );
 
-        if ($entity->getSex() === AnimalSex::FEMALE && $category !== null) {
+        [$catId, $subId] = $this->resolveCategoryIds($dto, $category);
+        if ($catId !== null) {
+            $entity->setCategoryId($catId);
+        }
+        if ($subId !== null) {
+            $entity->setSubcategoryId($subId);
+        }
+
+        if ($entity->getSex() === AnimalSex::FEMALE) {
             $currentDetails = $entity->getReproductiveDetails();
             $isEmpty = $dto->isEmpty !== null ? $dto->isEmpty : ($currentDetails?->isEmpty() ?? true);
-            $arrivalCategory = $currentDetails?->getArrivalCategory() ?? $category;
+            $arrivalCategory = $currentDetails?->getArrivalCategory() ?? ($category ?? AnimalCategory::VACA);
             
             $entity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
 
@@ -135,12 +146,13 @@ final class UpsertCaravanUseCase
         $newEntity = new CaravanEntity(
             $entity->getId(),
             $entity->getIdentification(),
-            $category,
             (int) $dto->teeth,
             $newWeight,
             null,
-            $dto->breed,
             $dto->breedId,
+            null,
+            $dto->colorId,
+            null,
             $dto->sex,
             null,
             null,
@@ -152,10 +164,18 @@ final class UpsertCaravanUseCase
             $entity->getGestations()
         );
 
-        if ($newEntity->getSex() === AnimalSex::FEMALE && $category !== null) {
+        [$catId, $subId] = $this->resolveCategoryIds($dto, $category);
+        if ($catId !== null) {
+            $newEntity->setCategoryId($catId);
+        }
+        if ($subId !== null) {
+            $newEntity->setSubcategoryId($subId);
+        }
+
+        if ($newEntity->getSex() === AnimalSex::FEMALE) {
             $currentDetails = $entity->getReproductiveDetails();
             $isEmpty = $dto->isEmpty !== null ? $dto->isEmpty : ($currentDetails?->isEmpty() ?? true);
-            $arrivalCategory = $currentDetails?->getArrivalCategory() ?? $category;
+            $arrivalCategory = $currentDetails?->getArrivalCategory() ?? ($category ?? AnimalCategory::VACA);
             
             $newEntity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
 
@@ -221,12 +241,13 @@ final class UpsertCaravanUseCase
         $newEntity = new CaravanEntity(
             null,
             $identification,
-            $category,
             (int) $dto->teeth,
             $newWeight,
             null,
-            $dto->breed,
             $dto->breedId,
+            null,
+            $dto->colorId,
+            null,
             $dto->sex,
             null,
             null,
@@ -234,9 +255,18 @@ final class UpsertCaravanUseCase
             $activeCompanyId
         );
 
-        if ($newEntity->getSex() === AnimalSex::FEMALE && $category !== null) {
+        [$catId, $subId] = $this->resolveCategoryIds($dto, $category);
+        if ($catId !== null) {
+            $newEntity->setCategoryId($catId);
+        }
+        if ($subId !== null) {
+            $newEntity->setSubcategoryId($subId);
+        }
+
+        if ($newEntity->getSex() === AnimalSex::FEMALE) {
             $isEmpty = $dto->isEmpty !== null ? $dto->isEmpty : true;
-            $newEntity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $category));
+            $arrivalCategory = $category ?? AnimalCategory::VACA;
+            $newEntity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
 
             // Automatización Gestacional: Si está preñada y no tiene gestación activa, crear una
             if (!$isEmpty && !$newEntity->hasActiveGestation()) {
@@ -269,6 +299,43 @@ final class UpsertCaravanUseCase
         $this->traceabilityService->recordInitialArrival($savedEntity, $activeCompanyId, $dto->farmId);
 
         return new UpsertCaravanResultDTO('created', $savedEntity->getId());
+    }
+
+    /**
+     * Resolve category and subcategory IDs from DTO or legacy string/enum.
+     *
+     * @return array{0: ?int, 1: ?int}
+     */
+    private function resolveCategoryIds(RegisterCaravanDTO $dto, ?AnimalCategory $category): array
+    {
+        $catId = $dto->categoryId;
+        $subId = $dto->subcategoryId;
+
+        if ($catId !== null) {
+            return [$catId, $subId];
+        }
+
+        $catCode = null;
+        if ($category !== null) {
+            $catCode = strtoupper($category->value);
+        } elseif (!empty($dto->category)) {
+            $catCode = strtoupper($dto->category);
+        }
+
+        if ($catCode !== null) {
+            $codeMap = [
+                'TERNERA' => 'TERNERO',
+                'VACA_VACIA' => 'VACA',
+                'VACA VACIA' => 'VACA',
+            ];
+            $searchCode = $codeMap[$catCode] ?? $catCode;
+            $catEntity = $this->animalCategoryRepository->findByCode($searchCode);
+            if ($catEntity) {
+                $catId = $catEntity->getId();
+            }
+        }
+
+        return [$catId, $subId];
     }
 
     /**

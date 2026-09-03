@@ -31,6 +31,8 @@ class BulkStoreCaravanRequest extends FormRequest
             'caravans' => 'required|array|min:1',
             'caravans.*.identification' => 'required|string',
             'caravans.*.category'       => 'nullable|string',
+            'caravans.*.category_id'    => 'nullable|integer|exists:animal_categories,id',
+            'caravans.*.subcategory_id' => 'nullable|integer|exists:animal_subcategories,id',
             'caravans.*.teeth'          => 'required|integer|min:0|max:99',
             'caravans.*.entry_weight'   => 'nullable|numeric',
             'caravans.*.breed'          => 'nullable|string',

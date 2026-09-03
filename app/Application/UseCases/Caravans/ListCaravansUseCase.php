@@ -15,10 +15,12 @@ final class ListCaravansUseCase
     }
 
     /**
+     * @param string|null $scope 'own' | 'external' | 'all'
      * @return CaravanEntity[]
      */
-    public function __invoke(): array
+    public function __invoke(?string $scope = 'own'): array
     {
-        return $this->repository->findAll();
+        return $this->repository->findAll($scope);
     }
 }
+

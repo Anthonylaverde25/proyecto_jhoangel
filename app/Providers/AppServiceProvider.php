@@ -14,7 +14,6 @@ use App\Core\Interfaces\ICompanyContext;
 use App\Core\Interfaces\ICompanyRepository;
 use App\Core\Interfaces\IBreedRepository;
 use App\Core\Interfaces\IBatchTypeRepository;
-use App\Core\Interfaces\IOCRProvider;
 use App\Core\Interfaces\IProviderRepository;
 use App\Core\Interfaces\IFarmRepository;
 use App\Core\Interfaces\IBatchRepository;
@@ -58,14 +57,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(IWorkTemplateRepository::class, EloquentWorkTemplateRepository::class);
         $this->app->bind(IBatchTypeRepository::class, \App\Infrastructure\Persistence\EloquentBatchTypeRepository::class);
         $this->app->bind(IServiceOrderRepository::class, EloquentServiceOrderRepository::class);
-        $this->app->bind(IOCRProvider::class, function ($app) {
-            $driver = config('services.ocr.driver');
-
-            return match ($driver) {
-                // 'google' => $app->make(\App\Infrastructure\OCR\GoogleOCRProvider::class),
-                default  => $app->make(\App\Infrastructure\OCR\AzureOCRProvider::class),
-            };
-        });
+        $this->app->bind(\App\Core\Interfaces\IAnimalCategoryRepository::class, \App\Infrastructure\Persistence\EloquentAnimalCategoryRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IPathogenRepository::class, \App\Infrastructure\Persistence\EloquentPathogenRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IVeterinaryDiagnosisRepository::class, \App\Infrastructure\Persistence\EloquentVeterinaryDiagnosisRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IBullHealthEvaluationRepository::class, \App\Infrastructure\Persistence\EloquentBullHealthEvaluationRepository::class);
     }
 
     /**

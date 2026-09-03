@@ -9,12 +9,16 @@ use App\Core\Entities\ServiceOrderEntity;
 use App\Core\Enums\AnimalSex;
 use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Exceptions\ServiceOrderDomainException;
+use App\Core\Interfaces\IBatchRepository;
+use App\Core\Interfaces\IBullHealthEvaluationRepository;
 use App\Core\Interfaces\IServiceOrderRepository;
 
 final class CreateServiceOrderUseCase
 {
     public function __construct(
-        private readonly IServiceOrderRepository $repository
+        private readonly IServiceOrderRepository $repository,
+        private readonly IBatchRepository $batchRepository,
+        private readonly IBullHealthEvaluationRepository $bullHealthRepository
     ) {
     }
 
@@ -33,6 +37,23 @@ final class CreateServiceOrderUseCase
             throw ServiceOrderDomainException::domainError("Cannot create a service order without females");
         }
 
+        // 0. Validate Target Batch Activity (Must be 'CRIA') and Ownership (Must be internal/own batch)
+        $targetBatch = $this->batchRepository->findById($dto->batchId);
+        if ($targetBatch === null) {
+            throw ServiceOrderDomainException::domainError("Target batch with ID {$dto->batchId} not found");
+        }
+
+        if ($targetBatch->getFarmId() !== null) {
+            throw ServiceOrderDomainException::domainError("The selected target batch must be an internal (own) batch.");
+        }
+
+        $activityCode = strtoupper((string) ($targetBatch->getActivityCode() ?? ''));
+        $activityName = mb_strtolower((string) ($targetBatch->getActivityName() ?? ''));
+
+        if ($activityCode !== 'CRIA' && !str_contains($activityName, 'cría') && !str_contains($activityName, 'cria')) {
+            throw ServiceOrderDomainException::domainError("The selected target batch must belong to the 'CRIA' (Breeding) activity.");
+        }
+
         // 1. Check if any caravan is already active in another service order
         $conflicts = $this->repository->findActiveOrdersByCaravans($allCaravans, $dto->companyId);
         if (!empty($conflicts)) {
@@ -49,6 +70,17 @@ final class CreateServiceOrderUseCase
             if ($sexes[$maleId] !== AnimalSex::MALE->value) {
                 throw ServiceOrderDomainException::invalidAnimalSex($maleId, 'male', $sexes[$maleId]);
             }
+
+            // Andrological & Clinical Health Guard
+            $bullHealth = $this->bullHealthRepository->findByCaravanId($maleId, $dto->companyId);
+            if ($bullHealth !== null && !$bullHealth->isApt()) {
+                $statusLabel = $bullHealth->getStatus()->value;
+                $activeDiags = array_map(fn ($d) => $d->getPathogenName() ?? $d->getPathogenCode(), $bullHealth->getActiveDiagnoses());
+                $diagText = !empty($activeDiags) ? ' (' . implode(', ', $activeDiags) . ')' : '';
+                throw ServiceOrderDomainException::domainError(
+                    "El reproductor ID {$maleId} no está apto para servicio. Estado: {$statusLabel}{$diagText}."
+                );
+            }
         }
 
         foreach ($dto->femaleCaravanIds as $femaleId) {
@@ -58,6 +90,27 @@ final class CreateServiceOrderUseCase
             if ($sexes[$femaleId] !== AnimalSex::FEMALE->value) {
                 throw ServiceOrderDomainException::invalidAnimalSex($femaleId, 'female', $sexes[$femaleId]);
             }
+        }
+
+        // 2.5. Verify that no animal belongs to an external batch (pending own assignment)
+        $invalidCaravans = \Illuminate\Support\Facades\DB::table('caravans')
+            ->join('batches', 'caravans.batch_id', '=', 'batches.id')
+            ->leftJoin('farms', 'batches.farm_id', '=', 'farms.id')
+            ->whereIn('caravans.id', $allCaravans)
+            ->where(function ($query) {
+                $query->whereNotNull('farms.provider_id');
+            })
+            ->select('caravans.id', 'caravans.identification', 'batches.name as batch_name')
+            ->get()
+            ->map(fn($row) => [
+                'id' => (int) $row->id,
+                'identification' => (string) $row->identification,
+                'batch_name' => (string) $row->batch_name
+            ])
+            ->toArray();
+
+        if (!empty($invalidCaravans)) {
+            throw \App\Core\Exceptions\CaravanInExternalBatchException::forCaravans($invalidCaravans);
         }
 
         // 3. Multi-Toro / Controlled Service Validations

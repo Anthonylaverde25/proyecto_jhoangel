@@ -15,36 +15,76 @@ use App\Core\Exceptions\DomainException;
 final class CaravanValueParser
 {
     /**
-     * Known full-mouth aliases mapped to their teeth count.
+     * Known teeth aliases mapped to their integer count.
      */
     private const TEETH_ALIASES = [
-        'boca llena'    => 8,
-        'boca_llena'    => 8,
-        'full mouth'    => 8,
-        'leche'         => 0,
+        'boca llena'      => 8,
+        'boca_llena'      => 8,
+        'full mouth'      => 8,
+        'bll'             => 8,
+        '8d'              => 8,
+        '8 d'             => 8,
+        '8 dientes'       => 8,
+        'seis dientes'    => 6,
+        '6d'              => 6,
+        '6 d'             => 6,
+        '6 dientes'       => 6,
+        'media boca'      => 4,
+        'media_boca'      => 4,
+        'mb'              => 4,
+        '4d'              => 4,
+        '4 d'             => 4,
+        '4 dientes'       => 4,
+        'dos dientes'     => 2,
+        '2d'              => 2,
+        '2 d'             => 2,
+        '2 dientes'       => 2,
         'diente de leche' => 0,
-        'media boca'    => 4,
-        'media_boca'    => 4,
+        'dientes de leche'=> 0,
+        'leche'           => 0,
+        'sin dientes'     => 0,
+        'dl'              => 0,
+        'd.l.'            => 0,
+        'd/l'             => 0,
+        '0d'              => 0,
     ];
 
     /**
-     * Parse a raw teeth value from OCR into an integer.
+     * Parse a raw teeth value from OCR or API into an integer.
      *
      * Examples:
-     *  - "4 dientes" → 4
-     *  - "Boca Llena" → 8
-     *  - "Leche (0)"  → 0
-     *  - "2"          → 2
-     *  - "6 dientes"  → 6
+     *  - "2D"          → 2
+     *  - "DL"          → 0
+     *  - "4 dientes"   → 4
+     *  - "Boca Llena"  → 8
+     *  - "Media Boca"  → 4
+     *  - "Leche (0)"   → 0
+     *  - 2             → 2
      *
-     * @param string $raw
+     * @param string|int|null $raw
      * @return int
      */
-    public static function parseTeeth(string $raw): int
+    public static function parseTeeth(string|int|null $raw): int
     {
-        $normalized = mb_strtolower(trim($raw));
+        if ($raw === null) {
+            return 0;
+        }
 
-        // Check known aliases first
+        if (is_int($raw)) {
+            return $raw;
+        }
+
+        $normalized = mb_strtolower(trim($raw));
+        if ($normalized === '') {
+            return 0;
+        }
+
+        // Check exact match in aliases first
+        if (isset(self::TEETH_ALIASES[$normalized])) {
+            return self::TEETH_ALIASES[$normalized];
+        }
+
+        // Check contains in aliases
         foreach (self::TEETH_ALIASES as $alias => $value) {
             if (str_contains($normalized, $alias)) {
                 return $value;
@@ -69,12 +109,24 @@ final class CaravanValueParser
      *  - "1,200.5"  → 1200.50
      *  - ""         → null
      *
-     * @param string $raw
+     * @param string|float|int|null $raw
      * @return float|null
      */
-    public static function parseWeight(string $raw): ?float
+    public static function parseWeight(string|float|int|null $raw): ?float
     {
-        $cleaned = trim($raw);
+        if ($raw === null) {
+            return null;
+        }
+
+        if (is_float($raw)) {
+            return $raw > 0 ? $raw : null;
+        }
+
+        if (is_int($raw)) {
+            return $raw > 0 ? (float) $raw : null;
+        }
+
+        $cleaned = trim((string) $raw);
 
         if ($cleaned === '') {
             return null;
@@ -211,9 +263,6 @@ final class CaravanValueParser
         }
 
         if (str_starts_with($normalized, 'm') || str_contains($normalized, 'mac') || str_contains($normalized, 'hom')) {
-            // "hom" can be "hombre" (macho) or "hombro" (ocr error for hembra?) 
-            // In the user's sample "Hombro" was meant to be "Hembra" based on category "vaca".
-            // Let's use category hint if available.
             if ($category === AnimalCategory::VACA || $category === AnimalCategory::VAQUILLONA || $category === AnimalCategory::TERNERA || $category === AnimalCategory::VACA_VACIA) {
                 return AnimalSex::FEMALE;
             }
@@ -233,11 +282,15 @@ final class CaravanValueParser
      * Parse a raw breed value from OCR into a normalized string.
      * Handles common OCR misreadings like "angos" (Angus).
      *
-     * @param string $raw
+     * @param string|null $raw
      * @return string|null
      */
-    public static function parseBreed(string $raw): ?string
+    public static function parseBreed(?string $raw): ?string
     {
+        if ($raw === null) {
+            return null;
+        }
+
         $cleaned = trim($raw);
 
         if ($cleaned === '') {

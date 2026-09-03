@@ -18,9 +18,14 @@ class CaravanMovement extends Model
     protected $fillable = [
         'caravan_id',
         'company_id',
+        'from_batch_id',
+        'to_batch_id',
+        'provider_id',
         'renspa',
+        'from_renspa',
         'type',
         'movement_date',
+        'provenance_metadata',
         'observations',
     ];
 
@@ -31,10 +36,32 @@ class CaravanMovement extends Model
         'movement_date' => 'datetime',
         'caravan_id' => 'integer',
         'company_id' => 'integer',
+        'from_batch_id' => 'integer',
+        'to_batch_id' => 'integer',
+        'provider_id' => 'integer',
+        'renspa' => 'string',
+        'from_renspa' => 'string',
+        'provenance_metadata' => 'array',
     ];
 
     public function caravan(): BelongsTo
     {
         return $this->belongsTo(Caravan::class);
     }
+
+    public function fromBatch(): BelongsTo
+    {
+        return $this->belongsTo(Batch::class, 'from_batch_id');
+    }
+
+    public function toBatch(): BelongsTo
+    {
+        return $this->belongsTo(Batch::class, 'to_batch_id');
+    }
+
+    public function provider(): BelongsTo
+    {
+        return $this->belongsTo(Provider::class);
+    }
 }
+

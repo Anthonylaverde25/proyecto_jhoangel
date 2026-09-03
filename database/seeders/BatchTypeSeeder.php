@@ -91,6 +91,21 @@ class BatchTypeSeeder extends Seeder
                 ]
             );
 
+            // Service / Breeding Herd Batch
+            BatchType::withoutGlobalScopes()->firstOrCreate(
+                [
+                    'company_id' => $c->id,
+                    'code' => 'SERVICE',
+                ],
+                [
+                    'name' => 'Servicio / Entore',
+                    'description' => 'Lote reproductivo homogéneo para servicio natural o IATF',
+                    'icon' => 'heroicons-outline:heart',
+                    'color' => '#ec4899',
+                    'is_active' => true,
+                ]
+            );
+
         }
     }
 }

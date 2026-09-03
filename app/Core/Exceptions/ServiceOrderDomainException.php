@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace App\Core\Exceptions;
 
-use Exception;
-
-class ServiceOrderDomainException extends Exception
+class ServiceOrderDomainException extends DomainException
 {
     public static function invalidStateTransition(string $from, string $to): self
     {

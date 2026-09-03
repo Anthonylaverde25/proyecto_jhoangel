@@ -53,9 +53,16 @@ class ActivitySeeder extends Seeder
 
         // Relacionar los lotes creados en LivestockHierarchySeeder con sus actividades
         \App\Models\Batch::where('name', 'like', '%Invierno%')
+            ->orWhere('name', 'like', '%Invernada%')
             ->update(['activity_id' => $activityIds['INVERNADA']]);
 
         \App\Models\Batch::where('name', 'like', '%Recría%')
+            ->orWhere('name', 'like', '%Recria%')
             ->update(['activity_id' => $activityIds['RECRIA']]);
+
+        \App\Models\Batch::where('name', 'like', '%Cría%')
+            ->orWhere('name', 'like', '%Cria%')
+            ->orWhere('name', 'like', '%CRIA%')
+            ->update(['activity_id' => $activityIds['CRIA']]);
     }
 }

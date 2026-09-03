@@ -10,6 +10,7 @@ final class WorkTemplateUseCases
         public readonly ListWorkTemplatesUseCase $listTemplates,
         public readonly FindWorkTemplateByCodeUseCase $findTemplateByCode,
         public readonly IdentifyWorkTemplateUseCase $identifyTemplate,
+        public readonly ProcessIng01SubmissionUseCase $processIng01,
     ) {
     }
 }

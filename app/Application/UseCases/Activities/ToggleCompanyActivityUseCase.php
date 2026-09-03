@@ -14,6 +14,6 @@ class ToggleCompanyActivityUseCase
 
     public function __invoke(int $companyId, int $activityId, bool $isEnabled): bool
     {
-        return $this->activityRepository.toggleActivity($companyId, $activityId, $isEnabled);
+        return $this->activityRepository->toggleActivity($companyId, $activityId, $isEnabled);
     }
 }

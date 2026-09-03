@@ -17,11 +17,12 @@ final class ListBatchesUseCase
     /**
      * @return BatchEntity[]
      */
-    public function __invoke(?int $farmId = null, ?string $batchType = null): array
+    public function __invoke(?int $farmId = null, ?string $batchType = null, ?string $scope = null): array
     {
         if ($farmId !== null) {
             return $this->repository->findByFarmId($farmId, $batchType);
         }
-        return $this->repository->findAll($batchType);
+        return $this->repository->findAll($batchType, $scope);
     }
 }
+

@@ -8,6 +8,7 @@ use App\Models\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Batch extends Model
 {
@@ -19,6 +20,10 @@ class Batch extends Model
         'farm_id',
         'activity_id',
         'current_weight',
+        'min_weight',
+        'max_weight',
+        'knows_to_eat',
+        'age_in_months',
         'observaciones',
         'is_active',
         'is_system',
@@ -29,6 +34,10 @@ class Batch extends Model
         'farm_id' => 'integer',
         'activity_id' => 'integer',
         'current_weight' => 'float',
+        'min_weight' => 'float',
+        'max_weight' => 'float',
+        'knows_to_eat' => 'boolean',
+        'age_in_months' => 'integer',
         'is_active' => 'boolean',
         'is_system' => 'boolean',
     ];
@@ -53,6 +62,11 @@ class Batch extends Model
         return $this->belongsTo(BatchType::class);
     }
 
+    public function serviceDetail(): HasOne
+    {
+        return $this->hasOne(ServiceBatchDetail::class, 'batch_id');
+    }
+
     public function scopeOperational($query)
     {
         return $query->whereHas('batchType', function ($q) {
@@ -74,9 +88,21 @@ class Batch extends Model
         });
     }
 
+    public function scopeService($query)
+    {
+        return $query->whereHas('batchType', function ($q) {
+            $q->where('code', 'SERVICE');
+        });
+    }
+
     public function isInQuarantine(): bool
     {
         return $this->batchType?->code === 'QUARANTINE' ?? false;
+    }
+
+    public function isServiceBatch(): bool
+    {
+        return $this->batchType?->code === 'SERVICE' ?? false;
     }
 
     public function isSystem(): bool

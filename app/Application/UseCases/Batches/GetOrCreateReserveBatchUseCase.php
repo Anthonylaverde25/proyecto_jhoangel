@@ -8,13 +8,15 @@ use App\Core\Entities\BatchEntity;
 use App\Core\Interfaces\IBatchRepository;
 use App\Core\Interfaces\IBatchTypeRepository;
 use App\Core\Interfaces\IActivityRepository;
+use App\Core\Interfaces\IFarmRepository;
 
 final class GetOrCreateReserveBatchUseCase
 {
     public function __construct(
         private readonly IBatchRepository $batchRepository,
         private readonly IBatchTypeRepository $batchTypeRepository,
-        private readonly IActivityRepository $activityRepository
+        private readonly IActivityRepository $activityRepository,
+        private readonly IFarmRepository $farmRepository
     ) {
     }
 
@@ -26,23 +28,29 @@ final class GetOrCreateReserveBatchUseCase
             return $existing;
         }
 
-        // 2. Resolve RESERVE batch type
+        // 2. Resolve own farm for the company
+        $ownFarms = $this->farmRepository->findOwnFarms();
+        $ownFarm = !empty($ownFarms) ? reset($ownFarms) : null;
+        $ownFarmId = $ownFarm?->getId();
+        $ownFarmName = $ownFarm?->getName();
+
+        // 3. Resolve RESERVE batch type
         $batchType = $this->batchTypeRepository->findByCode('RESERVE');
         $batchTypeId = $batchType?->getId();
 
-        // 3. Resolve internal activity if available
+        // 4. Resolve internal activity if available
         $internalActivity = $this->activityRepository->findByCode('INTERNAL');
         $activityId = $internalActivity?->getId();
 
-        // 4. Create the system reserve batch
+        // 5. Create the system reserve batch
         $batchEntity = new BatchEntity(
             id: null,
             name: 'Lote Reserva | Animales Apartados',
-            farmId: null,
+            farmId: $ownFarmId,
             observaciones: 'Lote interno del sistema para animales apartados, descartes reproductivos o reserva genética',
             isActive: true,
             createdAt: new \DateTimeImmutable(),
-            farmName: null,
+            farmName: $ownFarmName,
             providerId: null,
             providerName: null,
             activityId: $activityId,
@@ -54,6 +62,7 @@ final class GetOrCreateReserveBatchUseCase
             batchTypeCode: 'RESERVE',
             isSystem: true
         );
+
 
         $savedBatch = $this->batchRepository->save($batchEntity);
 

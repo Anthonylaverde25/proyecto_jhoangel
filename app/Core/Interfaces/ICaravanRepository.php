@@ -30,9 +30,11 @@ interface ICaravanRepository
     public function findById(int $id): ?CaravanEntity;
 
     /**
+     * @param string|null $scope 'own' | 'external' | 'all'
      * @return CaravanEntity[]
      */
-    public function findAll(): array;
+    public function findAll(?string $scope = 'own'): array;
+
 
     /**
      * @param int $batchId
@@ -47,6 +49,18 @@ interface ICaravanRepository
     public function getAverageWeightByBatch(int $batchId): ?float;
 
     /**
+     * @param int $batchId
+     * @return float|null
+     */
+    public function getMinWeightByBatch(int $batchId): ?float;
+
+    /**
+     * @param int $batchId
+     * @return float|null
+     */
+    public function getMaxWeightByBatch(int $batchId): ?float;
+
+    /**
      * @param int $id
      * @return bool
      */
@@ -58,9 +72,9 @@ interface ICaravanRepository
     public function findBirthHistory(): array;
 
     /**
-     * Update the batch assignment and optionally the category of a caravan.
+     * Update the batch assignment and optionally the category/subcategory IDs of a caravan.
      */
-    public function updateBatchAndCategory(int $caravanId, int $batchId, ?string $category): void;
+    public function updateBatchAndCategory(int $caravanId, int $batchId, ?int $categoryId = null, ?int $subcategoryId = null): void;
 
     /**
      * @param int $batchId

@@ -58,10 +58,11 @@ class ServiceOrderController extends Controller
             $entity = ($this->createUseCase)($dto);
 
             return response()->json(new ServiceOrderResource($entity), 201);
-        } catch (ServiceOrderDomainException $e) {
+        } catch (\App\Core\Exceptions\DomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
     }
+
 
     public function show(Request $request, int $id): JsonResponse
     {

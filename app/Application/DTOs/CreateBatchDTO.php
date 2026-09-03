@@ -12,7 +12,11 @@ final readonly class CreateBatchDTO
         public ?string $observaciones = null,
         public ?int $activityId = null,
         public ?float $weight = null,
-        public ?int $batchTypeId = null
+        public ?int $batchTypeId = null,
+        public bool $knowsToEat = false,
+        public ?int $ageInMonths = null,
+        public ?float $minWeight = null,
+        public ?float $maxWeight = null
     ) {
     }
 
@@ -24,7 +28,11 @@ final readonly class CreateBatchDTO
             isset($data['observaciones']) ? (string) $data['observaciones'] : null,
             isset($data['activity_id']) ? (int) $data['activity_id'] : null,
             isset($data['weight']) ? (float) $data['weight'] : null,
-            isset($data['batch_type_id']) ? (int) $data['batch_type_id'] : null
+            isset($data['batch_type_id']) ? (int) $data['batch_type_id'] : null,
+            (bool) ($data['knows_to_eat'] ?? false),
+            isset($data['age_in_months']) ? (int) $data['age_in_months'] : null,
+            isset($data['min_weight']) ? (float) $data['min_weight'] : null,
+            isset($data['max_weight']) ? (float) $data['max_weight'] : null
         );
     }
 }

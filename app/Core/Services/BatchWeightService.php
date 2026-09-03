@@ -18,9 +18,6 @@ class BatchWeightService
     ) {
     }
 
-    /**
-     * Recalculates the average weight of a batch based on current animal weights.
-     */
     public function recalculateBatchWeight(int $batchId): void
     {
         $batch = $this->batchRepository->findById($batchId);
@@ -29,8 +26,12 @@ class BatchWeightService
         }
 
         $newAvg = $this->caravanRepository->getAverageWeightByBatch($batchId) ?? 0.0;
+        $minWeight = $this->caravanRepository->getMinWeightByBatch($batchId);
+        $maxWeight = $this->caravanRepository->getMaxWeightByBatch($batchId);
         
         $batch->setCurrentWeight($newAvg);
+        $batch->setMinWeight($minWeight);
+        $batch->setMaxWeight($maxWeight);
         $this->batchRepository->save($batch);
 
         $this->batchRepository->addWeight(

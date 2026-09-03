@@ -60,17 +60,25 @@ class ServiceOrderTest extends TestCase
             'password'   => bcrypt('password'),
         ]);
 
+        // Create CRIA activity
+        $criaActivity = \App\Models\Activity::updateOrCreate(
+            ['code' => 'CRIA'],
+            ['name' => 'Cría']
+        );
+
         // Create batches
         $this->sourceBatch = Batch::create([
-            'company_id' => $this->company->id,
-            'name'       => 'Source Batch',
-            'is_active'  => true,
+            'company_id'  => $this->company->id,
+            'name'        => 'Source Batch',
+            'is_active'   => true,
+            'activity_id' => $criaActivity->id,
         ]);
 
         $this->targetBatch = Batch::create([
-            'company_id' => $this->company->id,
-            'name'       => 'Target Service Batch',
-            'is_active'  => true,
+            'company_id'  => $this->company->id,
+            'name'        => 'Target Service Batch',
+            'is_active'   => true,
+            'activity_id' => $criaActivity->id,
         ]);
 
         // Create animals
@@ -431,5 +439,77 @@ class ServiceOrderTest extends TestCase
             ]);
 
         $response->assertStatus(422);
+    }
+
+    public function test_cannot_create_service_order_with_non_cria_batch(): void
+    {
+        $invernadaActivity = \App\Models\Activity::updateOrCreate(
+            ['code' => 'INVERNADA'],
+            ['name' => 'Invernada']
+        );
+
+        $invernadaBatch = Batch::create([
+            'company_id'  => $this->company->id,
+            'name'        => 'Lote Invernada Test',
+            'is_active'   => true,
+            'activity_id' => $invernadaActivity->id,
+        ]);
+
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->withHeader('X-Company-ID', (string)$this->company->id)
+            ->postJson('http://test.localhost/api/service-orders', [
+                'batch_id'           => $invernadaBatch->id,
+                'code'               => 'SO-NON-CRIA-FAIL',
+                'planned_start_date' => '2026-06-01',
+                'male_caravan_ids'   => [$this->bull1->id],
+                'female_caravan_ids' => [$this->cow1->id],
+            ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonFragment([
+            'message' => "The selected target batch must belong to the 'CRIA' (Breeding) activity."
+        ]);
+    }
+
+    public function test_cannot_create_service_order_with_external_batch(): void
+    {
+        $criaActivity = \App\Models\Activity::where('code', 'CRIA')->first();
+
+        $provider = \App\Models\Provider::create([
+            'company_id' => $this->company->id,
+            'name'       => 'External Provider Test',
+            'cuit'       => '20-12345678-9',
+        ]);
+
+        $externalFarm = \App\Models\Farm::create([
+            'company_id'  => $this->company->id,
+            'name'        => 'External Farm Test',
+            'provider_id' => $provider->id,
+            'renspa'      => '00.000.0.00000/00',
+            'is_active'   => true,
+        ]);
+
+        $externalCriaBatch = Batch::create([
+            'company_id'  => $this->company->id,
+            'name'        => 'Lote Cria Externo Test',
+            'farm_id'     => $externalFarm->id,
+            'is_active'   => true,
+            'activity_id' => $criaActivity->id,
+        ]);
+
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->withHeader('X-Company-ID', (string)$this->company->id)
+            ->postJson('http://test.localhost/api/service-orders', [
+                'batch_id'           => $externalCriaBatch->id,
+                'code'               => 'SO-EXT-CRIA-FAIL',
+                'planned_start_date' => '2026-06-01',
+                'male_caravan_ids'   => [$this->bull1->id],
+                'female_caravan_ids' => [$this->cow1->id],
+            ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonFragment([
+            'message' => "The selected target batch must be an internal (own) batch."
+        ]);
     }
 }

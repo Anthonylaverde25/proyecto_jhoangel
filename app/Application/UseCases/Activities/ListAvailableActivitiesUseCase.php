@@ -12,9 +12,8 @@ class ListAvailableActivitiesUseCase
         private IActivityRepository $activityRepository
     ) {}
 
-    public function __invoke(int $companyId): array
+    public function __invoke(?int $companyId = null): array
     {
-        // This could be improved to return the catalog with the current status for the company
-        return $this->activityRepository->findAll();
+        return $this->activityRepository->findAll($companyId && $companyId > 0 ? $companyId : null);
     }
 }

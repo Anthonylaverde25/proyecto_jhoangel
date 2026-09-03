@@ -58,12 +58,12 @@ class EloquentCaravanRepository implements ICaravanRepository
             $gestationModel->sires()->sync($sireSyncData);
         }
 
-        return CaravanMapper::toEntity($model->load(['breedRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father']));
+        return CaravanMapper::toEntity($model->load(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father']));
     }
 
     public function findByIdentification(CaravanNumber $identification): ?CaravanEntity
     {
-        $model = Caravan::with(['breedRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])
+        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])
             ->where('identification', $identification->getValue())
             ->first();
         
@@ -73,7 +73,7 @@ class EloquentCaravanRepository implements ICaravanRepository
     public function findByIdentificationGlobal(CaravanNumber $identification): ?CaravanEntity
     {
         $model = Caravan::withoutGlobalScopes()
-            ->with(['breedRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])
+            ->with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])
             ->where('identification', $identification->getValue())
             ->first();
         
@@ -82,16 +82,51 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function findById(int $id): ?CaravanEntity
     {
-        $model = Caravan::with(['breedRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])->find($id);
+        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])->find($id);
         
         return $model ? CaravanMapper::toEntity($model) : null;
     }
 
-    public function findAll(): array
+    public function findAll(?string $scope = 'own'): array
     {
-        $models = Caravan::with(['breedRelation', 'batch', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])->get();
-        return $models->map(fn($model) => CaravanMapper::toEntity($model))->toArray();
+        $query = Caravan::with([
+            'categoryRelation',
+            'subcategoryRelation',
+            'breedRelation',
+            'colorRelation',
+            'batch.farm.provider',
+            'currentWeight',
+            'femaleDetail',
+            'gestations.sires',
+            'lineage.mother',
+            'lineage.father',
+            'provider'
+        ]);
+
+        if ($scope === 'own') {
+            $query->where(function ($q) {
+                $q->whereNull('batch_id')
+                  ->orWhereHas('batch', function ($qb) {
+                      $qb->where(function ($subQb) {
+                          $subQb->whereNull('farm_id')
+                                ->orWhereHas('farm', function ($farmQb) {
+                                    $farmQb->whereNull('provider_id');
+                                });
+                      });
+                  });
+            });
+        } elseif ($scope === 'external') {
+            $query->where(function ($q) {
+                $q->whereNotNull('provider_id')
+                  ->orWhereHas('batch.farm', function ($farmQb) {
+                      $farmQb->whereNotNull('provider_id');
+                  });
+            });
+        }
+
+        return $query->get()->map(fn($model) => CaravanMapper::toEntity($model))->toArray();
     }
+
 
     public function delete(int $id): bool
     {
@@ -111,6 +146,26 @@ class EloquentCaravanRepository implements ICaravanRepository
             ->avg('caravan_weights.weight');
 
         return $avg !== null ? (float) $avg : null;
+    }
+
+    public function getMinWeightByBatch(int $batchId): ?float
+    {
+        $min = Caravan::where('batch_id', $batchId)
+            ->join('caravan_weights', 'caravans.id', '=', 'caravan_weights.caravan_id')
+            ->where('caravan_weights.current', true)
+            ->min('caravan_weights.weight');
+
+        return $min !== null ? (float) $min : null;
+    }
+
+    public function getMaxWeightByBatch(int $batchId): ?float
+    {
+        $max = Caravan::where('batch_id', $batchId)
+            ->join('caravan_weights', 'caravans.id', '=', 'caravan_weights.caravan_id')
+            ->where('caravan_weights.current', true)
+            ->max('caravan_weights.weight');
+
+        return $max !== null ? (float) $max : null;
     }
 
     public function findBirthHistory(): array
@@ -144,11 +199,14 @@ class EloquentCaravanRepository implements ICaravanRepository
         return $history;
     }
 
-    public function updateBatchAndCategory(int $caravanId, int $batchId, ?string $category): void
+    public function updateBatchAndCategory(int $caravanId, int $batchId, ?int $categoryId = null, ?int $subcategoryId = null): void
     {
         $data = ['batch_id' => $batchId];
-        if ($category !== null) {
-            $data['category'] = $category;
+        if ($categoryId !== null) {
+            $data['category_id'] = $categoryId;
+        }
+        if ($subcategoryId !== null) {
+            $data['subcategory_id'] = $subcategoryId;
         }
         Caravan::where('id', $caravanId)->update($data);
     }

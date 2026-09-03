@@ -31,6 +31,10 @@ class CreateBatchRequest extends FormRequest
             'farm_id'       => 'nullable|integer|exists:farms,id',
             'activity_id'   => 'nullable|integer|exists:activities,id',
             'weight'        => 'nullable|numeric|min:0',
+            'min_weight'    => 'nullable|numeric|min:0',
+            'max_weight'    => 'nullable|numeric|min:0|gte:min_weight',
+            'knows_to_eat'  => 'nullable|boolean',
+            'age_in_months' => 'nullable|integer|min:0',
             'observaciones' => 'nullable|string',
             'batch_type_id' => [
                 'required',

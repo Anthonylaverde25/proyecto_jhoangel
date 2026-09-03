@@ -39,7 +39,11 @@ final class CreateBatchUseCase
             observaciones: $dto->observaciones,
             isActive: true,
             activityId: $activityId,
-            batchTypeId: $dto->batchTypeId
+            batchTypeId: $dto->batchTypeId,
+            knowsToEat: $dto->knowsToEat,
+            ageInMonths: $dto->ageInMonths,
+            minWeight: $dto->minWeight,
+            maxWeight: $dto->maxWeight
         );
 
         $savedEntity = $this->repository->save($entity);

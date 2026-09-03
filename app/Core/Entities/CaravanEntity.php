@@ -7,8 +7,10 @@ namespace App\Core\Entities;
 use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
 use App\Core\Enums\GestationStage;
+use App\Core\Enums\PhysiologicalState;
 use App\Core\Exceptions\DomainException;
 use App\Core\ValueObjects\CaravanNumber;
+use App\Core\ValueObjects\CaravanProvenance;
 use App\Core\ValueObjects\FemaleReproductiveDetails;
 
 final class CaravanEntity
@@ -16,13 +18,14 @@ final class CaravanEntity
     public function __construct(
         private readonly ?int $id,
         private CaravanNumber $identification,
-        private ?AnimalCategory $category,
         private int $teeth,
         private ?float $entryWeight = null,
         private ?float $exitWeight = null,
-        private ?string $breed = null,
         private ?int $breedId = null,
-        private AnimalSex $sex,
+        private ?string $breedName = null,
+        private ?int $colorId = null,
+        private ?string $colorName = null,
+        private AnimalSex $sex = AnimalSex::FEMALE,
         private ?\DateTimeInterface $entryDate = null,
         private ?\DateTimeInterface $createdAt = null,
         private ?int $batchId = null,
@@ -32,7 +35,19 @@ final class CaravanEntity
         private ?FemaleReproductiveDetails $reproductiveDetails = null,
         /** @var GestationEntity[] */
         private array $gestations = [],
-        private ?LineageEntity $lineage = null
+        private ?LineageEntity $lineage = null,
+        private string $renspa = 'NO_DEFINIDO',
+        private ?int $providerId = null,
+        private ?string $providerName = null,
+        private ?CaravanProvenance $provenance = null,
+        private ?int $categoryId = null,
+        private ?string $categoryCode = null,
+        private ?string $categoryName = null,
+        private ?int $subcategoryId = null,
+        private ?string $subcategoryCode = null,
+        private ?string $subcategoryName = null,
+        private bool $isInService = false,
+        private ?string $farmName = null
     ) {
         $this->validateTeeth($teeth);
     }
@@ -43,7 +58,7 @@ final class CaravanEntity
     private function validateTeeth(int $teeth): void
     {
         if ($teeth < 0 || $teeth > 99) {
-            throw new DomainException("La dentición debe estar en el rango de 00 a 99.");
+            throw new DomainException("La dentición debe estar en el rango de 0 a 99.");
         }
     }
 
@@ -67,6 +82,16 @@ final class CaravanEntity
         return $this->batchName;
     }
 
+    public function getFarmName(): ?string
+    {
+        return $this->farmName;
+    }
+
+    public function setFarmName(?string $farmName): void
+    {
+        $this->farmName = $farmName;
+    }
+
     public function getCurrentWeight(): ?float
     {
         return $this->currentWeight;
@@ -75,11 +100,6 @@ final class CaravanEntity
     public function getIdentification(): CaravanNumber
     {
         return $this->identification;
-    }
-
-    public function getCategory(): ?AnimalCategory
-    {
-        return $this->category;
     }
 
     public function getTeeth(): int
@@ -99,12 +119,47 @@ final class CaravanEntity
 
     public function getBreed(): ?string
     {
-        return $this->breed;
+        return $this->breedName;
+    }
+
+    public function getBreedName(): ?string
+    {
+        return $this->breedName;
+    }
+
+    public function setBreedName(?string $breedName): void
+    {
+        $this->breedName = $breedName;
     }
 
     public function getBreedId(): ?int
     {
         return $this->breedId;
+    }
+
+    public function setBreedId(?int $breedId): void
+    {
+        $this->breedId = $breedId;
+    }
+
+    public function getColorId(): ?int
+    {
+        return $this->colorId;
+    }
+
+    public function setColorId(?int $colorId): void
+    {
+        $this->colorId = $colorId;
+    }
+
+    public function getColorName(): ?string
+    {
+        return $this->colorName;
+    }
+
+    public function setColorName(?string $colorName): void
+    {
+        $this->colorName = $colorName;
     }
 
     public function getSex(): AnimalSex
@@ -213,11 +268,6 @@ final class CaravanEntity
         );
     }
 
-    public function updateCategory(AnimalCategory $category): void
-    {
-        $this->category = $category;
-    }
-
     /**
      * @throws DomainException
      */
@@ -237,26 +287,29 @@ final class CaravanEntity
      * La identificación y la fecha de entrada son inmutables.
      */
     public function updateDetails(
-        ?AnimalCategory $category,
         int $teeth,
         ?float $entryWeight,
         ?float $exitWeight,
-        ?string $breed,
         ?AnimalSex $sex,
         ?\DateTimeInterface $entryDate = null,
         ?int $batchId = null,
-        ?int $breedId = null
+        ?int $breedId = null,
+        ?int $colorId = null,
+        ?int $categoryId = null,
+        ?int $subcategoryId = null
     ): void {
         $this->validateTeeth($teeth);
         
-        $this->category = $category;
         $this->teeth = $teeth;
         $this->entryWeight = $entryWeight;
         $this->exitWeight = $exitWeight;
-        $this->breed = $breed;
         
         if ($breedId !== null) {
             $this->breedId = $breedId;
+        }
+
+        if ($colorId !== null) {
+            $this->colorId = $colorId;
         }
         
         if ($sex !== null) {
@@ -269,6 +322,14 @@ final class CaravanEntity
 
         if ($batchId !== null) {
             $this->batchId = $batchId;
+        }
+
+        if ($categoryId !== null) {
+            $this->categoryId = $categoryId;
+        }
+
+        if ($subcategoryId !== null) {
+            $this->subcategoryId = $subcategoryId;
         }
     }
 
@@ -291,5 +352,170 @@ final class CaravanEntity
 
         return $this->exitWeight - $this->entryWeight;
     }
-}
 
+    public function setBatchId(?int $batchId): void
+    {
+        $this->batchId = $batchId;
+    }
+
+    public function getRenspa(): string
+    {
+        return $this->renspa;
+    }
+
+    public function setRenspa(string $renspa): void
+    {
+        $this->renspa = $renspa;
+    }
+
+    public function getProviderId(): ?int
+    {
+        return $this->providerId;
+    }
+
+    public function setProviderId(?int $providerId): void
+    {
+        $this->providerId = $providerId;
+    }
+
+    public function getProviderName(): ?string
+    {
+        return $this->providerName;
+    }
+
+    public function setProviderName(?string $providerName): void
+    {
+        $this->providerName = $providerName;
+    }
+
+    public function getProvenance(): ?CaravanProvenance
+    {
+        return $this->provenance;
+    }
+
+    public function setProvenance(?CaravanProvenance $provenance): void
+    {
+        $this->provenance = $provenance;
+    }
+
+    public function getCategoryId(): ?int
+    {
+        return $this->categoryId;
+    }
+
+    public function setCategoryId(?int $categoryId): void
+    {
+        $this->categoryId = $categoryId;
+    }
+
+    public function getCategoryCode(): ?string
+    {
+        return $this->categoryCode;
+    }
+
+    public function setCategoryCode(?string $categoryCode): void
+    {
+        $this->categoryCode = $categoryCode;
+    }
+
+    public function getCategoryName(): ?string
+    {
+        return $this->categoryName;
+    }
+
+    public function setCategoryName(?string $categoryName): void
+    {
+        $this->categoryName = $categoryName;
+    }
+
+    public function getSubcategoryId(): ?int
+    {
+        return $this->subcategoryId;
+    }
+
+    public function setSubcategoryId(?int $subcategoryId): void
+    {
+        $this->subcategoryId = $subcategoryId;
+    }
+
+    public function getSubcategoryCode(): ?string
+    {
+        return $this->subcategoryCode;
+    }
+
+    public function setSubcategoryCode(?string $subcategoryCode): void
+    {
+        $this->subcategoryCode = $subcategoryCode;
+    }
+
+    public function getSubcategoryName(): ?string
+    {
+        return $this->subcategoryName;
+    }
+
+    public function setSubcategoryName(?string $subcategoryName): void
+    {
+        $this->subcategoryName = $subcategoryName;
+    }
+
+    public function isInService(): bool
+    {
+        return $this->isInService;
+    }
+
+    public function setIsInService(bool $isInService): void
+    {
+        $this->isInService = $isInService;
+    }
+
+    /**
+     * Compute the dynamic physiological state of the animal (Pure DDD).
+     */
+    public function getPhysiologicalState(): PhysiologicalState
+    {
+        if ($this->sex !== AnimalSex::FEMALE) {
+            return PhysiologicalState::UNKNOWN;
+        }
+
+        if ($this->isInService) {
+            return PhysiologicalState::IN_SERVICE;
+        }
+
+        $hasActiveGestation = $this->hasActiveGestation();
+        $isNursing = $this->isNursing();
+
+        if ($hasActiveGestation && $isNursing) {
+            return PhysiologicalState::PREGNANT_LACTATING;
+        }
+
+        if ($hasActiveGestation && !$isNursing) {
+            return PhysiologicalState::PREGNANT_DRY;
+        }
+
+        if (!$hasActiveGestation && $isNursing) {
+            return PhysiologicalState::EMPTY_LACTATING;
+        }
+
+        // Female not pregnant and not nursing
+        return PhysiologicalState::EMPTY_DRY;
+    }
+
+    public function isPregnant(): ?bool
+    {
+        if ($this->sex !== AnimalSex::FEMALE) {
+            return null;
+        }
+
+        return $this->hasActiveGestation();
+    }
+
+    public function getGestationMonths(): ?float
+    {
+        return $this->getActiveGestation()?->getGestationMonths();
+    }
+
+    public function getGestationStage(): ?GestationStage
+    {
+        return $this->getActiveGestation()?->getGestationStage();
+    }
+}

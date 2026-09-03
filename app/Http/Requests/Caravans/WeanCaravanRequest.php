@@ -27,7 +27,9 @@ class WeanCaravanRequest extends FormRequest
             'target_batch_id' => ['required', 'integer', 'exists:batches,id'],
             'weaning_date'    => ['required', 'date', 'date_format:Y-m-d'],
             'weaning_weight'  => ['required', 'numeric', 'min:0.1'],
-            'new_category'    => ['nullable', 'string', 'in:novillito,vaquillona'],
+            'new_category'    => ['nullable', 'string'],
+            'new_category_id' => ['nullable', 'integer', 'exists:animal_categories,id'],
+            'new_subcategory_id' => ['nullable', 'integer', 'exists:animal_subcategories,id'],
             'notes'           => ['nullable', 'string', 'max:500'],
         ];
     }

@@ -36,12 +36,15 @@ final class GetCaravanPedigreeUseCase
             SELECT 
                 c.id, 
                 c.identification, 
-                c.category, 
-                c.breed, 
+                ac.name as category_name,
+                ac.code as category_code,
+                b.name as breed, 
                 c.sex,
                 l.father_id, 
                 l.mother_id
             FROM caravans c
+            LEFT JOIN breeds b ON c.breed_id = b.id
+            LEFT JOIN animal_categories ac ON c.category_id = ac.id
             LEFT JOIN caravan_lineage l ON c.id = l.caravan_id
         ");
 
@@ -50,7 +53,7 @@ final class GetCaravanPedigreeUseCase
             $caravansMap[(int) $row->id] = [
                 'id' => (int) $row->id,
                 'identification' => $row->identification,
-                'category' => $row->category,
+                'category' => $row->category_name ?? $row->category_code,
                 'breed' => $row->breed,
                 'sex' => $row->sex,
                 'father_id' => $row->father_id !== null ? (int) $row->father_id : null,
@@ -121,13 +124,16 @@ final class GetCaravanPedigreeUseCase
             SELECT 
                 c.id, 
                 c.identification, 
-                c.category, 
-                c.breed, 
+                ac.name as category_name,
+                ac.code as category_code,
+                b.name as breed, 
                 c.sex,
                 l.father_id, 
                 l.mother_id
             FROM caravan_lineage l
             INNER JOIN caravans c ON l.caravan_id = c.id
+            LEFT JOIN breeds b ON c.breed_id = b.id
+            LEFT JOIN animal_categories ac ON c.category_id = ac.id
             WHERE l.father_id = :id1 OR l.mother_id = :id2
         ", ['id1' => $caravanId, 'id2' => $caravanId]);
 
@@ -146,7 +152,7 @@ final class GetCaravanPedigreeUseCase
             $offspring[] = [
                 'id' => (int) $o->id,
                 'identification' => $o->identification,
-                'category' => $o->category,
+                'category' => $o->category_name ?? $o->category_code,
                 'breed' => $o->breed,
                 'sex' => $o->sex,
                 'mate' => $mate ? [
@@ -163,8 +169,8 @@ final class GetCaravanPedigreeUseCase
             'caravan' => [
                 'id' => $caravan->id,
                 'identification' => $caravan->identification,
-                'category' => $caravan->category?->value ?? (string) $caravan->category,
-                'breed' => $caravan->breed,
+                'category' => $caravan->categoryRelation?->name ?? $caravan->categoryRelation?->code,
+                'breed' => $caravan->breedRelation?->name,
                 'sex' => $caravan->sex?->value ?? (string) $caravan->sex,
                 'batch_name' => $caravan->batch?->name ?? 'General',
                 'current_weight' => $caravan->currentWeight?->weight ? (float) $caravan->currentWeight->weight : null,

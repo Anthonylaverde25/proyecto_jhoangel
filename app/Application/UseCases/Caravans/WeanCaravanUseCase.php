@@ -78,7 +78,19 @@ final class WeanCaravanUseCase
             $this->lineageRepository->wean($dto->caravanId);
 
             // 5. Update batch_id and category on caravan
-            $this->caravanRepository->updateBatchAndCategory($dto->caravanId, $dto->targetBatchId, $dto->newCategory);
+            $newCatId = $dto->newCategoryId;
+            $newSubId = $dto->newSubcategoryId;
+            if ($newCatId === null && $dto->newCategory !== null) {
+                $searchCode = strtoupper($dto->newCategory);
+                $codeMap = [
+                    'TERNERA' => 'TERNERO',
+                    'VACA_VACIA' => 'VACA',
+                    'VACA VACIA' => 'VACA',
+                ];
+                $searchCode = $codeMap[$searchCode] ?? $searchCode;
+                $newCatId = \App\Models\AnimalCategory::where('code', $searchCode)->value('id');
+            }
+            $this->caravanRepository->updateBatchAndCategory($dto->caravanId, $dto->targetBatchId, $newCatId, $newSubId);
 
             // 6. Record weaning weight (and mark previous current ones as non-current)
             $this->caravanWeightRepository->markAllNonCurrentForCaravan($dto->caravanId);

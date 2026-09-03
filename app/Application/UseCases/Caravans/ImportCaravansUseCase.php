@@ -142,17 +142,33 @@ final class ImportCaravansUseCase
                     $transferEntity = new CaravanEntity(
                         $globalEntity->getId(),
                         $globalEntity->getIdentification(),
-                        $globalEntity->getCategory(),
                         $globalEntity->getTeeth(),
                         $globalEntity->getEntryWeight(),
                         $globalEntity->getExitWeight(),
-                        $globalEntity->getBreed(),
                         $globalEntity->getBreedId(),
+                        $globalEntity->getBreedName(),
+                        $globalEntity->getColorId(),
+                        $globalEntity->getColorName(),
                         $globalEntity->getSex(),
                         $globalEntity->getEntryDate(),
                         null,
                         $assignedBatchId,
-                        $activeCompanyId
+                        $activeCompanyId,
+                        null,
+                        $globalEntity->getCurrentWeight(),
+                        $globalEntity->getReproductiveDetails(),
+                        $globalEntity->getGestations(),
+                        $globalEntity->getLineage(),
+                        $globalEntity->getRenspa(),
+                        $globalEntity->getProviderId(),
+                        $globalEntity->getProviderName(),
+                        $globalEntity->getProvenance(),
+                        $globalEntity->getCategoryId(),
+                        $globalEntity->getCategoryCode(),
+                        $globalEntity->getCategoryName(),
+                        $globalEntity->getSubcategoryId(),
+                        $globalEntity->getSubcategoryCode(),
+                        $globalEntity->getSubcategoryName()
                     );
 
                     $this->updateCaravan($transferEntity, $row, $allBreeds, $assignedBatchId, $dto->emptyDestinationBatchId, $dto->serviceOrderId);
@@ -206,24 +222,44 @@ final class ImportCaravansUseCase
 
                 $assignedBatchId = ($isEmpty && $dto->emptyDestinationBatchId) ? $dto->emptyDestinationBatchId : $batchId;
 
+                $catId = null;
+                if ($category !== null) {
+                    $searchCode = strtoupper($category->value);
+                    $codeMap = ['TERNERA' => 'TERNERO', 'VACA_VACIA' => 'VACA', 'VACA VACIA' => 'VACA'];
+                    $searchCode = $codeMap[$searchCode] ?? $searchCode;
+                    $catId = \App\Models\AnimalCategory::where('code', $searchCode)->value('id');
+                }
+
                 $entity = new CaravanEntity(
                     id: null,
                     identification: $identification,
-                    category: $category,
                     teeth: $teeth,
                     entryWeight: $entryWeight,
                     exitWeight: null,
-                    breed: $breed,
                     breedId: $breedId,
+                    breedName: $breed,
+                    colorId: null,
+                    colorName: null,
                     sex: $sex,
                     entryDate: $entryDate,
                     createdAt: null,
                     batchId: $assignedBatchId,
-                    companyId: $activeCompanyId
+                    companyId: $activeCompanyId,
+                    batchName: null,
+                    currentWeight: $entryWeight,
+                    reproductiveDetails: null,
+                    gestations: [],
+                    lineage: null,
+                    renspa: 'NO_DEFINIDO',
+                    providerId: null,
+                    providerName: null,
+                    provenance: null,
+                    categoryId: $catId
                 );
 
-                if ($sex === \App\Core\Enums\AnimalSex::FEMALE && $category !== null) {
-                    $entity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $category));
+                if ($sex === \App\Core\Enums\AnimalSex::FEMALE) {
+                    $arrivalCategory = $category ?? AnimalCategory::VACA;
+                    $entity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
                     
                     if (!$isEmpty) {
                         $stageRaw = $row['gestational_stage'] ?? $row['estadio_estimado'] ?? $row['estadioestimado'] ?? null;
@@ -274,9 +310,21 @@ final class ImportCaravansUseCase
         ?int $emptyDestinationBatchId = null,
         ?int $serviceOrderId = null
     ): void {
-        $category = $entity->getCategory();
+        $category = null;
+        $catId = $entity->getCategoryId();
+        $subId = $entity->getSubcategoryId();
+
         if (isset($row['category']) && (string)$row['category'] !== '') {
-            $category = CaravanValueParser::parseCategory((string)$row['category']) ?? $category;
+            $category = CaravanValueParser::parseCategory((string)$row['category']);
+            if ($category !== null) {
+                $searchCode = strtoupper($category->value);
+                $codeMap = ['TERNERA' => 'TERNERO', 'VACA_VACIA' => 'VACA', 'VACA VACIA' => 'VACA'];
+                $searchCode = $codeMap[$searchCode] ?? $searchCode;
+                $resolvedCatId = \App\Models\AnimalCategory::where('code', $searchCode)->value('id');
+                if ($resolvedCatId) {
+                    $catId = $resolvedCatId;
+                }
+            }
         }
 
         $teeth = $entity->getTeeth();
@@ -316,7 +364,7 @@ final class ImportCaravansUseCase
         }
 
         $isEmpty = false;
-        if ($sex === \App\Core\Enums\AnimalSex::FEMALE && $category !== null) {
+        if ($sex === \App\Core\Enums\AnimalSex::FEMALE) {
             $currentDetails = $entity->getReproductiveDetails();
             $diagnosisRaw = $row['diagnostico'] ?? $row['diagnstico'] ?? null;
             if ($diagnosisRaw !== null) {
@@ -329,11 +377,11 @@ final class ImportCaravansUseCase
 
         $assignedBatchId = ($isEmpty && $emptyDestinationBatchId) ? $emptyDestinationBatchId : $batchId;
 
-        $entity->updateDetails($category, $teeth, $entryWeight, $exitWeight, $breed, $sex, $entryDate, $assignedBatchId, $breedId);
+        $entity->updateDetails($teeth, $entryWeight, $exitWeight, $sex, $entryDate, $assignedBatchId, $breedId, null, $catId, $subId);
 
-        if ($sex === \App\Core\Enums\AnimalSex::FEMALE && $category !== null) {
+        if ($sex === \App\Core\Enums\AnimalSex::FEMALE) {
             $currentDetails = $entity->getReproductiveDetails();
-            $arrivalCategory = $currentDetails?->getArrivalCategory() ?? $category;
+            $arrivalCategory = $currentDetails?->getArrivalCategory() ?? ($category ?? AnimalCategory::VACA);
             
             $entity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
 

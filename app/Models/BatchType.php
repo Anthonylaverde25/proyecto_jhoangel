@@ -53,13 +53,17 @@ class BatchType extends Model
         return $query->where('code', $code);
     }
 
- public function isOperational():bool
+ public function isOperational(): bool
  {
   return $this->code === 'OPERATIONAL';
  }
- public function isQuarantine():bool
+ public function isQuarantine(): bool
  {
   return $this->code === 'QUARANTINE';
+ }
+ public function isService(): bool
+ {
+  return $this->code === 'SERVICE';
  }
 
 

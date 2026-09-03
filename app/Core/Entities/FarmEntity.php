@@ -11,15 +11,21 @@ final class FarmEntity
         private string $name,
         private string $renspa,
         private ?string $location,
-        private int $providerId,
+        private ?int $providerId = null,
         private bool $isActive = true,
-        private ?\DateTimeInterface $createdAt = null
+        private ?\DateTimeInterface $createdAt = null,
+        private ?int $companyId = null
     ) {
     }
 
     public function getId(): ?int
     {
         return $this->id;
+    }
+
+    public function getCompanyId(): ?int
+    {
+        return $this->companyId;
     }
 
     public function getName(): string
@@ -37,15 +43,26 @@ final class FarmEntity
         return $this->location;
     }
 
-    public function getProviderId(): int
+    public function getProviderId(): ?int
     {
         return $this->providerId;
+    }
+
+    public function isOwn(): bool
+    {
+        return $this->providerId === null;
+    }
+
+    public function isExternal(): bool
+    {
+        return !$this->isOwn();
     }
 
     public function isActive(): bool
     {
         return $this->isActive;
     }
+
 
     public function getCreatedAt(): ?\DateTimeInterface
     {

@@ -10,6 +10,7 @@ use App\Core\Entities\LineageEntity;
 use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
 use App\Core\Exceptions\DomainException;
+use App\Core\Interfaces\IAnimalCategoryRepository;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Interfaces\ICaravanLineageRepository;
 use App\Core\ValueObjects\CaravanNumber;
@@ -25,7 +26,8 @@ final class RegisterBirthUseCase
         private readonly ICaravanRepository $caravanRepository,
         private readonly ICaravanLineageRepository $lineageRepository,
         private readonly RecordCaravanWeightUseCase $recordCaravanWeightUseCase,
-        private readonly BatchWeightService $batchWeightService
+        private readonly BatchWeightService $batchWeightService,
+        private readonly IAnimalCategoryRepository $animalCategoryRepository
     ) {
     }
 
@@ -90,11 +92,18 @@ final class RegisterBirthUseCase
             }
 
             $calfSex = AnimalSex::from($dto->calfSex);
-            $calfCategory = $dto->calfCategory !== null ? AnimalCategory::from($dto->calfCategory) : null;
+            $calfCategory = $dto->calfCategory !== null ? AnimalCategory::tryFrom($dto->calfCategory) : null;
+            if ($calfCategory === null) {
+                $calfCategory = AnimalCategory::TERNERO;
+            }
+
+            // Resolve calf category ID
+            $terneroCatEntity = $this->animalCategoryRepository->findByCode('TERNERO');
+            $calfCategoryId = $terneroCatEntity?->getId();
 
             // Initialize female details for the calf if it is a female
             $calfReproductiveDetails = null;
-            if ($calfSex === AnimalSex::FEMALE && $calfCategory !== null) {
+            if ($calfSex === AnimalSex::FEMALE) {
                 $calfReproductiveDetails = new FemaleReproductiveDetails(true, $calfCategory);
             }
 
@@ -102,12 +111,13 @@ final class RegisterBirthUseCase
             $calfEntity = new CaravanEntity(
                 id: null,
                 identification: $calfNumber,
-                category: $calfCategory,
                 teeth: $dto->calfTeeth,
                 entryWeight: $dto->calfWeight,
                 exitWeight: null,
-                breed: null,
                 breedId: $dto->calfBreedId,
+                breedName: null,
+                colorId: null,
+                colorName: null,
                 sex: $calfSex,
                 entryDate: new \DateTime($dto->birthDate),
                 createdAt: null,
@@ -117,7 +127,8 @@ final class RegisterBirthUseCase
                 currentWeight: $dto->calfWeight,
                 reproductiveDetails: $calfReproductiveDetails,
                 gestations: [],
-                lineage: null
+                lineage: null,
+                categoryId: $calfCategoryId
             );
 
             $savedCalf = $this->caravanRepository->save($calfEntity);
@@ -166,12 +177,17 @@ final class RegisterBirthUseCase
 
             $this->lineageRepository->save($lineageEntity);
 
-            // 7. Update Mother state to empty
+            // 8. Promote Mother: Vaquillona -> Vaca (after first calving)
+            $vacaCatEntity = $this->animalCategoryRepository->findByCode('VACA');
+            if ($vacaCatEntity) {
+                $mother->setCategoryId($vacaCatEntity->getId());
+            }
+
+            // Update Mother state to empty
             $motherReproductiveDetails = $mother->getReproductiveDetails();
-            $motherCategory = $mother->getCategory() ?? AnimalCategory::VAQUILLONA;
             $arrivalCategory = $motherReproductiveDetails !== null 
                 ? $motherReproductiveDetails->getArrivalCategory() 
-                : $motherCategory;
+                : AnimalCategory::VACA;
 
             $mother->recordFemaleDetails(new FemaleReproductiveDetails(true, $arrivalCategory));
             $this->caravanRepository->save($mother);

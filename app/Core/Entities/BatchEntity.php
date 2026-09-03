@@ -18,13 +18,35 @@ final class BatchEntity
         private ?string $providerName = null,
         private ?int $activityId = null,
         private ?string $activityName = null,
+        private ?string $activityCode = null,
         private ?float $currentWeight = null,
         private ?int $caravansCount = null,
         private ?int $batchTypeId = null,
         private ?string $batchTypeName = null,
         private ?string $batchTypeCode = null,
-        private bool $isSystem = false
+        private bool $isSystem = false,
+        private ?string $renspa = null,
+        private bool $knowsToEat = false,
+        private ?int $ageInMonths = null,
+        private ?float $minWeight = null,
+        private ?float $maxWeight = null,
+        private ?ServiceBatchDetailEntity $serviceDetail = null
     ) {
+    }
+
+    public function getServiceDetail(): ?ServiceBatchDetailEntity
+    {
+        return $this->serviceDetail;
+    }
+
+    public function setServiceDetail(?ServiceBatchDetailEntity $serviceDetail): void
+    {
+        $this->serviceDetail = $serviceDetail;
+    }
+
+    public function isServiceBatch(): bool
+    {
+        return $this->batchTypeCode === 'SERVICE' || $this->serviceDetail !== null;
     }
 
     public function getCurrentWeight(): ?float
@@ -50,6 +72,11 @@ final class BatchEntity
     public function getActivityName(): ?string
     {
         return $this->activityName;
+    }
+
+    public function getActivityCode(): ?string
+    {
+        return $this->activityCode;
     }
 
 
@@ -157,6 +184,66 @@ final class BatchEntity
     public function isSystem(): bool
     {
         return $this->isSystem;
+    }
+
+    public function isExternal(): bool
+    {
+        return $this->providerId !== null;
+    }
+
+    public function isOwn(): bool
+    {
+        return !$this->isExternal();
+    }
+
+    public function getRenspa(): ?string
+    {
+        return $this->renspa;
+    }
+
+    public function setRenspa(?string $renspa): void
+    {
+        $this->renspa = $renspa;
+    }
+
+    public function knowsToEat(): bool
+    {
+        return $this->knowsToEat;
+    }
+
+    public function setKnowsToEat(bool $knowsToEat): void
+    {
+        $this->knowsToEat = $knowsToEat;
+    }
+
+    public function getAgeInMonths(): ?int
+    {
+        return $this->ageInMonths;
+    }
+
+    public function setAgeInMonths(?int $ageInMonths): void
+    {
+        $this->ageInMonths = $ageInMonths;
+    }
+
+    public function getMinWeight(): ?float
+    {
+        return $this->minWeight;
+    }
+
+    public function setMinWeight(?float $minWeight): void
+    {
+        $this->minWeight = $minWeight;
+    }
+
+    public function getMaxWeight(): ?float
+    {
+        return $this->maxWeight;
+    }
+
+    public function setMaxWeight(?float $maxWeight): void
+    {
+        $this->maxWeight = $maxWeight;
     }
 }
 

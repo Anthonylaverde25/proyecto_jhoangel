@@ -11,7 +11,8 @@ interface IBatchRepository
     /**
      * @return BatchEntity[]
      */
-    public function findAll(?string $batchType = null): array;
+    public function findAll(?string $batchType = null, ?string $scope = null): array;
+
 
     public function findById(int $id): ?BatchEntity;
 

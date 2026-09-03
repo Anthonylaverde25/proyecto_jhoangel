@@ -15,9 +15,21 @@ class UserSeeder extends Seeder
     public function run(): void
     {
         // Limpiar tablas para permitir re-ejecución (idempotencia)
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+        } else {
+            DB::statement('PRAGMA foreign_keys = OFF;');
+        }
+
         DB::table('company_user')->delete();
         DB::table('users')->delete();
         DB::table('companies')->delete();
+
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+        } else {
+            DB::statement('PRAGMA foreign_keys = ON;');
+        }
 
         // 1. Crear Hacienda Principal
         $company1Id = DB::table('companies')->insertGetId([

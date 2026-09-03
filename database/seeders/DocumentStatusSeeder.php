@@ -16,12 +16,15 @@ class DocumentStatusSeeder extends Seeder
     {
         $now = now();
 
-        $documentTypeId = DB::table('document_types')->insertGetId([
-            'code' => 'SERVICE_ORDER',
-            'name' => 'Orden de Servicio',
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
+        $documentTypeId = DB::table('document_types')->where('code', 'SERVICE_ORDER')->value('id');
+        if (!$documentTypeId) {
+            $documentTypeId = DB::table('document_types')->insertGetId([
+                'code' => 'SERVICE_ORDER',
+                'name' => 'Orden de Servicio',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
 
         $statuses = [
             [

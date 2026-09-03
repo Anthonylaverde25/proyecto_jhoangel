@@ -50,7 +50,7 @@ final class RegisterGestationDiagnosisUseCase
 
         if ($dto->isPregnant) {
             // Update reproductive details to not empty
-            $category = $caravan->getCategory() ?? AnimalCategory::VACA;
+            $category = $caravan->getReproductiveDetails()?->getArrivalCategory() ?? AnimalCategory::VACA;
             $caravan->recordFemaleDetails(new FemaleReproductiveDetails(false, $category));
 
             // Determine stage and months
@@ -74,12 +74,27 @@ final class RegisterGestationDiagnosisUseCase
             }
         } else {
             // Update reproductive details to empty
-            $category = $caravan->getCategory() ?? AnimalCategory::VACA;
+            $category = $caravan->getReproductiveDetails()?->getArrivalCategory() ?? AnimalCategory::VACA;
             $caravan->recordFemaleDetails(new FemaleReproductiveDetails(true, $category));
 
             // Relocate to the empty destination batch if provided
-            if ($dto->emptyDestinationBatchId !== null) {
+            if ($dto->emptyDestinationBatchId !== null && $dto->emptyDestinationBatchId !== $caravan->getBatchId()) {
+                $previousBatchId = $caravan->getBatchId();
                 $caravan->moveToBatch($dto->emptyDestinationBatchId);
+
+                \Illuminate\Support\Facades\DB::table('caravan_movements')->insert([
+                    'caravan_id'          => $caravan->getId(),
+                    'company_id'          => $companyId,
+                    'from_batch_id'       => $previousBatchId,
+                    'to_batch_id'         => $dto->emptyDestinationBatchId,
+                    'renspa'              => $caravan->getRenspa() ?? 'NO_DEFINIDO',
+                    'from_renspa'         => $caravan->getRenspa() ?? 'NO_DEFINIDO',
+                    'type'                => 'TRANSFER',
+                    'movement_date'       => $dto->diagnosisDate ?? date('Y-m-d H:i:s'),
+                    'observations'        => "Relocated to Batch ID: {$dto->emptyDestinationBatchId} after empty pregnancy diagnosis (from Batch ID: {$previousBatchId})",
+                    'created_at'          => now(),
+                    'updated_at'          => now(),
+                ]);
             }
 
             // Close active gestation if exists

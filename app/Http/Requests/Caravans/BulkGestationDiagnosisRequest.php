@@ -30,8 +30,9 @@ class BulkGestationDiagnosisRequest extends FormRequest
             'diagnoses.*.is_pregnant'         => 'required|boolean',
             'diagnoses.*.gestation_stage'     => 'nullable|string|in:head,body,tail',
             'diagnoses.*.gestation_months'    => 'nullable|numeric|min:0|max:9.5',
-            'diagnoses.*.confirmed_sire_id'   => 'nullable|integer|exists:caravans,id',
-            'diagnoses.*.diagnosis_date'      => 'required|date_format:Y-m-d',
+            'diagnoses.*.confirmed_sire_id'          => 'nullable|integer|exists:caravans,id',
+            'diagnoses.*.diagnosis_date'             => 'required|date_format:Y-m-d',
+            'diagnoses.*.empty_destination_batch_id' => 'nullable|integer|exists:batches,id',
         ];
     }
 }

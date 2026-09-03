@@ -16,9 +16,10 @@ class FarmMapper
             $model->name,
             (string) $model->renspa,
             $model->location,
-            (int) $model->provider_id,
+            $model->provider_id !== null ? (int) $model->provider_id : null,
             (bool) $model->is_active,
             $model->created_at,
+            $model->company_id !== null ? (int) $model->company_id : null
         );
     }
 
@@ -33,7 +34,12 @@ class FarmMapper
         $model->location = $entity->getLocation();
         $model->provider_id = $entity->getProviderId();
         $model->is_active = $entity->isActive();
+        
+        if ($entity->getCompanyId() !== null) {
+            $model->company_id = $entity->getCompanyId();
+        }
 
         return $model;
     }
 }
+

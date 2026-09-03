@@ -16,11 +16,14 @@ final readonly class RegisterCaravanDTO
         public ?float $entryWeight = null,
         public ?string $breed = null,
         public ?int $breedId = null,
+        public ?int $colorId = null,
         public ?int $batchId = null,
         public ?int $farmId = null,
         public ?bool $isEmpty = null,
         public ?string $gestationStage = null,
         public ?float $gestationMonths = null,
+        public ?int $categoryId = null,
+        public ?int $subcategoryId = null,
     ) {
     }
 
@@ -38,11 +41,14 @@ final readonly class RegisterCaravanDTO
             isset($data['entry_weight']) ? (float) $data['entry_weight'] : null,
             isset($data['breed']) ? (string) $data['breed'] : null,
             isset($data['breed_id']) ? (int) $data['breed_id'] : null,
+            isset($data['color_id']) ? (int) $data['color_id'] : null,
             isset($data['batch_id']) ? (int) $data['batch_id'] : null,
             isset($data['farm_id']) ? (int) $data['farm_id'] : null,
             isset($data['is_empty']) ? filter_var($data['is_empty'], FILTER_VALIDATE_BOOLEAN) : null,
             isset($data['gestation_stage']) ? (string) $data['gestation_stage'] : null,
             isset($data['gestation_months']) ? (float) $data['gestation_months'] : null,
+            isset($data['category_id']) ? (int) $data['category_id'] : null,
+            isset($data['subcategory_id']) ? (int) $data['subcategory_id'] : null,
         );
     }
 }

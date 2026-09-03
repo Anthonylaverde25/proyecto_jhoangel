@@ -21,15 +21,19 @@ class CaravanMapper
      */
     public static function toEntity(Caravan $model): CaravanEntity
     {
+        $breedName = $model->relationLoaded('breedRelation') && $model->breedRelation ? $model->breedRelation->name : null;
+        $colorName = $model->relationLoaded('colorRelation') && $model->colorRelation ? $model->colorRelation->name : null;
+
         return new CaravanEntity(
             $model->id,
             new CaravanNumber((string) $model->identification),
-            $model->category,
             (int) $model->teeth,
             $model->entry_weight ? (float) $model->entry_weight : null,
             $model->exit_weight ? (float) $model->exit_weight : null,
-            $model->relationLoaded('breedRelation') && $model->breedRelation ? $model->breedRelation->name : $model->breed,
             $model->breed_id ? (int) $model->breed_id : null,
+            $breedName,
+            $model->color_id ? (int) $model->color_id : null,
+            $colorName,
             $model->sex,
             $model->entry_date ? (is_string($model->entry_date) ? new \DateTime($model->entry_date) : $model->entry_date) : null,
             $model->created_at,
@@ -66,7 +70,19 @@ class CaravanMapper
                     $g->service_order_id ? (int) $g->service_order_id : null
                 );
             })->toArray() : [],
-            $model->relationLoaded('lineage') && $model->lineage ? LineageMapper::toEntity($model->lineage) : null
+            $model->relationLoaded('lineage') && $model->lineage ? LineageMapper::toEntity($model->lineage) : null,
+            $model->renspa ?? 'NO_DEFINIDO',
+            $model->provider_id ? (int) $model->provider_id : null,
+            $model->relationLoaded('provider') && $model->provider ? $model->provider->name : null,
+            \App\Core\ValueObjects\CaravanProvenance::fromArray($model->provenance_metadata),
+            $model->category_id ? (int) $model->category_id : null,
+            $model->relationLoaded('categoryRelation') && $model->categoryRelation ? $model->categoryRelation->code : null,
+            $model->relationLoaded('categoryRelation') && $model->categoryRelation ? $model->categoryRelation->name : null,
+            $model->subcategory_id ? (int) $model->subcategory_id : null,
+            $model->relationLoaded('subcategoryRelation') && $model->subcategoryRelation ? $model->subcategoryRelation->code : null,
+            $model->relationLoaded('subcategoryRelation') && $model->subcategoryRelation ? $model->subcategoryRelation->name : null,
+            false,
+            $model->relationLoaded('batch') && $model->batch && $model->batch->relationLoaded('farm') && $model->batch->farm ? $model->batch->farm->name : null
         );
     }
 
@@ -80,15 +96,19 @@ class CaravanMapper
         }
 
         $model->identification = $entity->getIdentification()->getValue();
-        $model->category = $entity->getCategory();
+        $model->category_id = $entity->getCategoryId();
+        $model->subcategory_id = $entity->getSubcategoryId();
         $model->teeth = $entity->getTeeth();
         $model->entry_weight = $entity->getEntryWeight();
         $model->exit_weight = $entity->getExitWeight();
-        $model->breed = $entity->getBreed();
         $model->breed_id = $entity->getBreedId();
+        $model->color_id = $entity->getColorId();
         $model->sex = $entity->getSex();
         $model->entry_date = $entity->getEntryDate();
         $model->batch_id = $entity->getBatchId();
+        $model->renspa = $entity->getRenspa();
+        $model->provider_id = $entity->getProviderId();
+        $model->provenance_metadata = $entity->getProvenance()?->toArray();
         
         if ($entity->getCompanyId() !== null) {
             $model->company_id = $entity->getCompanyId();
@@ -97,4 +117,3 @@ class CaravanMapper
         return $model;
     }
 }
-

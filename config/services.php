@@ -23,7 +23,7 @@ return [
     ],
 
     'ses' => [
-        'key' => env('AWS_ACCESS_KEY_ID'),
+        'key'    => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
@@ -31,28 +31,21 @@ return [
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
-            'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
+            'channel'              => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
 
-    'gemini' => [
-        'key' => env('GEMINI_API_KEY'),
-        'prompt_table_extraction' => env('GEMINI_PROMPT_TABLE_EXTRACTION'),
+    /*
+    |--------------------------------------------------------------------------
+    | AI Agent Microservice (FastAPI + Gemini Vision)
+    |--------------------------------------------------------------------------
+    | The internal microservice responsible for all document analysis:
+    |  - Template code detection via Gemini Vision.
+    |  - Schema-guided field extraction (header + table rows).
+    |
+    */
+    'ai_agent' => [
+        'url' => env('AI_AGENT_URL', 'http://localhost:8001'),
     ],
 
-    'azure' => [
-        'key' => env('AZURE_DOCUMENT_INTELLIGENCE_KEY'),
-        'endpoint' => env('AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT'),
-    ],
-
-    'google' => [
-        'project_id' => env('GOOGLE_CLOUD_PROJECT_ID'),
-        'location' => env('GOOGLE_CLOUD_LOCATION', 'us'),
-        'processor_id' => env('GOOGLE_DOCUMENT_AI_PROCESSOR_ID'),
-        'credentials' => env('GOOGLE_APPLICATION_CREDENTIALS'),
-    ],
-
-    'ocr' => [
-        'driver' => env('OCR_DRIVER', 'azure'),
-    ],
 ];

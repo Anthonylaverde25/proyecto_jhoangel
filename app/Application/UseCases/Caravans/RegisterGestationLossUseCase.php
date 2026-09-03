@@ -46,10 +46,9 @@ final class RegisterGestationLossUseCase
 
             // Update female details to empty
             $reproductiveDetails = $caravan->getReproductiveDetails();
-            $category = $caravan->getCategory() ?? AnimalCategory::VAQUILLONA;
             $arrivalCategory = $reproductiveDetails !== null 
                 ? $reproductiveDetails->getArrivalCategory() 
-                : $category;
+                : AnimalCategory::VACA;
 
             $caravan->recordFemaleDetails(new FemaleReproductiveDetails(true, $arrivalCategory));
 

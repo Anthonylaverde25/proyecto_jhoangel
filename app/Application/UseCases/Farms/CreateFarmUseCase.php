@@ -23,9 +23,12 @@ final class CreateFarmUseCase
             renspa: $dto->renspa,
             location: $dto->location,
             providerId: $dto->providerId,
-            isActive: true
+            isActive: true,
+            createdAt: null,
+            companyId: $dto->companyId
         );
 
         return $this->repository->save($entity);
     }
 }
+

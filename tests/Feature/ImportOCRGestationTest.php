@@ -69,10 +69,17 @@ final class ImportOCRGestationTest extends TestCase
             ['cuit' => '30-98765432-1'],
             ['name' => 'Gestation Provider', 'is_active' => true]
         );
-        $farm = Farm::firstOrCreate(
-            ['renspa' => '01.02.0.00001/01'],
-            ['name' => 'Section A', 'provider_id' => $provider->id, 'is_active' => true]
-        );
+        $farm = Farm::withoutGlobalScopes()->where('renspa', '01.02.0.00001/01')->first();
+        if (!$farm) {
+            $farm = Farm::create([
+                'company_id' => $this->company->id,
+                'renspa' => '01.02.0.00001/01',
+                'name' => 'Section A',
+                'provider_id' => $provider->id,
+                'is_active' => true
+            ]);
+        }
+
         $batch = Batch::firstOrCreate(
             ['company_id' => $this->company->id, 'name' => 'Lote Recría - 3'],
             ['farm_id' => $farm->id, 'is_active' => true]

@@ -22,11 +22,15 @@ class TenantDatabaseSeeder extends Seeder
             GestationLossReasonSeeder::class,
             CaravanFieldMappingSeeder::class,
             BreedSeeder::class,
+            ColorSeeder::class,
+            AnimalCategorySeeder::class,
             LivestockHierarchySeeder::class,
             ActivitySeeder::class,
             BatchWeightSeeder::class,
             WorkTemplateSeeder::class,
             BatchTypeSeeder::class,
+            PathogenSeeder::class,
+            BullHealthSeeder::class,
         ]);
     }
 }

@@ -12,7 +12,9 @@ final readonly class WeanCaravanDTO
         public string $weaningDate,
         public float $weaningWeight,
         public ?string $newCategory = null,
-        public ?string $notes = null
+        public ?string $notes = null,
+        public ?int $newCategoryId = null,
+        public ?int $newSubcategoryId = null
     ) {
     }
 
@@ -24,7 +26,9 @@ final readonly class WeanCaravanDTO
             (string) $data['weaning_date'],
             (float) $data['weaning_weight'],
             $data['new_category'] ?? null,
-            $data['notes'] ?? null
+            $data['notes'] ?? null,
+            isset($data['new_category_id']) ? (int) $data['new_category_id'] : null,
+            isset($data['new_subcategory_id']) ? (int) $data['new_subcategory_id'] : null
         );
     }
 }

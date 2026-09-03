@@ -30,10 +30,13 @@ class UpsertCaravanRequest extends FormRequest
         return [
             'identification' => 'required|string',
             'category'       => 'nullable|string',
+            'category_id'    => 'nullable|integer|exists:animal_categories,id',
+            'subcategory_id' => 'nullable|integer|exists:animal_subcategories,id',
             'teeth'          => 'required|integer|min:0|max:99',
             'entry_weight'   => 'nullable|numeric',
             'breed'          => 'nullable|string',
             'breed_id'       => 'nullable|integer|exists:breeds,id',
+            'color_id'       => 'nullable|integer|exists:colors,id',
             'sex'            => ['nullable', new Enum(AnimalSex::class)],
             'batch_id'       => 'nullable|integer|exists:batches,id',
             'farm_id'        => 'nullable|integer|exists:farms,id',

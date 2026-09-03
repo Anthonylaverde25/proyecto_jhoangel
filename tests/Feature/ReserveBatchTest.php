@@ -82,7 +82,6 @@ class ReserveBatchTest extends TestCase
             'company_id' => $this->company->id,
             'identification' => 'TEST-001',
             'sex' => 'H',
-            'category' => 'vaca',
             'teeth' => 4,
             'batch_id' => $sourceBatch->id,
         ]);
@@ -91,7 +90,6 @@ class ReserveBatchTest extends TestCase
             'company_id' => $this->company->id,
             'identification' => 'TEST-002',
             'sex' => 'H',
-            'category' => 'vaquillona',
             'teeth' => 2,
             'batch_id' => $sourceBatch->id,
         ]);

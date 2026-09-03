@@ -58,16 +58,18 @@ class CaravanController extends Controller
     }
 
     /**
-     * Lista todas las caravanas registradas.
+     * Lista todas las caravanas registradas según su alcance (own | external | all).
      */
-    public function index(): JsonResponse
+    public function index(\Illuminate\Http\Request $request): JsonResponse
     {
-        $entities = ($this->caravan->list)();
+        $scope = (string) $request->query('scope', 'own');
+        $entities = ($this->caravan->list)($scope);
         
         return response()->json(
             CaravanResource::collection($entities)
         );
     }
+
 
     /**
      * Realiza un Upsert de una caravana.

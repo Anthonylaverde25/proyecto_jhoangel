@@ -202,7 +202,6 @@ class PedigreeLineageTest extends TestCase
             'company_id' => $this->company->id,
             'identification' => 'MOTHER-03',
             'sex' => AnimalSex::FEMALE,
-            'category' => AnimalCategory::VAQUILLONA,
             'teeth' => 4,
         ]);
 
@@ -210,7 +209,6 @@ class PedigreeLineageTest extends TestCase
             'company_id' => $this->company->id,
             'identification' => 'CALF-03',
             'sex' => AnimalSex::MALE,
-            'category' => AnimalCategory::TERNERO,
             'teeth' => 0,
         ]);
 
@@ -239,7 +237,8 @@ class PedigreeLineageTest extends TestCase
         // 4. Verify batch and category changed
         $calf->refresh();
         $this->assertEquals($batch->id, $calf->batch_id);
-        $this->assertEquals(AnimalCategory::NOVILLITO, $calf->category);
+        $novillitoCatId = \App\Models\AnimalCategory::where('code', 'NOVILLITO')->value('id');
+        $this->assertEquals($novillitoCatId, $calf->category_id);
 
         // 5. Verify weight is recorded in caravan_weights
         $weight = \App\Models\CaravanWeight::where('caravan_id', $calf->id)->first();
@@ -272,7 +271,6 @@ class PedigreeLineageTest extends TestCase
             'company_id' => $this->company->id,
             'identification' => 'MOTHER-BULK',
             'sex' => AnimalSex::FEMALE,
-            'category' => AnimalCategory::VACA,
             'teeth' => 6,
         ]);
 
@@ -280,7 +278,6 @@ class PedigreeLineageTest extends TestCase
             'company_id' => $this->company->id,
             'identification' => 'CALF-BULK-1',
             'sex' => AnimalSex::MALE,
-            'category' => AnimalCategory::TERNERO,
             'teeth' => 0,
         ]);
 
@@ -288,7 +285,6 @@ class PedigreeLineageTest extends TestCase
             'company_id' => $this->company->id,
             'identification' => 'CALF-BULK-2',
             'sex' => AnimalSex::FEMALE,
-            'category' => AnimalCategory::TERNERA,
             'teeth' => 0,
         ]);
 
@@ -340,9 +336,11 @@ class PedigreeLineageTest extends TestCase
         $calf1->refresh();
         $calf2->refresh();
         $this->assertEquals($batch->id, $calf1->batch_id);
-        $this->assertEquals(AnimalCategory::NOVILLITO, $calf1->category);
+        $novillitoCatId = \App\Models\AnimalCategory::where('code', 'NOVILLITO')->value('id');
+        $this->assertEquals($novillitoCatId, $calf1->category_id);
         $this->assertEquals($batch->id, $calf2->batch_id);
-        $this->assertEquals(AnimalCategory::VAQUILLONA, $calf2->category);
+        $vaquillonaCatId = \App\Models\AnimalCategory::where('code', 'VAQUILLONA')->value('id');
+        $this->assertEquals($vaquillonaCatId, $calf2->category_id);
 
         // Verify weights registered
         $weight1 = \App\Models\CaravanWeight::where('caravan_id', $calf1->id)->first();
@@ -491,7 +489,6 @@ class PedigreeLineageTest extends TestCase
             'company_id' => $this->company->id,
             'identification' => 'MOTHER-OWN',
             'sex' => AnimalSex::FEMALE,
-            'category' => AnimalCategory::VAQUILLONA,
             'teeth' => 4,
         ]);
 
@@ -499,7 +496,6 @@ class PedigreeLineageTest extends TestCase
             'company_id' => $this->company->id,
             'identification' => 'CALF-OWN',
             'sex' => AnimalSex::MALE,
-            'category' => AnimalCategory::TERNERO,
             'teeth' => 0,
         ]);
 
@@ -548,7 +544,6 @@ class PedigreeLineageTest extends TestCase
             'company_id' => $this->company->id,
             'identification' => 'CALF-SO',
             'sex' => AnimalSex::MALE,
-            'category' => AnimalCategory::NOVILLITO,
             'teeth' => 2,
         ]);
 
@@ -571,7 +566,6 @@ class PedigreeLineageTest extends TestCase
             'company_id' => $this->company->id,
             'identification' => 'SIRE-TEST-01',
             'sex' => AnimalSex::MALE,
-            'category' => AnimalCategory::TORO,
             'teeth' => 8,
         ]);
 
@@ -579,7 +573,6 @@ class PedigreeLineageTest extends TestCase
             'company_id' => $this->company->id,
             'identification' => 'DAM-TEST-01',
             'sex' => AnimalSex::FEMALE,
-            'category' => AnimalCategory::VACA,
             'teeth' => 6,
         ]);
 
@@ -587,7 +580,6 @@ class PedigreeLineageTest extends TestCase
             'company_id' => $this->company->id,
             'identification' => 'CALF-TEST-01',
             'sex' => AnimalSex::MALE,
-            'category' => AnimalCategory::TERNERO,
             'teeth' => 0,
         ]);
 

@@ -9,9 +9,10 @@ use App\Core\Entities\ActivityEntity;
 interface IActivityRepository
 {
     /**
+     * @param int|null $companyId
      * @return ActivityEntity[]
      */
-    public function findAll(): array;
+    public function findAll(?int $companyId = null): array;
 
     /**
      * @param int $companyId
