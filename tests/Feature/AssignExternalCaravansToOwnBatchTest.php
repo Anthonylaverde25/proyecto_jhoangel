@@ -178,7 +178,8 @@ class AssignExternalCaravansToOwnBatchTest extends TestCase
         ]);
 
         // 5. Asertar que falla con 500 (DomainException)
-        $response->assertStatus(500);
+        // AGENT.md 3.5: una invariante de dominio rota devuelve 422, no 500.
+        $response->assertStatus(422);
         $this->assertStringContainsString('ya pertenece a un lote propio', $response->json('message'));
     }
 }

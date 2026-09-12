@@ -48,7 +48,8 @@ final class ResolveVeterinaryDiagnosisUseCase
                 $bullHealth->getScrotalCircumferenceCm(),
                 $bullHealth->getBodyConditionScore(),
                 $bullHealth->getAplomoNotes(),
-                $activeDiagnoses
+                $activeDiagnoses,
+                $this->bullHealthRepository->findVenerealSampling($caravanId, $companyId)
             );
 
             $updatedBullHealth = new BullHealthEvaluationEntity(

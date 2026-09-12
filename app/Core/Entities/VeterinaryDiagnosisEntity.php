@@ -24,7 +24,14 @@ final class VeterinaryDiagnosisEntity
         private ?string $pathogenCode = null,
         private ?string $pathogenName = null,
         private ?bool $pathogenIsDisqualifying = null,
-        private ?string $veterinarianName = null
+        private ?string $veterinarianName = null,
+        // ADR-3: the system user who typed the record in, kept apart from the acting
+        // professional, who may have no login account at all (Use Case 2).
+        private readonly ?int $diagnosedByUserId = null,
+        private readonly ?int $diagnosticProtocolId = null,
+        private readonly ?int $bullLabSampleId = null,
+        private readonly ?string $diagnosedByUserName = null,
+        private readonly ?string $protocolNumber = null
     ) {
     }
 
@@ -96,6 +103,31 @@ final class VeterinaryDiagnosisEntity
     public function getVeterinarianName(): ?string
     {
         return $this->veterinarianName;
+    }
+
+    public function getDiagnosedByUserId(): ?int
+    {
+        return $this->diagnosedByUserId;
+    }
+
+    public function getDiagnosedByUserName(): ?string
+    {
+        return $this->diagnosedByUserName;
+    }
+
+    public function getDiagnosticProtocolId(): ?int
+    {
+        return $this->diagnosticProtocolId;
+    }
+
+    public function getBullLabSampleId(): ?int
+    {
+        return $this->bullLabSampleId;
+    }
+
+    public function getProtocolNumber(): ?string
+    {
+        return $this->protocolNumber;
     }
 
     public function isActive(): bool

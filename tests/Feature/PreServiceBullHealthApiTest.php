@@ -10,9 +10,6 @@ use App\Models\Company;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Models\VeterinaryDiagnosis;
-use Database\Seeders\AnimalCategorySeeder;
-use Database\Seeders\BullHealthSeeder;
-use Database\Seeders\PathogenSeeder;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
 
@@ -49,9 +46,10 @@ class PreServiceBullHealthApiTest extends TestCase
             'password' => bcrypt('secret123'),
         ]);
 
-        $this->seed(AnimalCategorySeeder::class);
-        $this->seed(PathogenSeeder::class);
-        $this->seed(BullHealthSeeder::class);
+        // No se vuelve a sembrar aquí: `Tenant::create()` dispara el pipeline de stancl/tenancy
+        // (CreateDatabase -> MigrateDatabase -> SeedDatabase), que ya ejecuta TenantDatabaseSeeder
+        // completo. Repetir las semillas duplicaba diagnósticos y evaluaciones, y era la causa de
+        // que los conteos esperados no coincidieran con los datos reales.
     }
 
     protected function tearDown(): void
@@ -117,8 +115,10 @@ class PreServiceBullHealthApiTest extends TestCase
         $aptCount = count(array_filter($seededBulls, fn ($b) => $b['status'] === 'APT'));
         $nonAptCount = count(array_filter($seededBulls, fn ($b) => $b['status'] !== 'APT'));
 
-        $this->assertSame(15, $aptCount, "Debe haber exactamente 15 toros aptos para servicio.");
-        $this->assertSame(15, $nonAptCount, "Debe haber exactamente 15 toros no aptos / en tratamiento.");
+        // TR-001..TR-008 completaron dos rondas negativas de raspaje vigentes; TR-009..TR-015
+        // siguen con muestras PENDING_RESULTS y por ADR-4 no pueden computarse APT todavía.
+        $this->assertSame(8, $aptCount, 'Solo los toros con doble raspaje negativo vigente son aptos.');
+        $this->assertSame(22, $nonAptCount, 'El resto queda no apto, en tratamiento o pendiente de muestreo.');
     }
 
     public function test_can_register_bull_health_evaluation_and_update_aptitude(): void
@@ -146,14 +146,19 @@ class PreServiceBullHealthApiTest extends TestCase
 
     public function test_can_resolve_diagnosis_and_toro_becomes_apt(): void
     {
-        // TR-025 is in treatment for Pietín
-        $caravan = Caravan::where('identification', 'TR-025')->firstOrFail();
+        // TR-026 is in treatment for Pietín (Fusobacterium necrophorum) and already carries a
+        // complete negative venereal history, so discharging it must restore full aptitude.
+        $caravan = Caravan::where('identification', 'TR-026')->firstOrFail();
         $diagnosis = VeterinaryDiagnosis::where('caravan_id', $caravan->id)
             ->where('status', 'IN_TREATMENT')
             ->firstOrFail();
 
-        // 1. Verify before resolving
-        $evalBefore = BullHealthEvaluation::where('caravan_id', $caravan->id)->firstOrFail();
+        // 1. Verify before resolving. The bull carries several longitudinal evaluations, so the
+        // assertion must target the most recent one, ordered deterministically (F5).
+        $evalBefore = BullHealthEvaluation::where('caravan_id', $caravan->id)
+            ->orderByDesc('last_evaluation_date')
+            ->orderByDesc('id')
+            ->firstOrFail();
         $this->assertSame('IN_TREATMENT', $evalBefore->status);
 
         // 2. Resolve diagnosis (Alta médica)
@@ -168,7 +173,10 @@ class PreServiceBullHealthApiTest extends TestCase
         $response->assertJsonPath('success', true);
 
         // 3. Verify bull status is now reactively updated to APT
-        $evalAfter = BullHealthEvaluation::where('caravan_id', $caravan->id)->firstOrFail();
+        $evalAfter = BullHealthEvaluation::where('caravan_id', $caravan->id)
+            ->orderByDesc('last_evaluation_date')
+            ->orderByDesc('id')
+            ->firstOrFail();
         $this->assertSame('APT', $evalAfter->status);
     }
 

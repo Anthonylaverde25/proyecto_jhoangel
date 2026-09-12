@@ -113,6 +113,23 @@ class ServiceOrderTest extends TestCase
             'category'       => AnimalCategory::VACA,
             'batch_id'       => $this->sourceBatch->id,
         ]);
+
+        // F5/ADR-5: el candado sanitario pasó a ser fail-closed. Un reproductor sin evaluación
+        // queda bloqueado, de modo que el fixture debe declarar la aptitud de cada toro igual que
+        // lo haría un protocolo diagnóstico cargado.
+        foreach ([$this->bull1, $this->bull2] as $bull) {
+            \App\Models\BullHealthEvaluation::create([
+                'company_id'               => $this->company->id,
+                'caravan_id'               => $bull->id,
+                'last_evaluation_date'     => now()->subDays(10)->toDateString(),
+                'aplomo_notes'             => 'Aplomos correctos verificados en manga.',
+                'scrotal_circumference_cm' => 36.0,
+                'body_condition_score'     => 3.5,
+                'libido'                   => 'ALTA',
+                'status'                   => 'APT',
+                'observations'             => 'Doble raspaje negativo y examen andrológico satisfactorio.',
+            ]);
+        }
     }
 
     protected function tearDown(): void

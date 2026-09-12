@@ -102,6 +102,19 @@ class BulkGestationDiagnosisTest extends TestCase
             'batch_id'       => $this->breedingBatch->id,
         ]);
 
+        // F5/ADR-5: el candado sanitario es fail-closed; el toro necesita aptitud registrada.
+        \App\Models\BullHealthEvaluation::create([
+            'company_id'               => $this->company->id,
+            'caravan_id'               => $this->bull->id,
+            'last_evaluation_date'     => now()->subDays(10)->toDateString(),
+            'aplomo_notes'             => 'Aplomos correctos verificados en manga.',
+            'scrotal_circumference_cm' => 36.0,
+            'body_condition_score'     => 3.5,
+            'libido'                   => 'ALTA',
+            'status'                   => 'APT',
+            'observations'             => 'Doble raspaje negativo y examen andrológico satisfactorio.',
+        ]);
+
         $responseCreate = $this->actingAs($this->user, 'sanctum')
             ->withHeader('X-Company-ID', (string)$this->company->id)
             ->postJson('http://test.localhost/api/service-orders', [

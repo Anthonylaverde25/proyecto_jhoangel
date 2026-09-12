@@ -63,7 +63,9 @@ final class RegisterBullHealthEvaluationUseCase
             $dto->scrotalCircumferenceCm,
             $dto->bodyConditionScore,
             $dto->aplomoNotes,
-            $activeDiagnoses
+            $activeDiagnoses,
+            // ADR-4: aptitude is no longer biometry-only; accumulated venereal rounds decide too.
+            $this->bullHealthRepository->findVenerealSampling($dto->caravanId, $companyId)
         );
 
         // 5. Build evaluation entity

@@ -17,9 +17,12 @@ class VeterinaryDiagnosis extends Model
      */
     protected $fillable = [
         'company_id',
+        'diagnostic_protocol_id',
+        'bull_lab_sample_id',
         'caravan_id',
         'pathogen_id',
         'veterinarian_id',
+        'diagnosed_by_user_id',
         'diagnosis_date',
         'status',
         'resolution_date',
@@ -32,9 +35,12 @@ class VeterinaryDiagnosis extends Model
      */
     protected $casts = [
         'company_id' => 'integer',
+        'diagnostic_protocol_id' => 'integer',
+        'bull_lab_sample_id' => 'integer',
         'caravan_id' => 'integer',
         'pathogen_id' => 'integer',
         'veterinarian_id' => 'integer',
+        'diagnosed_by_user_id' => 'integer',
         'diagnosis_date' => 'date:Y-m-d',
         'resolution_date' => 'date:Y-m-d',
     ];
@@ -54,8 +60,29 @@ class VeterinaryDiagnosis extends Model
         return $this->belongsTo(Pathogen::class);
     }
 
+    /**
+     * ADR-3: the legally responsible professional from the catalogue, who may have no login.
+     */
     public function veterinarian(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'veterinarian_id');
+        return $this->belongsTo(Veterinarian::class, 'veterinarian_id');
+    }
+
+    /**
+     * ADR-3: the system user who typed the record in, kept apart from legal responsibility.
+     */
+    public function diagnosedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'diagnosed_by_user_id');
+    }
+
+    public function diagnosticProtocol(): BelongsTo
+    {
+        return $this->belongsTo(DiagnosticProtocol::class, 'diagnostic_protocol_id');
+    }
+
+    public function labSample(): BelongsTo
+    {
+        return $this->belongsTo(BullLabSample::class, 'bull_lab_sample_id');
     }
 }

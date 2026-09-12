@@ -71,9 +71,24 @@ final class CreateServiceOrderUseCase
                 throw ServiceOrderDomainException::invalidAnimalSex($maleId, 'male', $sexes[$maleId]);
             }
 
-            // Andrological & Clinical Health Guard
+            // Andrological & Clinical Health Guard (F5 / ADR-5).
             $bullHealth = $this->bullHealthRepository->findByCaravanId($maleId, $dto->companyId);
-            if ($bullHealth !== null && !$bullHealth->isApt()) {
+
+            // Fail-closed: a bull that was never evaluated used to slip straight through. The
+            // message is deliberately different from a rejection, so the user understands that
+            // the protocol is missing rather than that the animal is sick.
+            if ($bullHealth === null) {
+                if ((bool) config('livestock.service_order.block_unevaluated_bulls', true)) {
+                    throw ServiceOrderDomainException::domainError(
+                        "El reproductor ID {$maleId} no tiene evaluación sanitaria registrada. " .
+                        'Cargue el protocolo diagnóstico antes del entore.'
+                    );
+                }
+
+                continue;
+            }
+
+            if (!$bullHealth->isApt()) {
                 $statusLabel = $bullHealth->getStatus()->value;
                 $activeDiags = array_map(fn ($d) => $d->getPathogenName() ?? $d->getPathogenCode(), $bullHealth->getActiveDiagnoses());
                 $diagText = !empty($activeDiags) ? ' (' . implode(', ', $activeDiags) . ')' : '';

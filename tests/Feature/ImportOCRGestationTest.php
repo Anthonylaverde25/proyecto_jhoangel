@@ -64,6 +64,16 @@ final class ImportOCRGestationTest extends TestCase
             'password' => bcrypt('password'),
         ]);
 
+        // CompanyContextMiddleware ahora exige pertenencia real a la compañía del header
+        // X-Company-ID, así que el fixture debe declarar el vínculo en `company_user`.
+        \Illuminate\Support\Facades\DB::table('company_user')->insert([
+            'company_id' => $this->company->id,
+            'user_id'    => $this->user->id,
+            'role'       => 'operator',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
         // 6. Create Provider, Farm, Batch, Service Order
         $provider = Provider::firstOrCreate(
             ['cuit' => '30-98765432-1'],

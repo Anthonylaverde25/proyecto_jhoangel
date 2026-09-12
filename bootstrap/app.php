@@ -15,11 +15,30 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'api/*',
         ]);
-        
+
         $middleware->api(append: [
             \App\Http\Middleware\CompanyContextMiddleware::class,
         ]);
+
+        $middleware->alias([
+            // Single door to the veterinary portal: authenticated staff vet or external
+            // professional carrying a temporary access token.
+            'veterinary.portal' => \App\Http\Middleware\ResolveVeterinaryPortalAccess::class,
+
+            // A management session reading somebody's portal writes nothing in their name.
+            'veterinary.portal.readonly' => \App\Http\Middleware\DenyReadOnlyPortalWrites::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // AGENT.md 3.5: a broken business invariant is a 422, never a 500.
+        $exceptions->render(function (\App\Core\Exceptions\DomainException $exception, $request) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'message' => $exception->getMessage(),
+                    'errors' => ['domain' => [$exception->getMessage()]],
+                ], 422);
+            }
+
+            return null;
+        });
     })->create();

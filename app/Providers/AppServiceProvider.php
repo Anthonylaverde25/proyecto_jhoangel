@@ -61,6 +61,32 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(\App\Core\Interfaces\IPathogenRepository::class, \App\Infrastructure\Persistence\EloquentPathogenRepository::class);
         $this->app->bind(\App\Core\Interfaces\IVeterinaryDiagnosisRepository::class, \App\Infrastructure\Persistence\EloquentVeterinaryDiagnosisRepository::class);
         $this->app->bind(\App\Core\Interfaces\IBullHealthEvaluationRepository::class, \App\Infrastructure\Persistence\EloquentBullHealthEvaluationRepository::class);
+
+        // Veterinary diagnostics module (hybrid sanitary architecture).
+        $this->app->bind(\App\Core\Interfaces\IVeterinarianRepository::class, \App\Infrastructure\Persistence\EloquentVeterinarianRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IDiagnosticProtocolRepository::class, \App\Infrastructure\Persistence\EloquentDiagnosticProtocolRepository::class);
+        $this->app->bind(\App\Core\Interfaces\ISampleShipmentRepository::class, \App\Infrastructure\Persistence\EloquentSampleShipmentRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IUserInvitationRepository::class, \App\Infrastructure\Persistence\EloquentUserInvitationRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IVeterinaryPortalAccessTokenRepository::class, \App\Infrastructure\Persistence\EloquentVeterinaryPortalAccessTokenRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IProtocolAttachmentStorage::class, \App\Infrastructure\Storage\LocalTenantAttachmentStorage::class);
+
+        // ADR-12: extraction act numbers are minted by the system under a pessimistic lock.
+        $this->app->bind(\App\Core\Interfaces\IProtocolNumberSequenceRepository::class, \App\Infrastructure\Persistence\EloquentProtocolNumberSequenceRepository::class);
+
+        // One portal identity per request, populated by ResolveVeterinaryPortalAccess and read
+        // by controllers and use cases through the Core interface.
+        $this->app->scoped(\App\Infrastructure\Veterinary\VeterinaryPortalContext::class);
+        $this->app->bind(
+            \App\Core\Interfaces\IVeterinaryPortalContext::class,
+            \App\Infrastructure\Veterinary\VeterinaryPortalContext::class
+        );
+
+        // ADR-4: the aptitude engine reads its thresholds from config/livestock.php, so the
+        // sanitary rules stay auditable and adjustable without redeploying logic.
+        $this->app->bind(
+            \App\Core\Services\BullHealthEvaluationEngine::class,
+            static fn (): \App\Core\Services\BullHealthEvaluationEngine => \App\Core\Services\BullHealthEvaluationEngine::fromConfig()
+        );
     }
 
     /**

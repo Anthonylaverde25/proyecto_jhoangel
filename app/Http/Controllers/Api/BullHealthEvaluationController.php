@@ -4,16 +4,21 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Application\DTOs\PreService\RegisterBullEvaluationSheetDTO;
 use App\Application\DTOs\PreService\RegisterBullHealthEvaluationDTO;
 use App\Application\DTOs\Veterinary\CreateVeterinaryDiagnosisDTO;
 use App\Application\DTOs\Veterinary\ResolveVeterinaryDiagnosisDTO;
 use App\Application\UseCases\PreService\ListPathogensUseCase;
 use App\Application\UseCases\PreService\ListPreServiceBullsUseCase;
+use App\Application\UseCases\PreService\RegisterBullEvaluationSheetUseCase;
 use App\Application\UseCases\PreService\RegisterBullHealthEvaluationUseCase;
 use App\Application\UseCases\Veterinary\CreateVeterinaryDiagnosisUseCase;
 use App\Application\UseCases\Veterinary\ResolveVeterinaryDiagnosisUseCase;
+use App\Core\Interfaces\ICompanyContext;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\PreService\RegisterBullEvaluationSheetRequest;
 use App\Http\Resources\BullHealthEvaluationResource;
+use App\Http\Resources\DiagnosticProtocolResource;
 use App\Http\Resources\PathogenResource;
 use App\Http\Resources\VeterinaryDiagnosisResource;
 use Illuminate\Http\JsonResponse;
@@ -59,7 +64,8 @@ class BullHealthEvaluationController extends Controller
             'observations' => 'nullable|string',
             'diagnosis' => 'nullable|array',
             'diagnosis.pathogen_id' => 'nullable|integer|exists:pathogens,id',
-            'diagnosis.veterinarian_id' => 'nullable|integer|exists:users,id',
+            // ADR-3: profesional actuante del catálogo, no un usuario del sistema.
+            'diagnosis.veterinarian_id' => 'nullable|integer|exists:veterinarians,id',
             'diagnosis.diagnosis_date' => 'nullable|date',
             'diagnosis.status' => 'nullable|string|in:CONFIRMED_POSITIVE,IN_TREATMENT,RESOLVED,SUSPECTED',
             'diagnosis.treatment_notes' => 'nullable|string',
@@ -74,6 +80,30 @@ class BullHealthEvaluationController extends Controller
     }
 
     /**
+     * Register a whole chute session in one atomic pass: biometry, tubes drawn and the extraction
+     * act that gives them a chain of custody.
+     *
+     * Replaces the per-row loop, which issued one request per bull and silently discarded the
+     * sampling checkboxes. ADR-13: this endpoint never signs — the act is born DRAFT and only the
+     * acting professional confirms it, from the portal.
+     */
+    public function registerEvaluationSheet(
+        RegisterBullEvaluationSheetRequest $request,
+        RegisterBullEvaluationSheetUseCase $useCase,
+        ICompanyContext $companyContext
+    ): JsonResponse {
+        $payload = $request->validated();
+        $payload['company_id'] = $companyContext->getCompanyId();
+        $payload['registered_by_user_id'] = $request->user()?->getAuthIdentifier();
+
+        $protocol = $useCase(RegisterBullEvaluationSheetDTO::fromArray($payload));
+
+        return (new DiagnosticProtocolResource($protocol))
+            ->response()
+            ->setStatusCode(201);
+    }
+
+    /**
      * Record a veterinary diagnosis on any caravan (male or female).
      */
     public function createDiagnosis(
@@ -83,7 +113,8 @@ class BullHealthEvaluationController extends Controller
     ): JsonResponse {
         $validated = $request->validate([
             'pathogen_id' => 'required|integer|exists:pathogens,id',
-            'veterinarian_id' => 'nullable|integer|exists:users,id',
+            // ADR-3: profesional actuante del catálogo, no un usuario del sistema.
+            'veterinarian_id' => 'nullable|integer|exists:veterinarians,id',
             'diagnosis_date' => 'nullable|date',
             'status' => 'required|string|in:CONFIRMED_POSITIVE,IN_TREATMENT,RESOLVED,SUSPECTED',
             'treatment_notes' => 'nullable|string',
@@ -91,6 +122,7 @@ class BullHealthEvaluationController extends Controller
         ]);
 
         $validated['caravan_id'] = $caravanId;
+        $validated['diagnosed_by_user_id'] = $request->user()?->getAuthIdentifier();
         $dto = CreateVeterinaryDiagnosisDTO::fromArray($validated);
         $diagnosis = $useCase($dto);
 

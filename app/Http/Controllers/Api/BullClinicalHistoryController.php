@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Core\Enums\DiagnosisStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BullClinicalHistoryResource;
 use App\Models\Caravan;
@@ -29,10 +30,11 @@ class BullClinicalHistoryController extends Controller
                     $query->orderBy('last_evaluation_date', 'desc');
                 },
                 'bullLabSamples' => function ($query) {
-                    $query->with('pathogen')->orderBy('sample_date', 'desc');
+                    $query->with(['pathogen', 'diagnosticProtocol'])->orderBy('sample_date', 'desc');
                 },
                 'diagnoses' => function ($query) {
-                    $query->with(['pathogen', 'veterinarian'])->orderBy('diagnosis_date', 'desc');
+                    $query->with(['pathogen', 'veterinarian', 'diagnosedByUser', 'diagnosticProtocol'])
+                        ->orderBy('diagnosis_date', 'desc');
                 },
             ])
             ->findOrFail($caravanId);
@@ -46,8 +48,12 @@ class BullClinicalHistoryController extends Controller
         $oldestCe = $oldestEval?->scrotal_circumference_cm !== null ? (float) $oldestEval->scrotal_circumference_cm : null;
         $ceDelta = ($latestCe !== null && $oldestCe !== null) ? round($latestCe - $oldestCe, 1) : 0.0;
 
-        // Active clinical diagnoses
-        $activeDiagnoses = $caravan->diagnoses->filter(fn ($d) => $d->status === 'ACTIVE');
+        // Active clinical diagnoses.
+        // F15: this used to compare against 'ACTIVE', a value that does not exist in
+        // DiagnosisStatus, so the filter silently returned an empty collection for every bull.
+        $activeDiagnoses = $caravan->diagnoses->filter(
+            fn ($d) => DiagnosisStatus::tryFrom((string) $d->status)?->isActive() ?? false
+        );
         $hasDisqualifyingDiagnosis = $activeDiagnoses->contains(fn ($d) => (bool) $d->pathogen?->is_disqualifying);
 
         // Laboratory pending status

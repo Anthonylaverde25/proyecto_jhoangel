@@ -14,7 +14,10 @@ final class VeterinaryDiagnosisMapper
     public static function toDomain(VeterinaryDiagnosis $model): VeterinaryDiagnosisEntity
     {
         $pathogen = $model->relationLoaded('pathogen') ? $model->pathogen : null;
+        // ADR-3: `veterinarian` is now the catalogue professional; `diagnosedByUser` is the operator.
         $vet = $model->relationLoaded('veterinarian') ? $model->veterinarian : null;
+        $operator = $model->relationLoaded('diagnosedByUser') ? $model->diagnosedByUser : null;
+        $protocol = $model->relationLoaded('diagnosticProtocol') ? $model->diagnosticProtocol : null;
 
         return new VeterinaryDiagnosisEntity(
             id: (int) $model->id,
@@ -30,7 +33,12 @@ final class VeterinaryDiagnosisMapper
             pathogenCode: $pathogen?->code,
             pathogenName: $pathogen?->name,
             pathogenIsDisqualifying: $pathogen !== null ? (bool) $pathogen->is_disqualifying : null,
-            veterinarianName: $vet?->name
+            veterinarianName: $vet?->name,
+            diagnosedByUserId: $model->diagnosed_by_user_id !== null ? (int) $model->diagnosed_by_user_id : null,
+            diagnosticProtocolId: $model->diagnostic_protocol_id !== null ? (int) $model->diagnostic_protocol_id : null,
+            bullLabSampleId: $model->bull_lab_sample_id !== null ? (int) $model->bull_lab_sample_id : null,
+            diagnosedByUserName: $operator?->name,
+            protocolNumber: $protocol?->protocol_number
         );
     }
 }

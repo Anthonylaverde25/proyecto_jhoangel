@@ -433,7 +433,7 @@ class BullHealthSeeder extends Seeder
                 'aplomo' => 'Pietín activo / Gabarro podal interdigital en miembro posterior izquierdo con inflamación.',
                 'status' => 'IN_TREATMENT',
                 'obs' => 'EN TRATAMIENTO: Dichelobacter nodosus / Fusobacterium necrophorum. Lavaje y desbridamiento.',
-                'pathogen_code' => 'DICHELOBACTER_NODOSUS',
+                'pathogen_code' => 'FUSOBACTERIUM_NECROPHORUM',
                 'diag_status' => 'IN_TREATMENT',
                 'sample_type' => null,
                 'tube' => null,
@@ -447,7 +447,7 @@ class BullHealthSeeder extends Seeder
                 'aplomo' => 'Pietín leve en miembro anterior derecho. Vendaje con sulfato de cobre.',
                 'status' => 'IN_TREATMENT',
                 'obs' => 'EN TRATAMIENTO: Manejo podológico.',
-                'pathogen_code' => 'DICHELOBACTER_NODOSUS',
+                'pathogen_code' => 'FUSOBACTERIUM_NECROPHORUM',
                 'diag_status' => 'IN_TREATMENT',
                 'sample_type' => null,
                 'tube' => null,
@@ -558,6 +558,29 @@ class BullHealthSeeder extends Seeder
                 ]);
             }
 
+            // Los toros en tratamiento por una afección con patógeno registrado llevan muestreo
+            // venéreo negativo completo: al recibir el alta deben volver a APT, y la regla de
+            // ADR-4 exige dos rondas negativas vigentes. Las afecciones sin patógeno (hematoma
+            // prepucial, déficit nutricional) no tienen diagnóstico que las represente en el
+            // modelo, por lo que esos toros quedan pendientes de muestreo, no aptos.
+            if (($cfg['status'] ?? null) === 'IN_TREATMENT' && !empty($cfg['pathogen_code'])) {
+                foreach ([1, 2] as $round) {
+                    BullLabSample::create([
+                        'company_id' => $companyId,
+                        'caravan_id' => $caravan->id,
+                        'evaluation_id' => $evalCurrent->id,
+                        'sample_type' => 'PREPUCE_SCRAPE',
+                        'sample_round' => $round,
+                        'sample_date' => now()->subDays(30 - ($round * 10))->toDateString(),
+                        'tube_number' => 'R-0' . $round . '-' . substr($cfg['tag'], -3),
+                        'status' => 'NEGATIVE_CLEARED',
+                        'protocol_number' => $round === 1 ? 'LAB-2026-890' : 'LAB-2026-920',
+                        'result_date' => now()->subDays(24 - ($round * 10))->toDateString(),
+                        'notes' => $round . 'º raspaje prepucial negativo previo al tratamiento podal.',
+                    ]);
+                }
+            }
+
             // Si tiene diagnóstico clínico persistente
             if (!empty($cfg['pathogen_code']) && isset($pathogens[$cfg['pathogen_code']])) {
                 $pathogen = $pathogens[$cfg['pathogen_code']];
@@ -565,7 +588,10 @@ class BullHealthSeeder extends Seeder
                     'company_id' => $companyId,
                     'caravan_id' => $caravan->id,
                     'pathogen_id' => $pathogen->id,
-                    'veterinarian_id' => $vetUser->id,
+                    // ADR-3: this column now points at the `veterinarians` catalogue. The seeded
+                    // account is the operator who typed the record in, not the acting professional;
+                    // DiagnosticProtocolSeeder later attaches the real M.V. and the source protocol.
+                    'diagnosed_by_user_id' => $vetUser->id,
                     'diagnosis_date' => now()->subDays(rand(2, 6))->toDateString(),
                     'status' => $cfg['diag_status'] ?? 'CONFIRMED_POSITIVE',
                     'treatment_notes' => $cfg['obs'],

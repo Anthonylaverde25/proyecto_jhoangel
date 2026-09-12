@@ -258,7 +258,8 @@ class PedigreeLineageTest extends TestCase
             'weaning_date' => '2026-05-30',
             'weaning_weight' => 180.5
         ]);
-        $responseDuplicate->assertStatus(500); // Because we throw a DomainException from Use Case
+        // AGENT.md 3.5: una invariante de dominio rota devuelve 422, no 500.
+        $responseDuplicate->assertStatus(422);
     }
 
     public function test_can_bulk_wean_calves(): void

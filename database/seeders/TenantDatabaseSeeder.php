@@ -31,6 +31,17 @@ class TenantDatabaseSeeder extends Seeder
             BatchTypeSeeder::class,
             PathogenSeeder::class,
             BullHealthSeeder::class,
+            // Sanitary diagnostics module: catalogues, evidentiary protocols, portal access
+            // links, and a final aptitude recomputation under the venereal rule (ADR-4).
+            VeterinaryCatalogSeeder::class,
+            DiagnosticProtocolSeeder::class,
+            // Actas de extracción en sus cuatro estados (ADR-11 / ADR-13 / ADR-17).
+            ExtractionActSeeder::class,
+            VeterinaryPortalAccessTokenSeeder::class,
+            BullAptitudeRecalculationSeeder::class,
+            // Va último a propósito: el recálculo anterior crea una evaluación para todo toro que
+            // no tenga ninguna, y estos tres deben quedar sin historia sanitaria alguna.
+            UnevaluatedTestBullsSeeder::class,
         ]);
     }
 }

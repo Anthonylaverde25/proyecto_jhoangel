@@ -47,6 +47,20 @@ return [
             'report' => false,
         ],
 
+        /*
+         * Private per-tenant disk holding sanitary evidence (lab reports, WhatsApp photos).
+         * Deliberately NOT symlinked into public/: the only read path is the signed
+         * download endpoint guarded by DiagnosticProtocolPolicy.
+         */
+        'tenant' => [
+            'driver' => 'local',
+            'root' => storage_path('app/tenants'),
+            'serve' => false,
+            'visibility' => 'private',
+            'throw' => true,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
