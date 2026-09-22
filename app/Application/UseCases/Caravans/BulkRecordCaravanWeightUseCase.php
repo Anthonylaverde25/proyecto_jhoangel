@@ -10,6 +10,7 @@ use App\Core\Interfaces\ICaravanWeightRepository;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Services\BatchWeightService;
 use Illuminate\Support\Facades\DB;
+use App\Core\Enums\BatchWeightCause;
 
 final class BulkRecordCaravanWeightUseCase
 {
@@ -50,7 +51,7 @@ final class BulkRecordCaravanWeightUseCase
 
             // 4. Recalculate unique batches once
             foreach (array_unique($batchIdsToRecalculate) as $batchId) {
-                $this->batchWeightService->recalculateBatchWeight($batchId);
+                $this->batchWeightService->recalculateBatchWeight($batchId, BatchWeightCause::CONTROL);
             }
         });
     }

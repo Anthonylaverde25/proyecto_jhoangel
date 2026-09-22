@@ -9,6 +9,7 @@ use App\Core\Entities\BatchEntity;
 use App\Core\Interfaces\IActivityRepository;
 use App\Models\Activity;
 use App\Models\CompanyActivity;
+use Illuminate\Support\Facades\DB;
 
 class EloquentActivityRepository implements IActivityRepository
 {
@@ -20,21 +21,35 @@ class EloquentActivityRepository implements IActivityRepository
             $query->with(['companies' => function ($q) use ($companyId) {
                 $q->where('company_id', $companyId);
             }, 'batches' => function ($q) use ($companyId) {
-                $q->where('company_id', $companyId)->with(['farm', 'batchType'])->withCount('caravans');
+                $q->where('company_id', $companyId)->with(['farm', 'batchType'])->withCount('caravans')->withExists('outgoingMovements');
             }]);
         } else {
             $query->with(['batches' => function ($q) {
-                $q->with(['farm', 'batchType'])->withCount('caravans');
+                $q->with(['farm', 'batchType'])->withCount('caravans')->withExists('outgoingMovements');
             }]);
         }
 
-        return $query->get()->map(function ($model) use ($companyId) {
+        $entities = $query->get()->map(function ($model) use ($companyId) {
             $isEnabled = (bool) $model->is_active;
+            $isInitial = false;
+            $isFinal = (bool) $model->is_final;
+            $sortOrder = 99;
 
             if ($companyId && $model->relationLoaded('companies')) {
                 $pivotCompany = $model->companies->first();
-                if ($pivotCompany && isset($pivotCompany->pivot->is_enabled)) {
-                    $isEnabled = (bool) $pivotCompany->pivot->is_enabled;
+                if ($pivotCompany && isset($pivotCompany->pivot)) {
+                    if (isset($pivotCompany->pivot->is_enabled)) {
+                        $isEnabled = (bool) $pivotCompany->pivot->is_enabled;
+                    }
+                    if (isset($pivotCompany->pivot->is_initial)) {
+                        $isInitial = (bool) $pivotCompany->pivot->is_initial;
+                    }
+                    if (isset($pivotCompany->pivot->is_final)) {
+                        $isFinal = (bool) $pivotCompany->pivot->is_final;
+                    }
+                    if (isset($pivotCompany->pivot->sort_order)) {
+                        $sortOrder = (int) $pivotCompany->pivot->sort_order;
+                    }
                 }
             }
 
@@ -43,8 +58,11 @@ class EloquentActivityRepository implements IActivityRepository
                 $model->name,
                 $model->code,
                 $isEnabled,
-                $model->is_final
+                $isFinal,
+                $isInitial,
+                $sortOrder
             );
+
             $entity->setBatches($model->batches->map(fn($b) => new BatchEntity(
                 $b->id,
                 $b->name,
@@ -58,30 +76,50 @@ class EloquentActivityRepository implements IActivityRepository
                 (int) $b->activity_id,
                 $model->name,
                 $model->code,
-                (float) $b->current_weight,
-                (int) $b->caravans_count,
-                $b->batch_type_id ? (int) $b->batch_type_id : null,
-                $b->batchType?->name,
-                $b->batchType?->code
+                $b->current_weight !== null ? (float) $b->current_weight : null,
+                totalWeight: $b->total_weight !== null ? (float) $b->total_weight : null,
+                weighedCount: $b->weighed_count !== null ? (int) $b->weighed_count : null,
+                caravansCount: (int) $b->caravans_count,
+                batchTypeId: $b->batch_type_id ? (int) $b->batch_type_id : null,
+                batchTypeName: $b->batchType?->name,
+                batchTypeCode: $b->batchType?->code,
+                isConfined: $b->is_confined !== null ? (bool) $b->is_confined : null,
+                wasEmptied: (bool) ($b->outgoing_movements_exists ?? false)
             ))->toArray());
+
             return $entity;
         })->toArray();
+
+        // Ordenar entidades por sortOrder ascendente
+        usort($entities, fn(ActivityEntity $a, ActivityEntity $b) => $a->getSortOrder() <=> $b->getSortOrder());
+
+        return $entities;
     }
 
     public function findEnabledByCompany(int $companyId): array
     {
-        return Activity::whereHas('companies', function ($query) use ($companyId) {
+        $entities = Activity::whereHas('companies', function ($query) use ($companyId) {
             $query->where('company_id', $companyId)->where('is_enabled', true);
-        })->with(['batches' => function ($query) use ($companyId) {
-            $query->where('company_id', $companyId)->with(['farm', 'batchType'])->withCount('caravans');
+        })->with(['companies' => function ($q) use ($companyId) {
+            $q->where('company_id', $companyId);
+        }, 'batches' => function ($query) use ($companyId) {
+            $query->where('company_id', $companyId)->with(['farm', 'batchType'])->withCount('caravans')->withExists('outgoingMovements');
         }])->get()->map(function ($model) {
+            $pivot = $model->companies->first()?->pivot;
+            $isInitial = $pivot ? (bool) $pivot->is_initial : false;
+            $isFinal = $pivot ? (bool) $pivot->is_final : (bool) $model->is_final;
+            $sortOrder = $pivot ? (int) $pivot->sort_order : 1;
+
             $entity = new ActivityEntity(
                 $model->id,
                 $model->name,
                 $model->code,
                 true,
-                $model->is_final
+                $isFinal,
+                $isInitial,
+                $sortOrder
             );
+
             $entity->setBatches($model->batches->map(fn($b) => new BatchEntity(
                 $b->id,
                 $b->name,
@@ -95,14 +133,23 @@ class EloquentActivityRepository implements IActivityRepository
                 (int) $b->activity_id,
                 $model->name,
                 $model->code,
-                (float) $b->current_weight,
-                (int) $b->caravans_count,
-                $b->batch_type_id ? (int) $b->batch_type_id : null,
-                $b->batchType?->name,
-                $b->batchType?->code
+                $b->current_weight !== null ? (float) $b->current_weight : null,
+                totalWeight: $b->total_weight !== null ? (float) $b->total_weight : null,
+                weighedCount: $b->weighed_count !== null ? (int) $b->weighed_count : null,
+                caravansCount: (int) $b->caravans_count,
+                batchTypeId: $b->batch_type_id ? (int) $b->batch_type_id : null,
+                batchTypeName: $b->batchType?->name,
+                batchTypeCode: $b->batchType?->code,
+                isConfined: $b->is_confined !== null ? (bool) $b->is_confined : null,
+                wasEmptied: (bool) ($b->outgoing_movements_exists ?? false)
             ))->toArray());
+
             return $entity;
         })->toArray();
+
+        usort($entities, fn(ActivityEntity $a, ActivityEntity $b) => $a->getSortOrder() <=> $b->getSortOrder());
+
+        return $entities;
     }
 
     public function toggleActivity(int $companyId, int $activityId, bool $isEnabled): bool
@@ -113,6 +160,26 @@ class EloquentActivityRepository implements IActivityRepository
         );
 
         return true;
+    }
+
+    public function updateCompanyFlow(int $companyId, array $configs): void
+    {
+        DB::transaction(function () use ($companyId, $configs) {
+            foreach ($configs as $config) {
+                CompanyActivity::updateOrCreate(
+                    [
+                        'company_id' => $companyId,
+                        'activity_id' => (int) $config['activity_id'],
+                    ],
+                    [
+                        'is_enabled' => (bool) $config['is_enabled'],
+                        'is_initial' => (bool) $config['is_initial'],
+                        'is_final' => (bool) $config['is_final'],
+                        'sort_order' => (int) $config['sort_order'],
+                    ]
+                );
+            }
+        });
     }
 
     public function findByCode(string $code): ?ActivityEntity
@@ -127,7 +194,9 @@ class EloquentActivityRepository implements IActivityRepository
             $model->name,
             $model->code,
             $model->is_active,
-            $model->is_final
+            $model->is_final,
+            false,
+            1
         );
     }
 }

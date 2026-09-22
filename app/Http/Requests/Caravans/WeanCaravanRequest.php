@@ -24,13 +24,18 @@ class WeanCaravanRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'target_batch_id' => ['required', 'integer', 'exists:batches,id'],
-            'weaning_date'    => ['required', 'date', 'date_format:Y-m-d'],
-            'weaning_weight'  => ['required', 'numeric', 'min:0.1'],
-            'new_category'    => ['nullable', 'string'],
-            'new_category_id' => ['nullable', 'integer', 'exists:animal_categories,id'],
+            'new_batch'          => ['nullable', 'array'],
+            'new_batch.name'     => ['required_with:new_batch', 'string', 'max:255'],
+            'new_batch.farm_id'  => ['nullable', 'integer', 'exists:farms,id'],
+            'new_batch.activity_id' => ['nullable', 'integer', 'exists:activities,id'],
+            'new_batch.batch_type_id' => ['nullable', 'integer', 'exists:batch_types,id'],
+            'target_batch_id'    => ['required_without:new_batch', 'nullable', 'integer', 'exists:batches,id'],
+            'weaning_date'       => ['required', 'date', 'date_format:Y-m-d'],
+            'weaning_weight'     => ['required', 'numeric', 'min:0.1'],
+            'new_category'       => ['nullable', 'string'],
+            'new_category_id'    => ['nullable', 'integer', 'exists:animal_categories,id'],
             'new_subcategory_id' => ['nullable', 'integer', 'exists:animal_subcategories,id'],
-            'notes'           => ['nullable', 'string', 'max:500'],
+            'notes'              => ['nullable', 'string', 'max:500'],
         ];
     }
 }

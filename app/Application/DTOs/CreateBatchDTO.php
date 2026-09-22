@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 namespace App\Application\DTOs;
 
+/**
+ * `isConfined` is the only tri-state field here: true = penned, false = pasture and
+ * null = nobody declared it. The paths where a person fills a form demand the answer
+ * (see ValidatesBatchClassification); the paths that create a batch out of a scanned
+ * sheet that never asked leave it null rather than inventing a "pasture".
+ */
 final readonly class CreateBatchDTO
 {
     public function __construct(
@@ -14,6 +20,7 @@ final readonly class CreateBatchDTO
         public ?float $weight = null,
         public ?int $batchTypeId = null,
         public bool $knowsToEat = false,
+        public ?bool $isConfined = null,
         public ?int $ageInMonths = null,
         public ?float $minWeight = null,
         public ?float $maxWeight = null
@@ -30,6 +37,7 @@ final readonly class CreateBatchDTO
             isset($data['weight']) ? (float) $data['weight'] : null,
             isset($data['batch_type_id']) ? (int) $data['batch_type_id'] : null,
             (bool) ($data['knows_to_eat'] ?? false),
+            isset($data['is_confined']) ? (bool) $data['is_confined'] : null,
             isset($data['age_in_months']) ? (int) $data['age_in_months'] : null,
             isset($data['min_weight']) ? (float) $data['min_weight'] : null,
             isset($data['max_weight']) ? (float) $data['max_weight'] : null

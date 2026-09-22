@@ -13,6 +13,10 @@ class BatchWeight extends Model
         'batch_id',
         'activity_id',
         'weight',
+        'total_weight',
+        'caravans_count',
+        'weighed_count',
+        'weights_as_of',
         'type',
         'weighing_date',
     ];
@@ -21,7 +25,11 @@ class BatchWeight extends Model
         'batch_id' => 'integer',
         'activity_id' => 'integer',
         'weighing_date' => 'date',
+        'weights_as_of' => 'date',
         'weight' => 'decimal:2',
+        'total_weight' => 'decimal:2',
+        'caravans_count' => 'integer',
+        'weighed_count' => 'integer',
     ];
 
     public function batch(): BelongsTo

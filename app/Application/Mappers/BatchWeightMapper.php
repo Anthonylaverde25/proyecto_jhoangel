@@ -16,9 +16,13 @@ final class BatchWeightMapper
             $model->batch_id,
             $model->activity_id,
             $model->activity?->name,
-            (float) $model->weight,
+            $model->weight !== null ? (float) $model->weight : null,
             $model->type,
-            $model->weighing_date
+            $model->weighing_date,
+            $model->total_weight !== null ? (float) $model->total_weight : null,
+            $model->caravans_count !== null ? (int) $model->caravans_count : null,
+            $model->weighed_count !== null ? (int) $model->weighed_count : null,
+            $model->weights_as_of
         );
     }
 }

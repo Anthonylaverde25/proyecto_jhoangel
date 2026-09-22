@@ -41,6 +41,7 @@ final class CreateBatchUseCase
             activityId: $activityId,
             batchTypeId: $dto->batchTypeId,
             knowsToEat: $dto->knowsToEat,
+            isConfined: $dto->isConfined,
             ageInMonths: $dto->ageInMonths,
             minWeight: $dto->minWeight,
             maxWeight: $dto->maxWeight
@@ -48,14 +49,20 @@ final class CreateBatchUseCase
 
         $savedEntity = $this->repository->save($entity);
 
-        // Siempre se genera el registro de peso inicial al crear el lote.
-        // Si no se provee peso, se asume 0.0 para el historial.
+        // El punto de apertura del lote. El peso va NULO cuando no se declaró ninguno:
+        // un lote sin animales no tiene peso promedio, y escribir 0 afirmaría que los
+        // animales no pesan nada, que es como la curva de un lote recién creado terminaba
+        // arrancando desde el piso.
         $this->repository->addWeight(
             $savedEntity->getId(),
-            $dto->weight ?? 0.0,
+            $dto->weight,
             'INITIAL',
             new \DateTimeImmutable(),
-            $activityId
+            $activityId,
+            totalWeight: 0.0,
+            caravansCount: 0,
+            weighedCount: 0,
+            weightsAsOf: null
         );
 
         return $savedEntity;

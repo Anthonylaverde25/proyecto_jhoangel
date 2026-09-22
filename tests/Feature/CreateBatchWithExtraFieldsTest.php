@@ -36,12 +36,15 @@ class CreateBatchWithExtraFieldsTest extends TestCase
 
         // Assign active batch type
         $this->batchType = BatchType::firstOrCreate([
-            'company_id' => $this->company->id,
             'code' => 'OPERATIONAL'
         ], [
             'name' => 'Operativo',
             'is_active' => true
         ]);
+        \App\Models\CompanyBatchType::firstOrCreate([
+            'company_id' => $this->company->id,
+            'batch_type_id' => $this->batchType->id,
+        ], ['is_enabled' => true]);
 
         $companyContext = new \App\Core\Contexts\CompanyContext();
         $companyContext->setCompanyId($this->company->id);

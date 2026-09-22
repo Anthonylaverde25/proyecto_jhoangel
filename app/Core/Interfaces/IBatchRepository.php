@@ -19,6 +19,11 @@ interface IBatchRepository
     public function findByNameAndFarmId(string $name, int $farmId): ?BatchEntity;
 
     /**
+     * Active batch of the current company with exactly this name, if any.
+     */
+    public function findActiveByName(string $name): ?BatchEntity;
+
+    /**
      * @return BatchEntity[]
      */
     public function findByFarmId(int $farmId, ?string $batchType = null): array;
@@ -27,7 +32,26 @@ interface IBatchRepository
 
     public function delete(int $id): bool;
 
-    public function addWeight(int $batchId, float $weight, string $type, \DateTimeInterface $date, ?int $activityId = null): void;
+    /**
+     * Records a point in the weight series of a batch.
+     *
+     * `$weight` is nullable on purpose: the average of an empty batch is undefined, and
+     * writing a zero there would state that the animals weigh nothing.
+     */
+    public function addWeight(
+        int $batchId,
+        ?float $weight,
+        string $type,
+        \DateTimeInterface $date,
+        ?int $activityId = null,
+        ?float $totalWeight = null,
+        ?int $caravansCount = null,
+        ?int $weighedCount = null,
+        ?\DateTimeInterface $weightsAsOf = null
+    ): void;
+
+    /** Most recent point of the weight series of a batch, by date and then by insertion. */
+    public function findLatestWeight(int $batchId): ?\App\Core\Entities\BatchWeightEntity;
 
     public function getWeights(int $batchId): array;
 

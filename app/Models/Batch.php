@@ -20,9 +20,13 @@ class Batch extends Model
         'farm_id',
         'activity_id',
         'current_weight',
+        'total_weight',
+        'caravans_count',
+        'weighed_count',
         'min_weight',
         'max_weight',
         'knows_to_eat',
+        'is_confined',
         'age_in_months',
         'observaciones',
         'is_active',
@@ -34,9 +38,13 @@ class Batch extends Model
         'farm_id' => 'integer',
         'activity_id' => 'integer',
         'current_weight' => 'float',
+        'total_weight' => 'float',
+        'caravans_count' => 'integer',
+        'weighed_count' => 'integer',
         'min_weight' => 'float',
         'max_weight' => 'float',
         'knows_to_eat' => 'boolean',
+        'is_confined' => 'boolean',
         'age_in_months' => 'integer',
         'is_active' => 'boolean',
         'is_system' => 'boolean',
@@ -60,6 +68,15 @@ class Batch extends Model
     public function batchType(): BelongsTo
     {
         return $this->belongsTo(BatchType::class);
+    }
+
+    /**
+     * Movements that took animals OUT of this batch. Distinguishes a batch that was
+     * emptied by a transfer from one that never held animals at all.
+     */
+    public function outgoingMovements(): HasMany
+    {
+        return $this->hasMany(CaravanMovement::class, 'from_batch_id');
     }
 
     public function serviceDetail(): HasOne
@@ -95,6 +112,13 @@ class Batch extends Model
         });
     }
 
+    public function scopeWeaning($query)
+    {
+        return $query->whereHas('batchType', function ($q) {
+            $q->where('code', 'WEANING');
+        });
+    }
+
     public function isInQuarantine(): bool
     {
         return $this->batchType?->code === 'QUARANTINE' ?? false;
@@ -103,6 +127,11 @@ class Batch extends Model
     public function isServiceBatch(): bool
     {
         return $this->batchType?->code === 'SERVICE' ?? false;
+    }
+
+    public function isWeaningBatch(): bool
+    {
+        return $this->batchType?->code === 'WEANING' ?? false;
     }
 
     public function isSystem(): bool

@@ -31,6 +31,9 @@ class BirthHistoryResource extends JsonResource
             'is_nursing'            => $this->resource->isNursing(),
             'calf_sex'              => $this->resource->getCalfSex(),
             'calf_batch_name'       => $this->resource->getCalfBatchName(),
+            'calf_batch_id'         => $this->resource->getCalfBatchId(),
+            'mother_batch_id'       => $this->resource->getMotherBatchId(),
+            'mother_batch_name'     => $this->resource->getMotherBatchName(),
         ];
     }
 }

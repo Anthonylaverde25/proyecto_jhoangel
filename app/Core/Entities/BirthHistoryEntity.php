@@ -16,7 +16,10 @@ final class BirthHistoryEntity
         private string $calfIdentification,
         private bool $isNursing,
         private ?string $calfSex,
-        private ?string $calfBatchName
+        private ?string $calfBatchName,
+        private ?int $calfBatchId = null,
+        private ?int $motherBatchId = null,
+        private ?string $motherBatchName = null
     ) {
     }
 
@@ -68,5 +71,20 @@ final class BirthHistoryEntity
     public function getCalfBatchName(): ?string
     {
         return $this->calfBatchName;
+    }
+
+    public function getCalfBatchId(): ?int
+    {
+        return $this->calfBatchId;
+    }
+
+    public function getMotherBatchId(): ?int
+    {
+        return $this->motherBatchId;
+    }
+
+    public function getMotherBatchName(): ?string
+    {
+        return $this->motherBatchName;
     }
 }

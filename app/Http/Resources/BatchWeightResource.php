@@ -17,6 +17,10 @@ class BatchWeightResource extends JsonResource
             'activity_id' => $this->getActivityId(),
             'activity_name' => $this->getActivityName(),
             'weight' => $this->getWeight(),
+            'total_weight' => $this->getTotalWeight(),
+            'caravans_count' => $this->getCaravansCount(),
+            'weighed_count' => $this->getWeighedCount(),
+            'weights_as_of' => $this->getWeightsAsOf()?->format('Y-m-d'),
             'type' => $this->getType(),
             'weighing_date' => $this->getWeighingDate()->format('Y-m-d'),
         ];

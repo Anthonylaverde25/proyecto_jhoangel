@@ -14,7 +14,9 @@ final class CaravanMovementEntity
         private readonly string $type, // ORIGIN, ENTRY, EXIT, TRANSFER
         private readonly \DateTimeInterface $movementDate,
         private readonly ?string $observations = null,
-        private readonly ?string $caravanIdentification = null
+        private readonly ?string $caravanIdentification = null,
+        private readonly ?int $fromBatchId = null,
+        private readonly ?int $toBatchId = null
     ) {}
 
     public function getId(): ?int
@@ -55,5 +57,15 @@ final class CaravanMovementEntity
     public function getCaravanIdentification(): ?string
     {
         return $this->caravanIdentification;
+    }
+
+    public function getFromBatchId(): ?int
+    {
+        return $this->fromBatchId;
+    }
+
+    public function getToBatchId(): ?int
+    {
+        return $this->toBatchId;
     }
 }

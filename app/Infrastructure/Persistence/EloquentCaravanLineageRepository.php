@@ -31,6 +31,27 @@ class EloquentCaravanLineageRepository implements ICaravanLineageRepository
     }
 
     /**
+     * @param int[] $caravanIds
+     * @return array<int, LineageEntity>
+     */
+    public function findByCaravanIds(array $caravanIds): array
+    {
+        if (empty($caravanIds)) {
+            return [];
+        }
+
+        $lineages = [];
+        CaravanLineage::with(['mother', 'father'])
+            ->whereIn('caravan_id', $caravanIds)
+            ->get()
+            ->each(function (CaravanLineage $model) use (&$lineages) {
+                $lineages[(int) $model->caravan_id] = LineageMapper::toEntity($model);
+            });
+
+        return $lineages;
+    }
+
+    /**
      * @param int $motherId
      * @return LineageEntity[]
      */

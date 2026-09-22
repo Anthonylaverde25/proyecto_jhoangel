@@ -41,6 +41,7 @@ class BulkStoreCaravanRequest extends FormRequest
             'caravans.*.batch_id'       => 'nullable|integer|exists:batches,id',
             'caravans.*.farm_id'        => 'nullable|integer|exists:farms,id',
             'caravans.*.is_empty'       => 'nullable|boolean',
+            'caravans.*.entry_date'     => 'nullable|date',
         ];
 
         $caravans = $this->input('caravans', []);

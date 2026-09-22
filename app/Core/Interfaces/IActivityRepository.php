@@ -33,4 +33,11 @@ interface IActivityRepository
      * @return ActivityEntity|null
      */
     public function findByCode(string $code): ?ActivityEntity;
+
+    /**
+     * @param int $companyId
+     * @param array $configs
+     * @return void
+     */
+    public function updateCompanyFlow(int $companyId, array $configs): void;
 }

@@ -17,6 +17,7 @@ use Illuminate\Http\Request;
 use App\Http\Requests\Batches\CreateBatchRequest;
 use App\Http\Requests\Batches\CreateServiceBatchRequest;
 use App\Http\Requests\Batches\ChangeBatchActivityRequest;
+use App\Http\Requests\Batches\ChangeBatchManagementRequest;
 use App\Http\Requests\AssignExternalCaravansToOwnBatchRequest;
 
 class BatchController extends Controller
@@ -109,6 +110,19 @@ class BatchController extends Controller
         $weight = isset($validated['weight']) ? (float) $validated['weight'] : null;
 
         $entity = ($this->batch->changeActivity)($id, (int) $validated['activity_id'], $weight);
+
+        return response()->json(new BatchResource($entity));
+    }
+
+    /**
+     * Cambia el sistema de manejo del lote (corral o extensivo).
+     *
+     * A diferencia del par (actividad, tipo), esta bandera es mutable y su cambio
+     * no mueve hacienda: no toca tipo, actividad, animales ni pesos.
+     */
+    public function changeManagement(ChangeBatchManagementRequest $request, int $id): JsonResponse
+    {
+        $entity = ($this->batch->changeManagement)($id, (bool) $request->validated()['is_confined']);
 
         return response()->json(new BatchResource($entity));
     }

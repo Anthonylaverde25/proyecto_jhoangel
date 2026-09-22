@@ -42,8 +42,10 @@ class WorkTemplateTest extends TestCase
                 ->getJson('/api/work-templates');
 
             $response->assertStatus(200);
-            $response->assertJsonPath('0.code', 'ING-01');
-            $response->assertJsonPath('0.category', 'ENTRY');
+            // The listing has no explicit order, so look the template up by code.
+            $ing01 = collect($response->json())->firstWhere('code', 'ING-01');
+            $this->assertNotNull($ing01);
+            $this->assertSame('ENTRY', $ing01['category']);
 
         } finally {
             if (tenancy()->initialized) {

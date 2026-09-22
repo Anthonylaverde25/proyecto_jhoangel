@@ -16,6 +16,7 @@ use App\Core\ValueObjects\CaravanNumber;
 use App\Core\ValueObjects\FemaleReproductiveDetails;
 use App\Core\Enums\AnimalSex;
 use App\Core\Enums\GestationStage;
+use App\Core\Enums\BatchWeightCause;
 
 final class UpsertCaravanUseCase
 {
@@ -112,24 +113,27 @@ final class UpsertCaravanUseCase
         $this->caravanRepository->save($entity);
 
         // Record weight in caravan_weights
+        $weighingDateStr = $dto->entryDate ?? date('Y-m-d');
+        $weighingDateObj = new \DateTime($weighingDateStr);
         $weightRecorded = false;
         if ($newWeight !== null) {
             ($this->recordCaravanWeightUseCase)(new \App\Application\DTOs\RecordCaravanWeightDTO(
                 $entity->getId(),
                 $newWeight,
-                date('Y-m-d'),
+                $weighingDateStr,
                 'Weight updated via upsert'
             ));
             $weightRecorded = true;
         }
 
-        // Recalculate Batch weights
+        // Recalculate Batch weights. The animal changed batch, so for both series this
+        // is a change of composition and not a weighing.
         if ($oldBatchId !== null && $oldBatchId !== $newBatchId) {
-            $this->batchWeightService->recalculateBatchWeight($oldBatchId);
+            $this->batchWeightService->recalculateBatchWeight($oldBatchId, BatchWeightCause::MOVEMENT_OUT, $weighingDateObj);
         }
-        
+
         if ($newBatchId !== null && !$weightRecorded && $newBatchId !== $oldBatchId) {
-            $this->batchWeightService->recalculateBatchWeight($newBatchId);
+            $this->batchWeightService->recalculateBatchWeight($newBatchId, BatchWeightCause::MOVEMENT_IN, $weighingDateObj);
         }
 
         return new UpsertCaravanResultDTO('updated', $entity->getId());
@@ -199,13 +203,15 @@ final class UpsertCaravanUseCase
 
         $savedEntity = $this->caravanRepository->save($newEntity);
 
+        $weighingDateStr = $dto->entryDate ?? date('Y-m-d');
+        $weighingDateObj = new \DateTime($weighingDateStr);
         $weightRecorded = false;
         // Record weight in caravan_weights
         if ($newWeight !== null) {
             ($this->recordCaravanWeightUseCase)(new \App\Application\DTOs\RecordCaravanWeightDTO(
                 $savedEntity->getId(),
                 $newWeight,
-                date('Y-m-d'),
+                $weighingDateStr,
                 'Weight on transfer'
             ));
             $weightRecorded = true;
@@ -213,12 +219,12 @@ final class UpsertCaravanUseCase
 
         // Recalculate old Batch Weight (lost an animal)
         if ($oldBatchId !== null) {
-            $this->batchWeightService->recalculateBatchWeight($oldBatchId);
+            $this->batchWeightService->recalculateBatchWeight($oldBatchId, BatchWeightCause::MOVEMENT_OUT, $weighingDateObj);
         }
 
         // Recalculate new Batch Weight
         if ($newBatchId !== null && !$weightRecorded) {
-            $this->batchWeightService->recalculateBatchWeight($newBatchId);
+            $this->batchWeightService->recalculateBatchWeight($newBatchId, BatchWeightCause::MOVEMENT_IN, $weighingDateObj);
         }
 
         // Registrar trazabilidad de transferencia
@@ -278,21 +284,23 @@ final class UpsertCaravanUseCase
 
         $savedEntity = $this->caravanRepository->save($newEntity);
 
+        $weighingDateStr = $dto->entryDate ?? date('Y-m-d');
+        $weighingDateObj = new \DateTime($weighingDateStr);
         $weightRecorded = false;
         // Record initial weight in caravan_weights
         if ($newWeight !== null) {
             ($this->recordCaravanWeightUseCase)(new \App\Application\DTOs\RecordCaravanWeightDTO(
                 $savedEntity->getId(),
                 $newWeight,
-                date('Y-m-d'),
+                $weighingDateStr,
                 'Initial weight on arrival'
             ));
             $weightRecorded = true;
         }
 
-        // Recalculate Batch Weight
+        // Recalculate Batch Weight: the animal joins the set.
         if ($newBatchId !== null && !$weightRecorded) {
-            $this->batchWeightService->recalculateBatchWeight($newBatchId);
+            $this->batchWeightService->recalculateBatchWeight($newBatchId, BatchWeightCause::MOVEMENT_IN, $weighingDateObj);
         }
 
         // Registrar trazabilidad de llegada inicial

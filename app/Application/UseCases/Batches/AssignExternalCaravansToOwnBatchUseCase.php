@@ -13,6 +13,7 @@ use App\Core\Services\BatchWeightService;
 use App\Core\ValueObjects\CaravanProvenance;
 use App\Models\CaravanMovement;
 use Illuminate\Support\Facades\DB;
+use App\Core\Enums\BatchWeightCause;
 
 final class AssignExternalCaravansToOwnBatchUseCase
 {
@@ -122,9 +123,9 @@ final class AssignExternalCaravansToOwnBatchUseCase
             }
 
             // Recalcular pesos de lotes afectados
-            $this->batchWeightService->recalculateBatchWeight($targetBatch->getId());
+            $this->batchWeightService->recalculateBatchWeight($targetBatch->getId(), BatchWeightCause::MOVEMENT_IN);
             foreach (array_keys($affectedSourceBatchIds) as $oldBatchId) {
-                $this->batchWeightService->recalculateBatchWeight((int) $oldBatchId);
+                $this->batchWeightService->recalculateBatchWeight((int) $oldBatchId, BatchWeightCause::MOVEMENT_OUT);
             }
         });
 

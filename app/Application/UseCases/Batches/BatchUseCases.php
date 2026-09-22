@@ -11,6 +11,7 @@ final class BatchUseCases
         public readonly CreateBatchUseCase $create,
         public readonly FindBatchUseCase $find,
         public readonly ChangeBatchActivityUseCase $changeActivity,
+        public readonly ChangeBatchManagementUseCase $changeManagement,
         public readonly GetBatchWeightHistoryUseCase $getWeights,
         public readonly GetOrCreateReserveBatchUseCase $getOrCreateReserve,
         public readonly AssignExternalCaravansToOwnBatchUseCase $assignExternalToOwn,

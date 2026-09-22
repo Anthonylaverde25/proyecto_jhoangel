@@ -66,13 +66,18 @@ final class GetOrCreateReserveBatchUseCase
 
         $savedBatch = $this->batchRepository->save($batchEntity);
 
-        // Add initial 0.0 weight history record
+        // Opening point of the reserve batch. The average goes NULL rather than 0.0: the
+        // batch holds no animals yet, and an average over an empty set is undefined.
         $this->batchRepository->addWeight(
             $savedBatch->getId(),
-            0.0,
+            null,
             'INITIAL',
             new \DateTimeImmutable(),
-            $activityId
+            $activityId,
+            totalWeight: 0.0,
+            caravansCount: 0,
+            weighedCount: 0,
+            weightsAsOf: null
         );
 
         return $savedBatch;

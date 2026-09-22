@@ -8,13 +8,15 @@ final class BatchTypeEntity
 {
     public function __construct(
         private readonly ?int $id,
-        private readonly int $companyId,
-        private string $name,
-        private string $code,
+        private readonly ?int $companyId = null,
+        private string $name = '',
+        private string $code = '',
         private ?string $description = null,
         private ?string $color = null,
         private ?string $icon = null,
-        private bool $isActive = true
+        private bool $isActive = true,
+        private ?int $activityId = null,
+        private bool $isSelectable = true
     ) {
     }
 
@@ -23,7 +25,7 @@ final class BatchTypeEntity
         return $this->id;
     }
 
-    public function getCompanyId(): int
+    public function getCompanyId(): ?int
     {
         return $this->companyId;
     }
@@ -56,6 +58,24 @@ final class BatchTypeEntity
     public function isActive(): bool
     {
         return $this->isActive;
+    }
+
+    /**
+     * Catalogue constraint: the activity this type belongs to, or null when the type
+     * is cross-cutting and therefore offered in every activity.
+     */
+    public function getActivityId(): ?int
+    {
+        return $this->activityId;
+    }
+
+    /**
+     * Whether this type is offered in the manual batch type selectors. Types created
+     * only by dedicated paths of the system are not.
+     */
+    public function isSelectable(): bool
+    {
+        return $this->isSelectable;
     }
 
     public function updateDetails(

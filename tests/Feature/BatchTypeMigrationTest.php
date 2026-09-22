@@ -1,123 +1,115 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
+use App\Models\Batch;
 use App\Models\BatchType;
 use App\Models\Company;
+use App\Models\CompanyBatchType;
 use App\Models\Tenant;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
 
 class BatchTypeMigrationTest extends TestCase
 {
-    use RefreshDatabase;
+    private Tenant $tenant;
 
-    public function test_batch_types_can_have_duplicate_codes_in_different_companies(): void
+    protected function setUp(): void
     {
-        // 1. Create a test tenant with unique ID
-        $tenantId = 'tenant-' . uniqid();
-        $tenant = Tenant::create(['id' => $tenantId]);
-        
-        try {
-            // 2. Initialize tenancy context
-            tenancy()->initialize($tenant);
+        parent::setUp();
 
-            // 3. Create two distinct companies
-            $companyA = Company::create([
-                'name' => 'Company A',
-                'renspa' => '123456789012',
-                'location' => 'Location A',
-                'is_active' => true,
-            ]);
-
-            $companyB = Company::create([
-                'name' => 'Company B',
-                'renspa' => '210987654321',
-                'location' => 'Location B',
-                'is_active' => true,
-            ]);
-
-            // 4. Create BatchType with the same code in different companies (should succeed)
-            $batchTypeA = BatchType::create([
-                'company_id' => $companyA->id,
-                'name' => 'Operational A',
-                'code' => 'OPERATIONAL',
-                'description' => 'Operational type for A',
-                'is_active' => true,
-            ]);
-
-            $batchTypeB = BatchType::create([
-                'company_id' => $companyB->id,
-                'name' => 'Operational B',
-                'code' => 'OPERATIONAL',
-                'description' => 'Operational type for B',
-                'is_active' => true,
-            ]);
-
-            $this->assertDatabaseHas('batch_types', [
-                'id' => $batchTypeA->id,
-                'company_id' => $companyA->id,
-                'code' => 'OPERATIONAL',
-            ]);
-
-            $this->assertDatabaseHas('batch_types', [
-                'id' => $batchTypeB->id,
-                'company_id' => $companyB->id,
-                'code' => 'OPERATIONAL',
-            ]);
-        } finally {
-            // Clean up database and end tenancy context
-            if (tenancy()->initialized) {
-                tenancy()->end();
-            }
-            $tenant->delete();
-        }
+        Artisan::call('migrate');
+        $this->tenant = Tenant::create(['id' => 'test-tenant-' . uniqid()]);
+        $this->tenant->domains()->create(['domain' => 'test.localhost']);
+        tenancy()->initialize($this->tenant);
     }
 
-    public function test_batch_types_cannot_have_duplicate_codes_in_the_same_company(): void
+    protected function tearDown(): void
     {
-        // 1. Create a test tenant with unique ID
-        $tenantId = 'tenant-' . uniqid();
-        $tenant = Tenant::create(['id' => $tenantId]);
-        
-        try {
-            // 2. Initialize tenancy context
-            tenancy()->initialize($tenant);
-
-            // 3. Create a single company
-            $company = Company::create([
-                'name' => 'Test Company',
-                'renspa' => '123456789012',
-                'location' => 'Test Location',
-                'is_active' => true,
-            ]);
-
-            // 4. Create first BatchType
-            BatchType::create([
-                'company_id' => $company->id,
-                'name' => 'Operational 1',
-                'code' => 'OPERATIONAL',
-                'description' => 'First Operational type',
-                'is_active' => true,
-            ]);
-
-            $this->expectException(QueryException::class);
-
-            // 5. Create second BatchType with same code in same company (should fail due to unique constraint)
-            BatchType::create([
-                'company_id' => $company->id,
-                'name' => 'Operational 2',
-                'code' => 'OPERATIONAL',
-                'description' => 'Second Operational type',
-                'is_active' => true,
-            ]);
-        } finally {
-            // Clean up database and end tenancy context
-            if (tenancy()->initialized) {
-                tenancy()->end();
-            }
-            $tenant->delete();
+        if (tenancy()->initialized) {
+            tenancy()->end();
         }
+
+        $this->tenant->delete();
+
+        parent::tearDown();
+    }
+
+    public function test_batch_types_have_unique_code_in_tenant(): void
+    {
+        // BatchTypeSeeder already seeded canonical types in the tenant.
+        // Attempting to create another BatchType with the same code must fail
+        $this->expectException(QueryException::class);
+
+        BatchType::create([
+            'name' => 'Operational Duplicate',
+            'code' => 'OPERATIONAL',
+            'description' => 'Duplicate code should fail',
+            'is_active' => true,
+        ]);
+    }
+
+    public function test_multiple_companies_can_attach_to_the_same_batch_type(): void
+    {
+        $companyA = Company::create([
+            'name' => 'Company A',
+            'renspa' => '123456789012',
+            'location' => 'Location A',
+            'is_active' => true,
+        ]);
+
+        $companyB = Company::create([
+            'name' => 'Company B',
+            'renspa' => '210987654321',
+            'location' => 'Location B',
+            'is_active' => true,
+        ]);
+
+        $canonicalType = BatchType::where('code', 'WEANING')->first();
+        $this->assertNotNull($canonicalType);
+
+        CompanyBatchType::firstOrCreate([
+            'company_id' => $companyA->id,
+            'batch_type_id' => $canonicalType->id,
+        ], ['is_enabled' => true]);
+
+        CompanyBatchType::firstOrCreate([
+            'company_id' => $companyB->id,
+            'batch_type_id' => $canonicalType->id,
+        ], ['is_enabled' => true]);
+
+        $this->assertTrue($companyA->batchTypes->contains('id', $canonicalType->id));
+        $this->assertTrue($companyB->batchTypes->contains('id', $canonicalType->id));
+    }
+
+    public function test_company_cannot_attach_duplicate_batch_type(): void
+    {
+        $company = Company::create([
+            'name' => 'Test Company',
+            'renspa' => '123456789012',
+            'location' => 'Test Location',
+            'is_active' => true,
+        ]);
+
+        $batchType = BatchType::where('code', 'SERVICE')->first();
+        $this->assertNotNull($batchType);
+
+        CompanyBatchType::create([
+            'company_id' => $company->id,
+            'batch_type_id' => $batchType->id,
+            'is_enabled' => true,
+        ]);
+
+        $this->expectException(QueryException::class);
+
+        // Duplicate attach should fail due to unique constraint [company_id, batch_type_id]
+        CompanyBatchType::create([
+            'company_id' => $company->id,
+            'batch_type_id' => $batchType->id,
+            'is_enabled' => true,
+        ]);
     }
 }

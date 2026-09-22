@@ -10,15 +10,15 @@ use App\Core\Enums\AnimalSex;
 use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Exceptions\ServiceOrderDomainException;
 use App\Core\Interfaces\IBatchRepository;
-use App\Core\Interfaces\IBullHealthEvaluationRepository;
 use App\Core\Interfaces\IServiceOrderRepository;
+use App\Core\Services\BullServiceFitnessPolicy;
 
 final class CreateServiceOrderUseCase
 {
     public function __construct(
         private readonly IServiceOrderRepository $repository,
         private readonly IBatchRepository $batchRepository,
-        private readonly IBullHealthEvaluationRepository $bullHealthRepository
+        private readonly BullServiceFitnessPolicy $fitnessPolicy
     ) {
     }
 
@@ -72,30 +72,7 @@ final class CreateServiceOrderUseCase
             }
 
             // Andrological & Clinical Health Guard (F5 / ADR-5).
-            $bullHealth = $this->bullHealthRepository->findByCaravanId($maleId, $dto->companyId);
-
-            // Fail-closed: a bull that was never evaluated used to slip straight through. The
-            // message is deliberately different from a rejection, so the user understands that
-            // the protocol is missing rather than that the animal is sick.
-            if ($bullHealth === null) {
-                if ((bool) config('livestock.service_order.block_unevaluated_bulls', true)) {
-                    throw ServiceOrderDomainException::domainError(
-                        "El reproductor ID {$maleId} no tiene evaluación sanitaria registrada. " .
-                        'Cargue el protocolo diagnóstico antes del entore.'
-                    );
-                }
-
-                continue;
-            }
-
-            if (!$bullHealth->isApt()) {
-                $statusLabel = $bullHealth->getStatus()->value;
-                $activeDiags = array_map(fn ($d) => $d->getPathogenName() ?? $d->getPathogenCode(), $bullHealth->getActiveDiagnoses());
-                $diagText = !empty($activeDiags) ? ' (' . implode(', ', $activeDiags) . ')' : '';
-                throw ServiceOrderDomainException::domainError(
-                    "El reproductor ID {$maleId} no está apto para servicio. Estado: {$statusLabel}{$diagText}."
-                );
-            }
+            $this->fitnessPolicy->assertFit($maleId, $dto->companyId);
         }
 
         foreach ($dto->femaleCaravanIds as $femaleId) {

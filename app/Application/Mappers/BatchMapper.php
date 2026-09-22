@@ -37,13 +37,16 @@ class BatchMapper
             $model->activity?->name,
             $model->activity?->code,
             $model->current_weight,
-            null, // caravansCount
+            $model->total_weight !== null ? (float) $model->total_weight : null,
+            $model->weighed_count !== null ? (int) $model->weighed_count : null,
+            $model->caravans_count !== null ? (int) $model->caravans_count : null,
             $model->batch_type_id ? (int) $model->batch_type_id : null,
             $model->batchType?->name,
             $model->batchType?->code,
             (bool) $model->is_system,
             $renspa,
             (bool) ($model->knows_to_eat ?? false),
+            $model->is_confined !== null ? (bool) $model->is_confined : null,
             $model->age_in_months !== null ? (int) $model->age_in_months : null,
             $model->min_weight !== null ? (float) $model->min_weight : null,
             $model->max_weight !== null ? (float) $model->max_weight : null
@@ -92,9 +95,13 @@ class BatchMapper
         $model->farm_id = $entity->getFarmId();
         $model->activity_id = $entity->getActivityId();
         $model->current_weight = $entity->getCurrentWeight();
+        $model->total_weight = $entity->getTotalWeight();
+        $model->caravans_count = $entity->getCaravansCount();
+        $model->weighed_count = $entity->getWeighedCount();
         $model->min_weight = $entity->getMinWeight();
         $model->max_weight = $entity->getMaxWeight();
         $model->knows_to_eat = $entity->knowsToEat();
+        $model->is_confined = $entity->isConfined();
         $model->age_in_months = $entity->getAgeInMonths();
         $model->observaciones = $entity->getObservaciones();
         $model->is_active = $entity->isActive();

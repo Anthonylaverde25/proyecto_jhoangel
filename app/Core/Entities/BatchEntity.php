@@ -20,6 +20,8 @@ final class BatchEntity
         private ?string $activityName = null,
         private ?string $activityCode = null,
         private ?float $currentWeight = null,
+        private ?float $totalWeight = null,
+        private ?int $weighedCount = null,
         private ?int $caravansCount = null,
         private ?int $batchTypeId = null,
         private ?string $batchTypeName = null,
@@ -27,10 +29,12 @@ final class BatchEntity
         private bool $isSystem = false,
         private ?string $renspa = null,
         private bool $knowsToEat = false,
+        private ?bool $isConfined = null,
         private ?int $ageInMonths = null,
         private ?float $minWeight = null,
         private ?float $maxWeight = null,
-        private ?ServiceBatchDetailEntity $serviceDetail = null
+        private ?ServiceBatchDetailEntity $serviceDetail = null,
+        private bool $wasEmptied = false
     ) {
     }
 
@@ -62,6 +66,36 @@ final class BatchEntity
     public function getCaravansCount(): ?int
     {
         return $this->caravansCount;
+    }
+
+    public function setCaravansCount(?int $caravansCount): void
+    {
+        $this->caravansCount = $caravansCount;
+    }
+
+    /**
+     * Measured mass of the batch: additive and conserved when animals are split between
+     * batches, which is what makes a transfer readable as a transfer and not as a loss.
+     */
+    public function getTotalWeight(): ?float
+    {
+        return $this->totalWeight;
+    }
+
+    public function setTotalWeight(?float $totalWeight): void
+    {
+        $this->totalWeight = $totalWeight;
+    }
+
+    /** Head the average was computed over; may be smaller than the batch. */
+    public function getWeighedCount(): ?int
+    {
+        return $this->weighedCount;
+    }
+
+    public function setWeighedCount(?int $weighedCount): void
+    {
+        $this->weighedCount = $weighedCount;
     }
 
     public function getActivityId(): ?int
@@ -216,6 +250,33 @@ final class BatchEntity
         $this->knowsToEat = $knowsToEat;
     }
 
+    /**
+     * Management system of this batch instance: true = confined (pen, trough feeding),
+     * false = extensive (pasture), null = nobody declared it yet. Orthogonal to the
+     * batch type, asked for in every productive activity, and mutable.
+     *
+     * The null is not an oversight: collapsing it into false would make the system
+     * assert a fact only the producer knows.
+     */
+    public function isConfined(): ?bool
+    {
+        return $this->isConfined;
+    }
+
+    public function setIsConfined(?bool $isConfined): void
+    {
+        $this->isConfined = $isConfined;
+    }
+
+    /**
+     * Whether the management system is a fact somebody stated, as opposed to a
+     * question nobody has been asked.
+     */
+    public function declaresManagementSystem(): bool
+    {
+        return $this->isConfined !== null;
+    }
+
     public function getAgeInMonths(): ?int
     {
         return $this->ageInMonths;
@@ -244,6 +305,26 @@ final class BatchEntity
     public function setMaxWeight(?float $maxWeight): void
     {
         $this->maxWeight = $maxWeight;
+    }
+
+    /**
+     * True when at least one animal left this batch: the batch is reusable and keeps
+     * its activity, type and management system, but it is empty because it was
+     * emptied, not because it never held animals.
+     */
+    public function wasEmptied(): bool
+    {
+        return $this->wasEmptied;
+    }
+
+    public function setWasEmptied(bool $wasEmptied): void
+    {
+        $this->wasEmptied = $wasEmptied;
+    }
+
+    public function isWeaningBatch(): bool
+    {
+        return $this->batchTypeCode === 'WEANING';
     }
 }
 

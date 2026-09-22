@@ -13,6 +13,14 @@ interface ICaravanLineageRepository
     public function findByCaravanId(int $caravanId): ?LineageEntity;
 
     /**
+     * Lineage records of several calves in one query, indexed by caravan_id.
+     *
+     * @param int[] $caravanIds
+     * @return array<int, LineageEntity>
+     */
+    public function findByCaravanIds(array $caravanIds): array;
+
+    /**
      * @param int $motherId
      * @return LineageEntity[]
      */

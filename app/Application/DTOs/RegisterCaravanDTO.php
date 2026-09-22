@@ -24,6 +24,7 @@ final readonly class RegisterCaravanDTO
         public ?float $gestationMonths = null,
         public ?int $categoryId = null,
         public ?int $subcategoryId = null,
+        public ?string $entryDate = null,
     ) {
     }
 
@@ -49,6 +50,7 @@ final readonly class RegisterCaravanDTO
             isset($data['gestation_months']) ? (float) $data['gestation_months'] : null,
             isset($data['category_id']) ? (int) $data['category_id'] : null,
             isset($data['subcategory_id']) ? (int) $data['subcategory_id'] : null,
+            isset($data['entry_date']) ? (string) $data['entry_date'] : null,
         );
     }
 }

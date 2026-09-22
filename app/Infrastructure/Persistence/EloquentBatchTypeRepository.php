@@ -13,10 +13,16 @@ class EloquentBatchTypeRepository implements IBatchTypeRepository
 {
     public function findAllActiveByCompany(int $companyId): array
     {
-        return BatchType::byCompany($companyId)
-            ->active()
+        return BatchType::whereHas('companies', function ($q) use ($companyId) {
+                $q->where('companies.id', $companyId)
+                  ->where('company_batch_type.is_enabled', true);
+            })
+            ->with(['companies' => function ($q) use ($companyId) {
+                $q->where('companies.id', $companyId);
+            }])
+            ->where('is_active', true)
             ->get()
-            ->map(fn (BatchType $model) => BatchTypeMapper::toEntity($model))
+            ->map(fn (BatchType $model) => BatchTypeMapper::toEntity($model, $companyId))
             ->toArray();
     }
 
@@ -28,10 +34,17 @@ class EloquentBatchTypeRepository implements IBatchTypeRepository
 
     public function findByCodeAndCompany(string $code, int $companyId): ?BatchTypeEntity
     {
-        $model = BatchType::byCompany($companyId)
-            ->byCode($code)
+        $model = BatchType::where('code', $code)
+            ->whereHas('companies', function ($q) use ($companyId) {
+                $q->where('companies.id', $companyId)
+                  ->where('company_batch_type.is_enabled', true);
+            })
+            ->with(['companies' => function ($q) use ($companyId) {
+                $q->where('companies.id', $companyId);
+            }])
             ->first();
-        return $model ? BatchTypeMapper::toEntity($model) : null;
+
+        return $model ? BatchTypeMapper::toEntity($model, $companyId) : null;
     }
 
     public function findByCode(string $code): ?BatchTypeEntity
@@ -40,4 +53,3 @@ class EloquentBatchTypeRepository implements IBatchTypeRepository
         return $model ? BatchTypeMapper::toEntity($model) : null;
     }
 }
-

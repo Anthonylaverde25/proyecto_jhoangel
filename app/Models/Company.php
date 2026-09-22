@@ -31,8 +31,17 @@ class Company extends Model
             ->withTimestamps();
     }
 
-    public function batchTypes(): HasMany
+    public function batchTypes(): BelongsToMany
     {
-      return $this->hasMany(BatchType::class);
+        return $this->belongsToMany(BatchType::class, 'company_batch_type')
+            ->withPivot(['is_enabled', 'custom_name', 'custom_color'])
+            ->withTimestamps();
+    }
+
+    public function activities(): BelongsToMany
+    {
+        return $this->belongsToMany(Activity::class, 'company_activity')
+            ->withPivot(['is_enabled', 'is_initial', 'is_final', 'sort_order'])
+            ->withTimestamps();
     }
 }

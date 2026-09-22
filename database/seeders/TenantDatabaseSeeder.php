@@ -42,6 +42,20 @@ class TenantDatabaseSeeder extends Seeder
             // Va último a propósito: el recálculo anterior crea una evaluación para todo toro que
             // no tenga ninguna, y estos tres deben quedar sin historia sanitaria alguna.
             UnevaluatedTestBullsSeeder::class,
+            // Contraparte de los crudos: tres toros con todos los parámetros correctos (APTOS).
+            FitTestBullsSeeder::class,
+            // Crías al pie DST-T-01..46 para las planillas de prueba DEST-01 (ai-agent/image_test/dest001).
+            WeaningTestCalvesSeeder::class,
+            ActivityChangeTestAnimalsSeeder::class,
+            // Ejemplos 3.1, 3.3 y 3.5 del plan de curva de peso: un lote cuyo promedio baja
+            // porque se clasificaron los pesados, un destino que ya tenía animales, y un
+            // lote que queda vacío. Sirven para mirar en pantalla que ninguna caída es
+            // una pérdida de peso.
+            BatchCompositionCurveSeeder::class,
+            // Simulación histórica de ingresos progresivos en 'lote ejemplo peso 1' a lo largo de 5 meses.
+            SimulateBatchProgressiveEntriesSeeder::class,
+            // Dos lotes vacíos para pruebas interactivas de usuario: 'LOTE DE INGRESO ANIMALES TEST' y 'LOTE DESTINO EGRESO ANIMALES TEST'
+            TestGraphBatchesSeeder::class,
         ]);
     }
 }

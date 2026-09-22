@@ -70,6 +70,30 @@ class EloquentCaravanRepository implements ICaravanRepository
         return $model ? CaravanMapper::toEntity($model) : null;
     }
 
+    public function findByIdentifications(array $identifications): array
+    {
+        $values = array_values(array_unique(array_filter(
+            array_map(static fn ($raw) => trim((string) $raw), $identifications),
+            static fn (string $value): bool => $value !== ''
+        )));
+
+        if ($values === []) {
+            return [];
+        }
+
+        $models = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])
+            ->whereIn('identification', $values)
+            ->get();
+
+        $resolved = [];
+
+        foreach ($models as $model) {
+            $resolved[mb_strtoupper(trim((string) $model->identification))] = CaravanMapper::toEntity($model);
+        }
+
+        return $resolved;
+    }
+
     public function findByIdentificationGlobal(CaravanNumber $identification): ?CaravanEntity
     {
         $model = Caravan::withoutGlobalScopes()
@@ -78,6 +102,19 @@ class EloquentCaravanRepository implements ICaravanRepository
             ->first();
         
         return $model ? CaravanMapper::toEntity($model) : null;
+    }
+
+    public function findIdsInExternalBatches(array $caravanIds): array
+    {
+        if (empty($caravanIds)) {
+            return [];
+        }
+
+        return Caravan::whereIn('id', $caravanIds)
+            ->whereHas('batch.farm', fn ($farmQb) => $farmQb->whereNotNull('provider_id'))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
     }
 
     public function findById(int $id): ?CaravanEntity
@@ -138,6 +175,71 @@ class EloquentCaravanRepository implements ICaravanRepository
         return Caravan::where('batch_id', $batchId)->count();
     }
 
+    public function countWeighedByBatch(int $batchId): int
+    {
+        return Caravan::where('batch_id', $batchId)
+            ->join('caravan_weights', 'caravans.id', '=', 'caravan_weights.caravan_id')
+            ->where('caravan_weights.current', true)
+            ->count();
+    }
+
+    public function getTotalWeightByBatch(int $batchId): ?float
+    {
+        $sum = Caravan::where('batch_id', $batchId)
+            ->join('caravan_weights', 'caravans.id', '=', 'caravan_weights.caravan_id')
+            ->where('caravan_weights.current', true)
+            ->sum('caravan_weights.weight');
+
+        // `sum` returns 0 for an empty set, which would state that the batch holds zero
+        // kilos of cattle. That is true for an empty batch and meaningless otherwise, so
+        // the caller decides by looking at the weighed count.
+        return $sum !== null ? (float) $sum : null;
+    }
+
+    public function getLatestWeighingDateByBatch(int $batchId): ?\DateTimeInterface
+    {
+        $date = Caravan::where('batch_id', $batchId)
+            ->join('caravan_weights', 'caravans.id', '=', 'caravan_weights.caravan_id')
+            ->where('caravan_weights.current', true)
+            ->max('caravan_weights.weighing_date');
+
+        return $date !== null ? new \DateTimeImmutable((string) $date) : null;
+    }
+
+    public function moveCaravansToBatch(
+        array $caravanIds,
+        int $targetBatchId,
+        ?int $categoryId = null,
+        ?int $subcategoryId = null
+    ): array {
+        if ($caravanIds === []) {
+            return [];
+        }
+
+        // The source batches have to be read BEFORE the move: afterwards the previous
+        // membership is gone and there is no way to know which batches to recalculate.
+        $sourceBatchIds = Caravan::whereIn('id', $caravanIds)
+            ->whereNotNull('batch_id')
+            ->distinct()
+            ->pluck('batch_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $data = ['batch_id' => $targetBatchId];
+
+        if ($categoryId !== null) {
+            $data['category_id'] = $categoryId;
+        }
+
+        if ($subcategoryId !== null) {
+            $data['subcategory_id'] = $subcategoryId;
+        }
+
+        Caravan::whereIn('id', $caravanIds)->update($data);
+
+        return array_values(array_unique([...$sourceBatchIds, $targetBatchId]));
+    }
+
     public function getAverageWeightByBatch(int $batchId): ?float
     {
         $avg = Caravan::where('batch_id', $batchId)
@@ -171,7 +273,7 @@ class EloquentCaravanRepository implements ICaravanRepository
     public function findBirthHistory(): array
     {
         $gestations = \App\Models\CaravanGestation::where('success', true)
-            ->with(['caravan', 'offspring.caravan.batch'])
+            ->with(['caravan.batch', 'offspring.caravan.batch'])
             ->get();
 
         $history = [];
@@ -191,7 +293,10 @@ class EloquentCaravanRepository implements ICaravanRepository
                     calfIdentification: (string) ($lineage->caravan?->identification ?? ''),
                     isNursing: (bool) $lineage->is_nursing,
                     calfSex: $lineage->caravan?->sex?->value,
-                    calfBatchName: $lineage->caravan?->batch?->name
+                    calfBatchName: $lineage->caravan?->batch?->name,
+                    calfBatchId: $lineage->caravan?->batch_id !== null ? (int) $lineage->caravan->batch_id : null,
+                    motherBatchId: $g->caravan?->batch_id !== null ? (int) $g->caravan->batch_id : null,
+                    motherBatchName: $g->caravan?->batch?->name
                 );
             }
         }
@@ -209,6 +314,11 @@ class EloquentCaravanRepository implements ICaravanRepository
             $data['subcategory_id'] = $subcategoryId;
         }
         Caravan::where('id', $caravanId)->update($data);
+    }
+
+    public function updateTeeth(int $caravanId, int $teeth): void
+    {
+        Caravan::where('id', $caravanId)->update(['teeth' => $teeth]);
     }
 
     public function findGestatingByBatch(int $batchId): array

@@ -53,9 +53,13 @@ class CreateServiceBatchApiTest extends TestCase
         );
 
         $this->serviceBatchType = BatchType::firstOrCreate(
-            ['company_id' => $this->company->id, 'code' => 'SERVICE'],
+            ['code' => 'SERVICE'],
             ['name' => 'Servicio / Entore', 'is_active' => true]
         );
+        \App\Models\CompanyBatchType::firstOrCreate([
+            'company_id' => $this->company->id,
+            'batch_type_id' => $this->serviceBatchType->id,
+        ], ['is_enabled' => true]);
 
         $this->criaActivity = Activity::firstOrCreate(
             ['code' => 'CRIA'],
@@ -99,6 +103,17 @@ class CreateServiceBatchApiTest extends TestCase
             'teeth' => 4,
             'sex' => 'M',
             'category_id' => $this->maleCat->id,
+        ]);
+
+        // ADR-5: the auto-created order only accepts an APT bull.
+        \App\Models\BullHealthEvaluation::create([
+            'company_id' => $this->company->id,
+            'caravan_id' => $male->id,
+            'last_evaluation_date' => now()->subDays(5)->toDateString(),
+            'scrotal_circumference_cm' => 36.0,
+            'body_condition_score' => 3.5,
+            'libido' => 'ALTA',
+            'status' => 'APT',
         ]);
 
         $payload = [

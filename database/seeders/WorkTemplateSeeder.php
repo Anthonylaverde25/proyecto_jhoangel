@@ -180,13 +180,16 @@ class WorkTemplateSeeder extends Seeder
                 ]
             );
 
+            // OP-02 was a placeholder: category and title only, with no schema, no
+            // processing channel and no printable component. CACT-01 supersedes it and
+            // covers far more, so it is archived instead of left listed and inert.
             WorkTemplate::updateOrCreate(
                 ['company_id' => $company->id, 'code' => 'OP-02'],
                 [
                     'category' => 'ACTIVITY',
                     'title' => 'Transferencia a Invernada',
-                    'description' => 'Movimiento de lotes que finalizan la recría y pasan a terminación.',
-                    'status' => 'active'
+                    'description' => 'Reemplazada por CACT-01 (Cambio de Actividad de Hacienda).',
+                    'status' => 'archived'
                 ]
             );
 
@@ -470,6 +473,335 @@ class WorkTemplateSeeder extends Seeder
                                 'type' => 'text',
                                 'required' => false,
                                 'ai_hint' => 'Cualquier nota adicional, asimetría testicular, prepucio o tratamiento.',
+                            ],
+                        ],
+                    ],
+                ]
+            );
+
+            // Seed LSER-01: Conformación de Lote de Servicio de toro único (genera lote, orden y movimientos)
+            WorkTemplate::updateOrCreate(
+                ['company_id' => $company->id, 'code' => 'LSER-01'],
+                [
+                    'category' => 'REPRODUCTIVE',
+                    'title' => 'Conformación de Lote de Servicio — Toro Único',
+                    'description' => 'Constitución de un lote de servicio antes del entore: el toro en el encabezado y los vientres en la tabla. No es registro de montas (MON-01). Al cargarse genera el lote, la orden de servicio y los movimientos.',
+                    'status' => 'active',
+                    'schema_definition' => [
+                        'header_fields' => [
+                            [
+                                'name' => 'lote',
+                                'label' => 'Nombre del Lote de Servicio',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Nombre del lote de servicio escrito en el encabezado. Ej: Entore Vaquillonas Toro 004',
+                            ],
+                            [
+                                'name' => 'toro_caravana',
+                                'label' => 'Caravana del Toro',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Caravana del único toro del lote, en el recuadro destacado del encabezado. No es un vientre de la tabla.',
+                            ],
+                            [
+                                'name' => 'planned_start_date',
+                                'label' => 'Fecha Inicio de Servicio',
+                                'type' => 'date',
+                                'required' => true,
+                                'default' => 'today',
+                                'ai_hint' => 'Fecha de inicio del servicio y del ingreso de los animales al lote (DD/MM/AAAA).',
+                            ],
+                            [
+                                'name' => 'planned_end_date',
+                                'label' => 'Fecha Fin de Servicio',
+                                'type' => 'date',
+                                'required' => false,
+                                'ai_hint' => 'Fecha prevista de retiro del toro (DD/MM/AAAA). Puede estar vacía.',
+                            ],
+                            [
+                                'name' => 'responsable',
+                                'label' => 'Responsable / Firma',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Nombre de quien arma el lote en la manga.',
+                            ],
+                            [
+                                'name' => 'observaciones',
+                                'label' => 'Observaciones',
+                                'type' => 'text',
+                                'required' => false,
+                                'ai_hint' => 'Notas generales del lote.',
+                            ],
+                        ],
+                        'table_columns' => [
+                            [
+                                'name' => 'caravana',
+                                'label' => 'Caravana del Vientre',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Número de caravana del vientre escrito a mano, una por fila. Ignorar filas vacías.',
+                            ],
+                            [
+                                'name' => 'observations',
+                                'label' => 'Observaciones',
+                                'type' => 'text',
+                                'required' => false,
+                                'ai_hint' => 'Notas de la manga sobre ese vientre.',
+                            ],
+                        ],
+                    ],
+                ]
+            );
+
+            // Seed DEST-01: Destete de crías al pie (destina las crías al lote de destete, registra peso y movimientos)
+            WorkTemplate::updateOrCreate(
+                ['company_id' => $company->id, 'code' => 'DEST-01'],
+                [
+                    'category' => 'WEANING',
+                    'title' => 'Destete y Conformación de Lote de Destete',
+                    'description' => 'Desmadre de crías al pie. Una fila por cría, con peso de destete opcional. Al cargarse destina las crías al lote de destete indicado, existente o nuevo, y registra el movimiento de cada ternero.',
+                    'status' => 'active',
+                    'schema_definition' => [
+                        'header_fields' => [
+                            [
+                                'name' => 'lote_destete',
+                                'label' => 'Lote de Destete (nombre)',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Nombre del lote de destete, impreso o escrito a mano en el recuadro destacado del encabezado. Ej: Destete Marzo 2026',
+                            ],
+                            [
+                                'name' => 'fecha_destete',
+                                'label' => 'Fecha de Destete',
+                                'type' => 'date',
+                                'required' => true,
+                                'default' => 'today',
+                                'ai_hint' => 'Fecha en que se desmadran las crías (DD/MM/AAAA).',
+                            ],
+                            [
+                                'name' => 'tipo_destete',
+                                'label' => 'Tipo de Destete',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Opción marcada: TRADICIONAL, ANTICIPADO o PRECOZ. Puede estar vacío.',
+                            ],
+                            [
+                                'name' => 'lote_origen',
+                                'label' => 'Lote de Cría (Origen)',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Nombre del lote de vacas con cría al pie de donde salen los terneros. Puede estar vacío.',
+                            ],
+                            [
+                                'name' => 'responsable',
+                                'label' => 'Responsable / Firma',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Nombre de quien hace el destete en la manga.',
+                            ],
+                            [
+                                'name' => 'hoja_numero',
+                                'label' => 'Hoja N°',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Número de hoja del recuadro "Hoja N de M" (el N).',
+                            ],
+                            [
+                                'name' => 'hoja_total',
+                                'label' => 'De (total de hojas)',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Total de hojas del recuadro "Hoja N de M" (el M).',
+                            ],
+                            [
+                                'name' => 'observaciones',
+                                'label' => 'Observaciones',
+                                'type' => 'text',
+                                'required' => false,
+                                'ai_hint' => 'Notas generales del destete.',
+                            ],
+                        ],
+                        'table_columns' => [
+                            [
+                                'name' => 'caravana',
+                                'label' => 'Caravana de la Cría',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Caravana del ternero, impresa o escrita a mano. Ignorar filas vacías.',
+                            ],
+                            [
+                                'name' => 'caravana_madre',
+                                'label' => 'Caravana de la Madre',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Caravana de la vaca. Puede estar impresa o vacía.',
+                            ],
+                            [
+                                'name' => 'peso',
+                                'label' => 'Peso Destete (kg)',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Peso de balanza en kg, escrito a mano. Puede estar vacío. Ej: 172, 185.5',
+                            ],
+                            [
+                                'name' => 'observations',
+                                'label' => 'Observaciones',
+                                'type' => 'text',
+                                'required' => false,
+                                'ai_hint' => 'Notas de la manga sobre la cría.',
+                            ],
+                        ],
+                    ],
+                ]
+            );
+
+            // Seed CACT-01: cambio de actividad con pesaje en la manga. A diferencia de
+            // la transferencia por pantalla, la planilla registra mediciones del día, y
+            // admite un destino único o un destino por animal.
+            WorkTemplate::updateOrCreate(
+                ['company_id' => $company->id, 'code' => 'CACT-01'],
+                [
+                    'category' => 'ACTIVITY',
+                    'title' => 'Cambio de Actividad de Hacienda',
+                    'description' => 'Movimiento de animales de un lote a otro con cambio de actividad productiva. Una fila por cabeza, con el peso de entrada a la nueva actividad y la dentición. Admite un destino único o un destino por animal.',
+                    'status' => 'active',
+                    'schema_definition' => [
+                        'header_fields' => [
+                            [
+                                'name' => 'actividad_origen',
+                                'label' => 'Actividad de Origen',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Actividad de la que salen los animales, impresa o escrita. Ej: Cría, Recría, Invernada. Puede estar vacía.',
+                            ],
+                            [
+                                'name' => 'actividad_destino',
+                                'label' => 'Actividad de Destino',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Actividad a la que pasan los animales. Ej: Cría, Recría, Invernada. Puede estar vacía.',
+                            ],
+                            [
+                                'name' => 'lote_origen',
+                                'label' => 'Lote de Origen',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Nombre del lote del que salen los animales, en el recuadro destacado del encabezado.',
+                            ],
+                            [
+                                'name' => 'lote_destino',
+                                'label' => 'Lote de Destino (todos)',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Nombre del lote al que van TODOS los animales. Queda vacío cuando la planilla usa la columna de destino por animal.',
+                            ],
+                            [
+                                'name' => 'fecha_movimiento',
+                                'label' => 'Fecha del Movimiento',
+                                'type' => 'date',
+                                'required' => true,
+                                'default' => 'today',
+                                'ai_hint' => 'Fecha en que se hace el cambio de actividad y el pesaje (DD/MM/AAAA).',
+                            ],
+                            [
+                                'name' => 'sistema_manejo',
+                                'label' => 'Sistema de Manejo',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Casillero marcado: CORRAL (encierre) o PASTURA (a campo). Puede estar vacío.',
+                            ],
+                            [
+                                'name' => 'total_cabezas',
+                                'label' => 'Total de Cabezas',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Cantidad total de animales escrita en el recuadro de resumen. Puede estar vacía.',
+                            ],
+                            [
+                                'name' => 'peso_total',
+                                'label' => 'Peso Total de la Tropa (kg)',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Kilos totales escritos en el recuadro de resumen. Puede estar vacío.',
+                            ],
+                            [
+                                'name' => 'responsable',
+                                'label' => 'Responsable / Firma',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Nombre de quien hace el trabajo en la manga.',
+                            ],
+                            [
+                                'name' => 'hoja_numero',
+                                'label' => 'Hoja N°',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Número de hoja del recuadro "Hoja N de M" (el N).',
+                            ],
+                            [
+                                'name' => 'hoja_total',
+                                'label' => 'De (total de hojas)',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Total de hojas del recuadro "Hoja N de M" (el M).',
+                            ],
+                            [
+                                'name' => 'observaciones',
+                                'label' => 'Observaciones',
+                                'type' => 'text',
+                                'required' => false,
+                                'ai_hint' => 'Notas generales del movimiento.',
+                            ],
+                        ],
+                        'table_columns' => [
+                            [
+                                'name' => 'caravana',
+                                'label' => 'Caravana',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Número o código de caravana, impreso o manuscrito. Ignorar filas vacías.',
+                            ],
+                            [
+                                'name' => 'peso_actual',
+                                'label' => 'Peso Actual (kg)',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Peso de balanza del día, en kg. Es el peso con el que el animal entra a la nueva actividad. Puede estar vacío. Ej: 248, 305.5',
+                            ],
+                            [
+                                'name' => 'sexo',
+                                'label' => 'Sexo',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'M = Macho, H = Hembra. Puede venir impreso.',
+                            ],
+                            [
+                                'name' => 'categoria',
+                                'label' => 'Categoría',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Texto de categoría tal como está escrito. Ej: Ternero, Novillito, Vaquillona.',
+                            ],
+                            [
+                                'name' => 'dientes',
+                                'label' => 'Dentición',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'DL (0), 2D, 4D, 6D, 8D, Boca Llena. Extraer el texto tal como está. Si la celda está vacía, devolver vacío: no completar con cero.',
+                            ],
+                            [
+                                'name' => 'lote_destino',
+                                'label' => 'Lote Destino',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Lote al que va ESTE animal. Sólo se completa cuando la planilla usa destino por animal; si está vacío vale el lote del encabezado.',
+                            ],
+                            [
+                                'name' => 'observations',
+                                'label' => 'Observaciones',
+                                'type' => 'text',
+                                'required' => false,
+                                'ai_hint' => 'Notas de la manga sobre el animal.',
                             ],
                         ],
                     ],

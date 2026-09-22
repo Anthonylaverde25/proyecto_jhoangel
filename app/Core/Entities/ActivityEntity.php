@@ -15,6 +15,8 @@ class ActivityEntity
         private string $code,
         private bool $isEnabled = true,
         private bool $isFinal = false,
+        private bool $isInitial = false,
+        private int $sortOrder = 1,
         private array $batches = [],
         private int $caravansCount = 0
     ) {
@@ -62,5 +64,15 @@ class ActivityEntity
     public function isFinal(): bool
     {
         return $this->isFinal;
+    }
+
+    public function isInitial(): bool
+    {
+        return $this->isInitial;
+    }
+
+    public function getSortOrder(): int
+    {
+        return $this->sortOrder;
     }
 }

@@ -37,6 +37,13 @@ class ActivitySeeder extends Seeder
         $activityIds = [];
         $companyId = \App\Models\Company::first()->id;
 
+        $flowConfig = [
+            'CRIA' => ['is_enabled' => true, 'is_initial' => true, 'is_final' => false, 'sort_order' => 1],
+            'RECRIA' => ['is_enabled' => true, 'is_initial' => false, 'is_final' => false, 'sort_order' => 2],
+            'INVERNADA' => ['is_enabled' => true, 'is_initial' => false, 'is_final' => true, 'sort_order' => 3],
+            'INTERNAL' => ['is_enabled' => false, 'is_initial' => false, 'is_final' => false, 'sort_order' => 4],
+        ];
+
         foreach ($activitiesData as $data) {
             $activity = \App\Models\Activity::updateOrCreate(
                 ['code' => $data['code']],
@@ -44,10 +51,17 @@ class ActivitySeeder extends Seeder
             );
             $activityIds[$data['code']] = $activity->id;
 
-            // Activar automáticamente para la empresa (Tenant por defecto)
+            $config = $flowConfig[$data['code']] ?? [
+                'is_enabled' => true,
+                'is_initial' => false,
+                'is_final' => false,
+                'sort_order' => 99,
+            ];
+
+            // Configurar flujo automáticamente para la empresa (Tenant por defecto)
             \App\Models\CompanyActivity::updateOrCreate(
                 ['company_id' => $companyId, 'activity_id' => $activity->id],
-                ['is_enabled' => true]
+                $config
             );
         }
 

@@ -10,7 +10,8 @@ final readonly class BulkWeanDTO
      * @param WeanCaravanDTO[] $weanings
      */
     public function __construct(
-        public array $weanings
+        public array $weanings,
+        public ?CreateBatchDTO $newBatch = null
     ) {
     }
 }

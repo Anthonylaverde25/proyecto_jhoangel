@@ -25,7 +25,7 @@ class Activity extends Model
     public function companies(): BelongsToMany
     {
         return $this->belongsToMany(Company::class, 'company_activity')
-            ->withPivot('is_enabled')
+            ->withPivot('is_enabled', 'is_initial', 'is_final', 'sort_order')
             ->withTimestamps();
     }
 }

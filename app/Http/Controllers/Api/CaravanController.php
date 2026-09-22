@@ -91,7 +91,10 @@ class CaravanController extends Controller
             farmId: isset($validated['farm_id']) ? (int) $validated['farm_id'] : null,
             isEmpty: isset($validated['is_empty']) ? (bool) $validated['is_empty'] : null,
             gestationStage: $validated['gestation_stage'] ?? null,
-            gestationMonths: isset($validated['gestation_months']) ? (float) $validated['gestation_months'] : null
+            gestationMonths: isset($validated['gestation_months']) ? (float) $validated['gestation_months'] : null,
+            categoryId: isset($validated['category_id']) ? (int) $validated['category_id'] : null,
+            subcategoryId: isset($validated['subcategory_id']) ? (int) $validated['subcategory_id'] : null,
+            entryDate: $validated['entry_date'] ?? null
         );
 
         $result = ($this->caravan->upsert)($dto);
@@ -175,7 +178,10 @@ class CaravanController extends Controller
                 farmId: isset($data['farm_id']) ? (int) $data['farm_id'] : null,
                 isEmpty: isset($data['is_empty']) ? (bool) $data['is_empty'] : null,
                 gestationStage: $data['gestation_stage'] ?? null,
-                gestationMonths: isset($data['gestation_months']) ? (float) $data['gestation_months'] : null
+                gestationMonths: isset($data['gestation_months']) ? (float) $data['gestation_months'] : null,
+                categoryId: isset($data['category_id']) ? (int) $data['category_id'] : null,
+                subcategoryId: isset($data['subcategory_id']) ? (int) $data['subcategory_id'] : null,
+                entryDate: isset($data['entry_date']) ? (string) $data['entry_date'] : null
             );
         }, $request->input('caravans'));
 
@@ -251,14 +257,8 @@ class CaravanController extends Controller
     public function wean(WeanCaravanRequest $request, int $id): JsonResponse
     {
         $validated = $request->validated();
-        $dto = new WeanCaravanDTO(
-            caravanId: $id,
-            targetBatchId: (int) $validated['target_batch_id'],
-            weaningDate: $validated['weaning_date'],
-            weaningWeight: (float) $validated['weaning_weight'],
-            newCategory: $validated['new_category'] ?? null,
-            notes: $validated['notes'] ?? null
-        );
+        $validated['caravan_id'] = $id;
+        $dto = WeanCaravanDTO::fromArray($validated);
 
         ($this->weanCaravan)($dto);
 
@@ -276,7 +276,11 @@ class CaravanController extends Controller
             $validated['weanings']
         );
 
-        $dto = new BulkWeanDTO($dtos);
+        $newBatchDto = isset($validated['new_batch'])
+            ? \App\Application\DTOs\CreateBatchDTO::fromArray($validated['new_batch'])
+            : null;
+
+        $dto = new BulkWeanDTO($dtos, $newBatchDto);
         ($this->bulkWeanCaravans)($dto);
 
         return response()->json(null, 204);

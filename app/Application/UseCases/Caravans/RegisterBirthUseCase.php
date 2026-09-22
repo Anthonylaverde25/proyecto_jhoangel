@@ -19,6 +19,7 @@ use App\Core\ValueObjects\SireEntry;
 use App\Core\Services\BatchWeightService;
 use App\Application\DTOs\RecordCaravanWeightDTO;
 use Illuminate\Support\Facades\DB;
+use App\Core\Enums\BatchWeightCause;
 
 final class RegisterBirthUseCase
 {
@@ -206,7 +207,8 @@ final class RegisterBirthUseCase
 
             // 9. Recalculate Batch weight for the calf's batch
             if ($weightRecorded) {
-                $this->batchWeightService->recalculateBatchWeight($dto->batchId);
+                // A newborn grows the set: for this series that is a change of composition.
+                $this->batchWeightService->recalculateBatchWeight($dto->batchId, BatchWeightCause::MOVEMENT_IN);
             }
 
             // Reload calf with lineage relations

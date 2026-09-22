@@ -11,7 +11,21 @@ class CompanyActivity extends Model
 {
     protected $table = 'company_activity';
 
-    protected $fillable = ['company_id', 'activity_id', 'is_enabled'];
+    protected $fillable = [
+        'company_id',
+        'activity_id',
+        'is_enabled',
+        'is_initial',
+        'is_final',
+        'sort_order',
+    ];
+
+    protected $casts = [
+        'is_enabled' => 'boolean',
+        'is_initial' => 'boolean',
+        'is_final' => 'boolean',
+        'sort_order' => 'integer',
+    ];
 
     public function company(): BelongsTo
     {

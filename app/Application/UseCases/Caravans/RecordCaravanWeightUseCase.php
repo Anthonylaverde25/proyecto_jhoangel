@@ -10,6 +10,7 @@ use App\Core\Interfaces\ICaravanWeightRepository;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Services\BatchWeightService;
 use Illuminate\Support\Facades\DB;
+use App\Core\Enums\BatchWeightCause;
 
 final class RecordCaravanWeightUseCase
 {
@@ -41,7 +42,11 @@ final class RecordCaravanWeightUseCase
             // 3. Recalculate batch weight if the caravan is assigned to a batch
             $caravan = $this->caravanRepository->findById($dto->caravanId);
             if ($caravan && $caravan->getBatchId()) {
-                $this->batchWeightService->recalculateBatchWeight($caravan->getBatchId());
+                $this->batchWeightService->recalculateBatchWeight(
+                    $caravan->getBatchId(),
+                    BatchWeightCause::CONTROL,
+                    new \DateTime($dto->weighingDate)
+                );
             }
         });
     }

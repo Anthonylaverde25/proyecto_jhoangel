@@ -14,7 +14,10 @@ use App\Core\Exceptions\ServiceBatchDomainException;
 use App\Core\Interfaces\IActivityRepository;
 use App\Core\Interfaces\IBatchRepository;
 use App\Core\Interfaces\IBatchTypeRepository;
+use App\Core\Enums\BatchWeightCause;
 use App\Core\Interfaces\ICaravanRepository;
+use App\Core\Services\BatchWeightService;
+use App\Core\Services\BullServiceFitnessPolicy;
 use App\Models\Batch;
 use App\Models\Caravan;
 use App\Models\CaravanMovement;
@@ -31,7 +34,9 @@ final class CreateServiceBatchUseCase
         private readonly IBatchRepository $batchRepository,
         private readonly IBatchTypeRepository $batchTypeRepository,
         private readonly IActivityRepository $activityRepository,
-        private readonly ICaravanRepository $caravanRepository
+        private readonly ICaravanRepository $caravanRepository,
+        private readonly BullServiceFitnessPolicy $fitnessPolicy,
+        private readonly BatchWeightService $batchWeightService
     ) {
     }
 
@@ -115,6 +120,12 @@ final class CreateServiceBatchUseCase
                 throw ServiceBatchDomainException::domainError("La caravana reproductor macho con ID {$maleId} no existe.");
             }
             $domainServiceBatch->validateAnimalAdmission($caravan);
+
+            // The auto-created order skips CreateServiceOrderUseCase, so the ADR-5 guard runs here.
+            if ($dto->autoCreateServiceOrder) {
+                $this->fitnessPolicy->assertFit($maleId, $companyId, $caravan->getIdentification()->getValue());
+            }
+
             $males[] = $caravan;
         }
 
@@ -158,7 +169,23 @@ final class CreateServiceBatchUseCase
                 'notes' => $dto->notes,
             ]);
 
-            // C. Move Females and Log Movement
+            // C. Move Females and Log Movement.
+            // The composition of every batch losing animals is closed BEFORE the move:
+            // afterwards the previous membership is gone and the step could no longer be
+            // anchored on this date.
+            $sourceBatchIds = [];
+
+            foreach ([...$females, ...$males] as $animal) {
+                $originBatchId = $animal->getBatchId();
+                if ($originBatchId !== null && $originBatchId !== $batch->id) {
+                    $sourceBatchIds[$originBatchId] = true;
+                }
+            }
+
+            foreach (array_keys($sourceBatchIds) as $sourceBatchId) {
+                $this->batchWeightService->snapshotBeforeMovement((int) $sourceBatchId);
+            }
+
             foreach ($females as $female) {
                 $originBatchId = $female->getBatchId();
                 $female->setBatchId($batch->id);
@@ -192,6 +219,17 @@ final class CreateServiceBatchUseCase
                     'to_batch_id' => $batch->id,
                     'observations' => "Asignación de reproductor a Lote de Servicio: '{$batch->name}'"
                 ]);
+            }
+
+            // D bis. The aggregate weight of a batch is derived from its current
+            // membership: the animals moved, so both sides have to be recomputed and the
+            // change recorded as what it is, a movement and not a weighing.
+            foreach (array_keys($sourceBatchIds) as $sourceBatchId) {
+                $this->batchWeightService->recalculateBatchWeight((int) $sourceBatchId, BatchWeightCause::MOVEMENT_OUT);
+            }
+
+            if ($females !== [] || $males !== []) {
+                $this->batchWeightService->recalculateBatchWeight((int) $batch->id, BatchWeightCause::MOVEMENT_IN);
             }
 
             // E. Auto-create linked ServiceOrder if requested and animals are present

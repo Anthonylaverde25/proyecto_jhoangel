@@ -41,6 +41,7 @@ class UpsertCaravanRequest extends FormRequest
             'batch_id'       => 'nullable|integer|exists:batches,id',
             'farm_id'        => 'nullable|integer|exists:farms,id',
             'is_empty'       => 'nullable|boolean',
+            'entry_date'     => 'nullable|date',
             'gestation_stage' => [
                 Rule::requiredIf(fn() => $this->input('is_empty') === false && !$this->filled('gestation_months')),
                 'nullable',

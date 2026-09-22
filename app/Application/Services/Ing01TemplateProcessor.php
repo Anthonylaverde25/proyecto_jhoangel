@@ -353,9 +353,7 @@ final class Ing01TemplateProcessor
             return $existing;
         }
 
-        $batchType = BatchType::where('company_id', $companyId)
-            ->where('code', 'OPERATIONAL')
-            ->first() ?? BatchType::where('company_id', $companyId)->first();
+        $batchType = BatchType::where('code', 'OPERATIONAL')->first() ?? BatchType::first();
 
         return Batch::create([
             'company_id' => $companyId,

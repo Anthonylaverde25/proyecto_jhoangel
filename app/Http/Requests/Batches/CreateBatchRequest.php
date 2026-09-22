@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Batches;
 
+use App\Http\Requests\Concerns\ValidatesBatchClassification;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class CreateBatchRequest extends FormRequest
 {
+    use ValidatesBatchClassification;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -34,13 +38,28 @@ class CreateBatchRequest extends FormRequest
             'min_weight'    => 'nullable|numeric|min:0',
             'max_weight'    => 'nullable|numeric|min:0|gte:min_weight',
             'knows_to_eat'  => 'nullable|boolean',
+            'is_confined'   => 'nullable|boolean',
             'age_in_months' => 'nullable|integer|min:0',
             'observaciones' => 'nullable|string',
             'batch_type_id' => [
                 'required',
                 'integer',
-                Rule::exists('batch_types', 'id')->where('company_id', $companyId),
+                Rule::exists('company_batch_type', 'batch_type_id')
+                    ->where('company_id', $companyId)
+                    ->where('is_enabled', true),
             ],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            $this->validateBatchClassification(
+                $validator,
+                $this->input('activity_id'),
+                $this->input('batch_type_id'),
+                $this->has('is_confined')
+            );
+        });
     }
 }

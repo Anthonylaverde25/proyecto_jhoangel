@@ -17,6 +17,9 @@ use App\Http\Controllers\Api\WorkTemplateController;
 use App\Http\Controllers\Api\WorkTemplateIdentifyController;
 use App\Http\Controllers\Api\ProcessIng01Controller;
 use App\Http\Controllers\Api\ProcessTor01Controller;
+use App\Http\Controllers\Api\ProcessLser01Controller;
+use App\Http\Controllers\Api\ProcessCact01Controller;
+use App\Http\Controllers\Api\ProcessDest01Controller;
 use App\Http\Controllers\Api\ProcessLabResultsController;
 use App\Http\Controllers\Api\BatchTypeController;
 use App\Http\Controllers\Api\ServiceOrderController;
@@ -75,12 +78,14 @@ Route::middleware([
     Route::post('/batches/assign-to-own', [BatchController::class, 'assignExternalToOwn']);
     Route::apiResource('batches', BatchController::class)->only(['index', 'store', 'show']);
     Route::patch('/batches/{id}/activity', [BatchController::class, 'changeActivity']);
+    Route::patch('/batches/{id}/management', [BatchController::class, 'changeManagement']);
     Route::get('/batches/{id}/weights', [BatchController::class, 'getWeightHistory']);
     Route::get('/batches/{id}/gestating-caravans', [CaravanController::class, 'gestatingByBatch']);
 
 
     Route::get('/breeds', [BreedController::class, 'index']);
     Route::get('/activities', [ActivityController::class, 'index']);
+    Route::put('/activities/config', [ActivityController::class, 'updateConfig']);
     Route::patch('/activities/{id}/toggle', [ActivityController::class, 'toggle']);
     Route::get('/batch-types', [BatchTypeController::class, 'index']);
     Route::get('/animal-categories', [AnimalCategoryController::class, 'index']);
@@ -91,6 +96,9 @@ Route::middleware([
     Route::post('/work-templates/identify', WorkTemplateIdentifyController::class);
     Route::post('/work-templates/ing-01/process', ProcessIng01Controller::class);
     Route::post('/work-templates/tor-01/process', ProcessTor01Controller::class);
+    Route::post('/work-templates/lser-01/process', ProcessLser01Controller::class);
+    Route::post('/work-templates/dest-01/process', ProcessDest01Controller::class);
+    Route::post('/work-templates/cact-01/process', ProcessCact01Controller::class);
     Route::get('/work-templates/{code}', [WorkTemplateController::class, 'show']);
 
     // Órdenes de Servicio

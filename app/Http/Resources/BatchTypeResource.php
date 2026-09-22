@@ -30,6 +30,8 @@ class BatchTypeResource extends JsonResource
             'color'       => $this->resource->getColor(),
             'icon'        => $this->resource->getIcon(),
             'is_active'   => $this->resource->isActive(),
+            'activity_id' => $this->resource->getActivityId(),
+            'is_selectable' => $this->resource->isSelectable(),
         ];
     }
 }

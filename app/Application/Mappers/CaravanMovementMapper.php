@@ -19,7 +19,9 @@ class CaravanMovementMapper
             (string) $model->type,
             $model->movement_date,
             $model->observations,
-            $model->caravan ? (string) $model->caravan->identification : null
+            $model->caravan ? (string) $model->caravan->identification : null,
+            $model->from_batch_id !== null ? (int) $model->from_batch_id : null,
+            $model->to_batch_id !== null ? (int) $model->to_batch_id : null
         );
     }
 
@@ -35,6 +37,8 @@ class CaravanMovementMapper
         $model->type = $entity->getType();
         $model->movement_date = $entity->getMovementDate();
         $model->observations = $entity->getObservations();
+        $model->from_batch_id = $entity->getFromBatchId();
+        $model->to_batch_id = $entity->getToBatchId();
 
         return $model;
     }

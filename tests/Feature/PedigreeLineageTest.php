@@ -352,6 +352,88 @@ class PedigreeLineageTest extends TestCase
         $this->assertEquals(175.0, $weight2->weight);
     }
 
+    public function test_can_bulk_wean_calves_with_atomic_new_batch_and_ternero_category(): void
+    {
+        $mother = Caravan::create([
+            'company_id' => $this->company->id,
+            'identification' => 'MOTHER-ATOMIC',
+            'sex' => AnimalSex::FEMALE,
+            'teeth' => 4,
+        ]);
+
+        $calf1 = Caravan::create([
+            'company_id' => $this->company->id,
+            'identification' => 'CALF-ATOMIC-1',
+            'sex' => AnimalSex::MALE,
+            'teeth' => 0,
+        ]);
+
+        $calf2 = Caravan::create([
+            'company_id' => $this->company->id,
+            'identification' => 'CALF-ATOMIC-2',
+            'sex' => AnimalSex::FEMALE,
+            'teeth' => 0,
+        ]);
+
+        CaravanLineage::create([
+            'caravan_id' => $calf1->id,
+            'mother_id' => $mother->id,
+            'birth_date' => '2026-05-01',
+            'is_nursing' => true,
+        ]);
+
+        CaravanLineage::create([
+            'caravan_id' => $calf2->id,
+            'mother_id' => $mother->id,
+            'birth_date' => '2026-05-01',
+            'is_nursing' => true,
+        ]);
+
+        // Post bulk-wean with new_batch and ternero / ternera categories (no target_batch_id)
+        $response = $this->postJson("http://test.localhost/api/caravans/bulk-wean", [
+            'new_batch' => [
+                'name' => 'Lote Destete Atomico 2026',
+            ],
+            'weanings' => [
+                [
+                    'caravan_id' => $calf1->id,
+                    'weaning_date' => '2026-06-01',
+                    'weaning_weight' => 205.5,
+                    'new_category' => 'ternero',
+                    'notes' => 'Atomic wean calf 1'
+                ],
+                [
+                    'caravan_id' => $calf2->id,
+                    'weaning_date' => '2026-06-01',
+                    'weaning_weight' => 195.0,
+                    'new_category' => 'ternera',
+                    'notes' => 'Atomic wean calf 2'
+                ],
+            ]
+        ]);
+
+        $response->assertStatus(204);
+
+        // Verify the new batch was created in DB
+        $createdBatch = \App\Models\Batch::where('name', 'Lote Destete Atomico 2026')->first();
+        $this->assertNotNull($createdBatch);
+
+        // Verify calves were placed into the new batch
+        $calf1->refresh();
+        $calf2->refresh();
+        $this->assertEquals($createdBatch->id, $calf1->batch_id);
+        $this->assertEquals($createdBatch->id, $calf2->batch_id);
+
+        // Verify categories were updated
+        $terneroCatId = \App\Models\AnimalCategory::where('code', 'TERNERO')->value('id');
+        $this->assertEquals($terneroCatId, $calf1->category_id);
+        $this->assertEquals($terneroCatId, $calf2->category_id);
+
+        // Verify both lineages marked is_nursing = false
+        $this->assertFalse((bool) CaravanLineage::where('caravan_id', $calf1->id)->value('is_nursing'));
+        $this->assertFalse((bool) CaravanLineage::where('caravan_id', $calf2->id)->value('is_nursing'));
+    }
+
     public function test_can_register_birth_inheriting_sire_from_gestation(): void
     {
         $batch = \App\Models\Batch::first();

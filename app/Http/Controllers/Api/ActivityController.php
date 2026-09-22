@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Application\DTOs\Activities\ActivityConfigItemDTO;
 use App\Application\UseCases\Activities\ListAvailableActivitiesUseCase;
 use App\Application\UseCases\Activities\ToggleCompanyActivityUseCase;
+use App\Application\UseCases\Activities\UpdateCompanyActivitiesConfigUseCase;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Activities\ToggleActivityRequest;
+use App\Http\Requests\Activities\UpdateCompanyActivitiesConfigRequest;
 use App\Http\Resources\ActivityResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use App\Http\Requests\Activities\ToggleActivityRequest;
 
 class ActivityController extends Controller
 {
@@ -31,5 +34,22 @@ class ActivityController extends Controller
         $useCase($companyId, $id, $isEnabled);
 
         return response()->json(['message' => 'Activity status updated successfully']);
+    }
+
+    public function updateConfig(
+        UpdateCompanyActivitiesConfigRequest $request,
+        UpdateCompanyActivitiesConfigUseCase $useCase
+    ): JsonResponse {
+        $companyId = (int) $request->header('X-Company-ID');
+        $validated = $request->validated();
+
+        $items = array_map(
+            fn(array $item) => ActivityConfigItemDTO::fromArray($item),
+            $validated['activities']
+        );
+
+        $useCase($companyId, $items);
+
+        return response()->json(['message' => 'Configuración de flujo de actividades actualizada correctamente']);
     }
 }
