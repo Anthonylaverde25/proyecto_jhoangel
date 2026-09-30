@@ -14,6 +14,8 @@ final class WorkTemplateUseCases
         public readonly ProcessLser01SubmissionUseCase $processLser01,
         public readonly ProcessDest01SubmissionUseCase $processDest01,
         public readonly ProcessCact01SubmissionUseCase $processCact01,
+        public readonly ProcessPar01SubmissionUseCase $processPar01,
+        public readonly ResolveCact01SourceBatchUseCase $resolveCact01SourceBatch,
     ) {
     }
 }

@@ -553,22 +553,38 @@ class WorkTemplateSeeder extends Seeder
                 ]
             );
 
-            // Seed DEST-01: Destete de crías al pie (destina las crías al lote de destete, registra peso y movimientos)
+            // Seed DEST-01: Destete de crías al pie. Cumple una orden de destete (su código va en el
+            // encabezado) o, impresa en blanco, genera la orden al confirmarse. Destino único (el
+            // lote del encabezado) o por animal (columna Lote destino), y C/S nueva por cría.
             WorkTemplate::updateOrCreate(
                 ['company_id' => $company->id, 'code' => 'DEST-01'],
                 [
                     'category' => 'WEANING',
                     'title' => 'Destete y Conformación de Lote de Destete',
-                    'description' => 'Desmadre de crías al pie. Una fila por cría, con peso de destete opcional. Al cargarse destina las crías al lote de destete indicado, existente o nuevo, y registra el movimiento de cada ternero.',
+                    'description' => 'Desmadre de crías al pie. Una fila por cría, con peso de destete opcional. Cumple la orden de destete impresa en el encabezado. Destina las crías al lote de destete del encabezado o al de cada fila, existente o nuevo, puede cambiar su categoría y registra el movimiento de cada ternero.',
                     'status' => 'active',
                     'schema_definition' => [
                         'header_fields' => [
                             [
-                                'name' => 'lote_destete',
-                                'label' => 'Lote de Destete (nombre)',
+                                'name' => 'orden_destete',
+                                'label' => 'Orden de Destete',
                                 'type' => 'string',
-                                'required' => true,
-                                'ai_hint' => 'Nombre del lote de destete, impreso o escrito a mano en el recuadro destacado del encabezado. Ej: Destete Marzo 2026',
+                                'required' => false,
+                                'ai_hint' => 'Código de la orden de destete, formato DS-AAAAMMDD-NNNN, impreso en el recuadro ORDEN DE DESTETE del encabezado. No confundir con DEST-01, que es el código de la planilla (recuadro TEMPLATE CODE). Si el recuadro está vacío, devolver vacío: la planilla se llenó sin orden.',
+                            ],
+                            [
+                                'name' => 'lote_destete',
+                                'label' => 'Lote de Destete (todas las crías)',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Nombre del lote de destete al que van TODAS las crías, impreso o escrito a mano en el recuadro destacado del encabezado. Ej: Destete Marzo 2026. Si el recuadro dice "— por animal —", la planilla usa la columna de destino por fila: devolver vacío.',
+                            ],
+                            [
+                                'name' => 'sistema_manejo',
+                                'label' => 'Sistema de Manejo del Lote de Destete',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Casillero marcado: CORRAL (encierre) o PASTURA (a campo), del lote de destete del encabezado. Puede estar vacío.',
                             ],
                             [
                                 'name' => 'fecha_destete',
@@ -583,14 +599,14 @@ class WorkTemplateSeeder extends Seeder
                                 'label' => 'Tipo de Destete',
                                 'type' => 'string',
                                 'required' => false,
-                                'ai_hint' => 'Opción marcada: TRADICIONAL, ANTICIPADO o PRECOZ. Puede estar vacío.',
+                                'ai_hint' => 'Casillas marcadas entre TRADICIONAL, ANTICIPADO y PRECOZ. Si hay más de una marcada, devolver TODAS separadas por coma (ej.: "ANTICIPADO, PRECOZ"); nunca elegir una. Vacío si no hay ninguna marcada.',
                             ],
                             [
                                 'name' => 'lote_origen',
                                 'label' => 'Lote de Cría (Origen)',
                                 'type' => 'string',
                                 'required' => false,
-                                'ai_hint' => 'Nombre del lote de vacas con cría al pie de donde salen los terneros. Puede estar vacío.',
+                                'ai_hint' => 'Nombre del lote de vacas con cría al pie de donde salen los terneros. Con crías de varios lotes dice "Varios". Puede estar vacío.',
                             ],
                             [
                                 'name' => 'responsable',
@@ -637,11 +653,39 @@ class WorkTemplateSeeder extends Seeder
                                 'ai_hint' => 'Caravana de la vaca. Puede estar impresa o vacía.',
                             ],
                             [
+                                'name' => 'categoria',
+                                'label' => 'C/S actual',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Categoría ACTUAL de la cría, impresa en gris por el sistema. Ej: Ternero. Sólo sirve para encontrar la cría.',
+                            ],
+                            [
+                                'name' => 'cs_nueva',
+                                'label' => 'C/S nueva',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Columna "C/S nueva": categoría o subcategoría NUEVA de la cría, escrita a mano o impresa. Puede traer sólo la categoría (Novillito), sólo la subcategoría (Reposición) o ambas separadas por barra (Vaquillona / Reposición). Si está vacía o tiene un guion, devolver vacío.',
+                            ],
+                            [
                                 'name' => 'peso',
                                 'label' => 'Peso Destete (kg)',
                                 'type' => 'number',
                                 'required' => false,
                                 'ai_hint' => 'Peso de balanza en kg, escrito a mano. Puede estar vacío. Ej: 172, 185.5',
+                            ],
+                            [
+                                'name' => 'lote_destino',
+                                'label' => 'Lote de Destete (por cría)',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Lote de destete de ESTA cría, impreso o escrito a mano. Sólo existe cuando la planilla usa destino por animal. Si está vacío, devolver vacío: NO completar con el encabezado.',
+                            ],
+                            [
+                                'name' => 'manejo',
+                                'label' => 'M',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Celda angosta de UNA letra manuscrita, a la derecha del lote de destete de la fila: C = corral, P = pastura. Es el sistema de manejo del LOTE de esta fila. Si está vacía, devolver vacío.',
                             ],
                             [
                                 'name' => 'observations',
@@ -678,8 +722,8 @@ class WorkTemplateSeeder extends Seeder
                                 'name' => 'actividad_destino',
                                 'label' => 'Actividad de Destino',
                                 'type' => 'string',
-                                'required' => false,
-                                'ai_hint' => 'Actividad a la que pasan los animales. Ej: Cría, Recría, Invernada. Puede estar vacía.',
+                                'required' => true,
+                                'ai_hint' => 'Actividad a la que pasan los animales, una sola para toda la planilla y todas sus hojas. Ej: Cría, Recría, Invernada. Todo lote de destino escrito en la planilla pertenece a esta actividad.',
                             ],
                             [
                                 'name' => 'lote_origen',
@@ -746,6 +790,13 @@ class WorkTemplateSeeder extends Seeder
                                 'ai_hint' => 'Total de hojas del recuadro "Hoja N de M" (el M).',
                             ],
                             [
+                                'name' => 'orden_transferencia',
+                                'label' => 'Orden de Transferencia',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Código de la orden de transferencia, formato TR-AAAAMMDD-NNNN, impreso en el recuadro del encabezado. Puede estar vacío si la planilla se llenó sin orden.',
+                            ],
+                            [
                                 'name' => 'observaciones',
                                 'label' => 'Observaciones',
                                 'type' => 'text',
@@ -773,14 +824,24 @@ class WorkTemplateSeeder extends Seeder
                                 'label' => 'Sexo',
                                 'type' => 'string',
                                 'required' => false,
-                                'ai_hint' => 'M = Macho, H = Hembra. Puede venir impreso.',
+                                'ai_hint' => 'Grupo SEXO de ESTA fila: dos subcolumnas con UNA casilla cada una, con encabezado MACHO y HEMBRA. Una casilla cuenta sólo si tiene una X o tilde de tinta encima. Devolver M si está marcada la casilla bajo MACHO, H si está marcada la de HEMBRA, M, H si están marcadas las dos, y vacío si ninguna está marcada. No deducirlo de la caravana ni de otras filas.',
                             ],
                             [
                                 'name' => 'categoria',
                                 'label' => 'Categoría',
                                 'type' => 'string',
                                 'required' => false,
-                                'ai_hint' => 'Texto de categoría tal como está escrito. Ej: Ternero, Novillito, Vaquillona.',
+                                'ai_hint' => 'Categoría ACTUAL del animal, impresa en gris por el sistema en formato C/S. Ej: Ternero, Vaquillona / Reposición.',
+                            ],
+                            [
+                                // Only printed when the order says the category changes. The
+                                // ai-agent appends the catalog to this hint when it loads the schema.
+                                'name' => 'cs_nueva',
+                                'label' => 'C/S Nueva',
+                                'type' => 'string',
+                                'required' => false,
+                                'catalog' => 'animal_categories',
+                                'ai_hint' => 'Columna "C/S nueva": categoría o subcategoría NUEVA del animal, escrita a mano o impresa. Puede traer sólo la categoría (Novillito), sólo la subcategoría (Reposición) o ambas separadas por barra (Vaquillona / Reposición). Si está vacía o tiene un guion, devolver vacío.',
                             ],
                             [
                                 'name' => 'dientes',
@@ -794,7 +855,14 @@ class WorkTemplateSeeder extends Seeder
                                 'label' => 'Lote Destino',
                                 'type' => 'string',
                                 'required' => false,
-                                'ai_hint' => 'Lote al que va ESTE animal. Sólo se completa cuando la planilla usa destino por animal; si está vacío vale el lote del encabezado.',
+                                'ai_hint' => 'Lote al que va ESTE animal, siempre un lote de la actividad de destino del encabezado. Sólo se completa cuando la planilla usa destino por animal; si está vacío vale el lote del encabezado.',
+                            ],
+                            [
+                                'name' => 'manejo',
+                                'label' => 'M',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Celda angosta de UNA letra manuscrita, a la derecha del lote destino: C = corral, P = pastura. Es el sistema de manejo del LOTE DESTINO de esta fila, no del animal. Si está vacía, devolver vacío: no completar.',
                             ],
                             [
                                 'name' => 'observations',
@@ -802,6 +870,131 @@ class WorkTemplateSeeder extends Seeder
                                 'type' => 'text',
                                 'required' => false,
                                 'ai_hint' => 'Notas de la manga sobre el animal.',
+                            ],
+                        ],
+                    ],
+                ]
+            );
+
+            // Seed PAR-01: planilla de parición. Cumple una orden de parición (su código va en el
+            // encabezado) en una o varias recorridas, o, impresa en blanco, genera la orden al
+            // confirmarse. Sin lote destino: la cría nace en el lote de su madre. No lleva padre
+            // ni dientes: el padre se confirma aparte y la cría nace con 0 dientes.
+            WorkTemplate::updateOrCreate(
+                ['company_id' => $company->id, 'code' => 'PAR-01'],
+                [
+                    'category' => 'BIRTH',
+                    'title' => 'Planilla de Parición',
+                    'description' => 'Recorrida de parición. Una fila por vientre preñado, con el resultado marcado (parió, nacido muerto, aborto) y, si parió, la caravana, el sexo, el peso, la raza y la fecha de nacimiento de la cría. Un parto que la orden no listaba se escribe en una fila libre con la casilla «Fuera de orden». Cumple la orden de parición del encabezado; la cría queda en el lote de su madre.',
+                    'status' => 'active',
+                    'schema_definition' => [
+                        'header_fields' => [
+                            [
+                                'name' => 'orden_paricion',
+                                'label' => 'Orden de Parición',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Código de la orden de parición, formato PA-AAAAMMDD-NNNN, impreso en el recuadro del encabezado. No confundir con PAR-01, que es el código de la planilla. Puede estar vacío si la planilla se llenó sin orden.',
+                            ],
+                            [
+                                'name' => 'lote',
+                                'label' => 'Lote(s)',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Lote de los vientres, impreso. Con vientres de varios lotes dice "Varios". Informativo.',
+                            ],
+                            [
+                                'name' => 'fecha_recorrida',
+                                'label' => 'Fecha de Recorrida',
+                                'type' => 'date',
+                                'required' => false,
+                                'ai_hint' => 'Fecha de la recorrida (DD/MM/AAAA). Es informativa: NO copiarla a la fecha de nacimiento de las filas.',
+                            ],
+                            [
+                                'name' => 'responsable',
+                                'label' => 'Responsable / Firma',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Nombre de quien hizo la recorrida.',
+                            ],
+                            [
+                                'name' => 'hoja_numero',
+                                'label' => 'Hoja N°',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Número de hoja del recuadro "Hoja N de M" (el N).',
+                            ],
+                            [
+                                'name' => 'hoja_total',
+                                'label' => 'De (total de hojas)',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Total de hojas del recuadro "Hoja N de M" (el M).',
+                            ],
+                            [
+                                'name' => 'observaciones',
+                                'label' => 'Observaciones',
+                                'type' => 'text',
+                                'required' => false,
+                                'ai_hint' => 'Notas generales de la recorrida.',
+                            ],
+                        ],
+                        'table_columns' => [
+                            [
+                                'name' => 'caravana_madre',
+                                'label' => 'Caravana de la Madre',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Caravana del vientre, impresa por el sistema. En las filas en blanco del final puede estar escrita a mano. Ignorar filas completamente vacías.',
+                            ],
+                            [
+                                'name' => 'resultado',
+                                'label' => 'Resultado (V/M/A)',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Grupo RESULTADO de ESTA fila: tres subcolumnas con UNA casilla cada una, con encabezado PARIÓ, MUERTO y ABORTO (de izquierda a derecha). Una casilla cuenta sólo si tiene una X o tilde de tinta encima. Devolver V si está marcada la casilla bajo PARIÓ, M si está marcada la de MUERTO, A si está marcada la de ABORTO. Si hay dos o más marcadas devolver todas separadas por coma (ej: V, M). Si ninguna de las tres está marcada devolver vacío, aunque la fila tenga caravana de cría, sexo o fecha: NUNCA deducir el resultado de los otros datos.',
+                            ],
+                            [
+                                'name' => 'caravana_cria',
+                                'label' => 'Caravana de la Cría',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Caravana de la cría, escrita a mano. Puede estar vacía.',
+                            ],
+                            [
+                                'name' => 'sexo',
+                                'label' => 'Sexo (M/H)',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Celda angosta SEXO (M/H) de ESTA fila, a la derecha de CARAVANA CRÍA: UNA letra manuscrita, M = macho, H = hembra. Devolver la letra tal como está escrita. Si la celda está vacía, devolver vacío: no deducirlo de la caravana ni de otras filas. Si hay otra cosa escrita o no se entiende, devolver el texto tal cual.',
+                            ],
+                            [
+                                'name' => 'peso',
+                                'label' => 'Peso al Nacer (kg)',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Peso de la cría en kg, escrito a mano. Puede estar vacío. Ej: 32, 35.5',
+                            ],
+                            [
+                                'name' => 'raza',
+                                'label' => 'Raza',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Raza de la cría, escrita a mano (Ej: Angus, Hereford, Brangus). Puede estar vacía.',
+                            ],
+                            [
+                                'name' => 'fecha_nacimiento',
+                                'label' => 'Fecha de Nacimiento',
+                                'type' => 'date',
+                                'required' => false,
+                                'ai_hint' => 'Fecha del parto de ESTA fila (DD/MM/AAAA), escrita a mano. Si está vacía, devolver vacío: NO completar con la fecha de recorrida del encabezado.',
+                            ],
+                            [
+                                'name' => 'fuera_de_orden',
+                                'label' => 'Fuera de orden',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Última columna, FUERA DE ORDEN: UNA casilla por fila. Devolver X si la casilla de ESTA fila tiene una X o tilde de tinta encima, y vacío si no. No deducirlo de que la caravana de la madre esté escrita a mano.',
                             ],
                         ],
                     ],

@@ -19,8 +19,33 @@ final class BirthHistoryEntity
         private ?string $calfBatchName,
         private ?int $calfBatchId = null,
         private ?int $motherBatchId = null,
-        private ?string $motherBatchName = null
+        private ?string $motherBatchName = null,
+        /** The open order — of weaning or of transfer — that already holds this calf, if any. */
+        private ?string $openOrderCode = null,
+        /** The calf's current C/S: the reference a new one is chosen against. */
+        private ?int $calfCategoryId = null,
+        private ?int $calfSubcategoryId = null
     ) {
+    }
+
+    public function getCalfCategoryId(): ?int
+    {
+        return $this->calfCategoryId;
+    }
+
+    public function getCalfSubcategoryId(): ?int
+    {
+        return $this->calfSubcategoryId;
+    }
+
+    public function getOpenOrderCode(): ?string
+    {
+        return $this->openOrderCode;
+    }
+
+    public function holdByOpenOrder(?string $code): void
+    {
+        $this->openOrderCode = $code;
     }
 
     public function getGestationId(): int

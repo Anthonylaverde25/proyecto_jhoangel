@@ -43,4 +43,11 @@ class EloquentCaravanWeightRepository implements ICaravanWeightRepository
         CaravanWeight::where('caravan_id', $caravanId)
             ->update(['current' => false]);
     }
+
+    public function hasWeighingAfter(int $caravanId, \DateTimeInterface $date): bool
+    {
+        return CaravanWeight::where('caravan_id', $caravanId)
+            ->whereDate('weighing_date', '>', $date->format('Y-m-d'))
+            ->exists();
+    }
 }

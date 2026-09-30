@@ -11,6 +11,7 @@ use App\Core\Exceptions\DomainException;
 use App\Core\Interfaces\ICompanyContext;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\WorkTemplates\ProcessDest01Request;
+use App\Http\Resources\Dest01ResultResource;
 use Illuminate\Http\JsonResponse;
 
 final class ProcessDest01Controller extends Controller
@@ -30,7 +31,7 @@ final class ProcessDest01Controller extends Controller
         }
 
         try {
-            $dto = Dest01SubmissionDTO::fromArray($request->validated(), $companyId);
+            $dto = Dest01SubmissionDTO::fromArray($request->validated(), $companyId, $request->user()?->id);
             $result = ($this->useCases->processDest01)($dto);
         } catch (Dest01ValidationException $e) {
             return response()->json([
@@ -48,22 +49,10 @@ final class ProcessDest01Controller extends Controller
             ], 422);
         }
 
-        $batch = $result['batch'];
-        $action = $result['created'] ? 'creado' : 'actualizado';
-
         return response()->json([
             'status' => 'success',
-            'message' => "Destete registrado: {$result['calves_count']} crías en el lote '{$batch->getName()}' ({$action}).",
-            'data' => [
-                'batch_id' => $batch->getId(),
-                'batch_name' => $batch->getName(),
-                'batch_created' => $result['created'],
-                'calves_count' => $result['calves_count'],
-                'males_count' => $result['males_count'],
-                'females_count' => $result['females_count'],
-                'weighed_count' => $result['weighed_count'],
-                'average_weight' => $result['average_weight'],
-            ],
+            'message' => Dest01ResultResource::message($result),
+            'data' => (new Dest01ResultResource($result))->resolve($request),
         ], 201);
     }
 }

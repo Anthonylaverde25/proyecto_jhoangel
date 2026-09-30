@@ -5,20 +5,28 @@ declare(strict_types=1);
 namespace App\Application\UseCases\Caravans;
 
 use App\Application\DTOs\WeanCaravanDTO;
+use App\Application\UseCases\Batches\CreateBatchUseCase;
+use App\Core\Entities\CaravanMovementEntity;
+use App\Core\Entities\CaravanWeightEntity;
+use App\Core\Enums\BatchWeightCause;
 use App\Core\Exceptions\DomainException;
+use App\Core\Interfaces\IBatchRepository;
 use App\Core\Interfaces\ICaravanLineageRepository;
+use App\Core\Interfaces\ICaravanMovementRepository;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Interfaces\ICaravanWeightRepository;
-use App\Core\Interfaces\ICaravanMovementRepository;
-use App\Core\Interfaces\IBatchRepository;
-use App\Core\Interfaces\IFarmRepository;
 use App\Core\Interfaces\ICompanyRepository;
-use App\Core\Entities\CaravanWeightEntity;
-use App\Core\Entities\CaravanMovementEntity;
+use App\Core\Interfaces\IFarmRepository;
 use App\Core\Services\BatchWeightService;
 use Illuminate\Support\Facades\DB;
-use App\Core\Enums\BatchWeightCause;
 
+/**
+ * Weans one calf: it stops nursing, moves to its weaning batch with a WEANING movement, may change
+ * category and may record its weaning weight.
+ *
+ * It is the last step of every weaning, and every weaning reaches it through the DEST-01
+ * processing — a scanned sheet, an order executed from the screen or a registered weaning.
+ */
 final class WeanCaravanUseCase
 {
     public function __construct(
@@ -30,13 +38,20 @@ final class WeanCaravanUseCase
         private readonly IFarmRepository $farmRepository,
         private readonly ICompanyRepository $companyRepository,
         private readonly BatchWeightService $batchWeightService,
-        private readonly \App\Application\UseCases\Batches\CreateBatchUseCase $createBatchUseCase
+        private readonly CreateBatchUseCase $createBatchUseCase
     ) {
     }
 
-    public function __invoke(WeanCaravanDTO $dto): void
+    /**
+     * @param bool $recalculateTargetWeight false when the caller weans a whole troop and
+     *        recalculates each batch once at the end, instead of once per calf
+     * @return int the id of the WEANING movement that records it
+     *
+     * @throws DomainException
+     */
+    public function __invoke(WeanCaravanDTO $dto, bool $recalculateTargetWeight = true): int
     {
-        DB::transaction(function () use ($dto) {
+        return DB::transaction(function () use ($dto, $recalculateTargetWeight): int {
             $targetBatchId = $dto->targetBatchId;
             if ($dto->newBatch !== null) {
                 $batchEntity = ($this->createBatchUseCase)($dto->newBatch);
@@ -44,100 +59,105 @@ final class WeanCaravanUseCase
             }
 
             if (!$targetBatchId) {
-                throw new DomainException("No se especificó un lote de destino válido para el destete.");
+                throw new DomainException('No se especificó un lote de destino válido para el destete.');
             }
 
             // 1. Validate lineage
             $lineage = $this->lineageRepository->findByCaravanId($dto->caravanId);
             if ($lineage === null) {
-                throw new DomainException("No se encontró registro de linaje para la caravana especificada.");
+                throw new DomainException('No se encontró registro de linaje para la caravana especificada.');
             }
 
             if (!$lineage->isNursing()) {
-                throw new DomainException("La caravana ya se encuentra destetada.");
+                throw new DomainException('La caravana ya se encuentra destetada.');
             }
 
             // 2. Validate offspring caravan
             $calf = $this->caravanRepository->findById($dto->caravanId);
             if ($calf === null) {
-                throw new DomainException("No se encontró la caravana de la cría.");
+                throw new DomainException('No se encontró la caravana de la cría.');
             }
 
             // 3. Get RENSPA from target batch farm
             $batch = $this->batchRepository->findById($targetBatchId);
             if ($batch === null) {
-                throw new DomainException("Lote de destino no encontrado.");
+                throw new DomainException('Lote de destino no encontrado.');
             }
 
             $renspa = '';
             $farmId = $batch->getFarmId();
             if ($farmId !== null) {
-                $farm = $this->farmRepository->findById($farmId);
-                if ($farm !== null) {
-                    $renspa = $farm->getRenspa() ?? '';
-                }
-            } else {
-                $companyId = $calf->getCompanyId();
-                if ($companyId !== null) {
-                    $company = $this->companyRepository->findById($companyId);
-                    if ($company !== null) {
-                        $renspa = $company->getRenspa() ?? '';
-                    }
-                }
+                $renspa = $this->farmRepository->findById($farmId)?->getRenspa() ?? '';
+            } elseif ($calf->getCompanyId() !== null) {
+                $renspa = $this->companyRepository->findById($calf->getCompanyId())?->getRenspa() ?? '';
             }
 
             // 4. Mark is_nursing = false in caravan_lineage
             $this->lineageRepository->wean($dto->caravanId);
 
-            // 5. Update batch_id and category on caravan (origin batch read before it changes)
+            // 5. Move the calf (origin batch read before it changes) and, when a new category was
+            // decided, reclassify it whole: a new category without subcategory clears the old one.
             $fromBatchId = $calf->getBatchId();
-            $newCatId = $dto->newCategoryId;
-            $newSubId = $dto->newSubcategoryId;
-            if ($newCatId === null && $dto->newCategory !== null) {
-                $searchCode = strtoupper($dto->newCategory);
-                $codeMap = [
-                    'TERNERA' => 'TERNERO',
-                    'VACA_VACIA' => 'VACA',
-                    'VACA VACIA' => 'VACA',
-                ];
-                $searchCode = $codeMap[$searchCode] ?? $searchCode;
-                $newCatId = \App\Models\AnimalCategory::where('code', $searchCode)->value('id');
-            } elseif ($newCatId === null && $calf->getCategoryId() === null) {
-                $newCatId = \App\Models\AnimalCategory::where('code', 'TERNERO')->value('id');
-            }
-            $this->caravanRepository->updateBatchAndCategory($dto->caravanId, $targetBatchId, $newCatId, $newSubId);
 
-            // 6. Record weaning weight (and mark previous current ones as non-current).
-            // Without a weight the calf keeps its last recorded one.
+            if ($dto->newCategoryId !== null) {
+                $this->caravanRepository->updateBatchAndReclassify($dto->caravanId, $targetBatchId, $dto->newCategoryId, $dto->newSubcategoryId);
+            } else {
+                $newCatId = null;
+                if ($dto->newCategory !== null) {
+                    $searchCode = strtoupper($dto->newCategory);
+                    $codeMap = [
+                        'TERNERA' => 'TERNERO',
+                        'VACA_VACIA' => 'VACA',
+                        'VACA VACIA' => 'VACA',
+                    ];
+                    $searchCode = $codeMap[$searchCode] ?? $searchCode;
+                    $newCatId = \App\Models\AnimalCategory::where('code', $searchCode)->value('id');
+                } elseif ($calf->getCategoryId() === null) {
+                    $newCatId = \App\Models\AnimalCategory::where('code', 'TERNERO')->value('id');
+                }
+                $this->caravanRepository->updateBatchAndCategory($dto->caravanId, $targetBatchId, $newCatId);
+            }
+
+            $weaningDate = new \DateTime($dto->weaningDate);
+
+            // 6. Record the weaning weight. Without a weight the calf keeps its last recorded one;
+            // a weaning loaded late joins the history without displacing a later current weight.
             if ($dto->weaningWeight !== null) {
-                $this->caravanWeightRepository->markAllNonCurrentForCaravan($dto->caravanId);
-                $weightEntity = new CaravanWeightEntity(
+                $isCurrent = !$this->caravanWeightRepository->hasWeighingAfter($dto->caravanId, $weaningDate);
+
+                if ($isCurrent) {
+                    $this->caravanWeightRepository->markAllNonCurrentForCaravan($dto->caravanId);
+                }
+
+                $this->caravanWeightRepository->save(new CaravanWeightEntity(
                     id: null,
                     caravanId: $dto->caravanId,
                     weight: $dto->weaningWeight,
-                    current: true,
-                    weighingDate: new \DateTime($dto->weaningDate),
+                    current: $isCurrent,
+                    weighingDate: $weaningDate,
                     notes: $dto->notes ?? 'Weaning weight'
-                );
-                $this->caravanWeightRepository->save($weightEntity);
+                ));
             }
 
             // 7. Record CaravanMovement of type WEANING
-            $movementEntity = new CaravanMovementEntity(
+            $movement = $this->movementRepository->save(new CaravanMovementEntity(
                 id: null,
                 caravanId: $dto->caravanId,
                 companyId: $calf->getCompanyId(),
                 renspa: $renspa,
                 type: 'WEANING',
-                movementDate: new \DateTime($dto->weaningDate),
-                observations: $dto->notes ?? "Weaned and moved to batch: " . $batch->getName(),
+                movementDate: $weaningDate,
+                observations: $dto->notes ?? 'Weaned and moved to batch: ' . $batch->getName(),
                 fromBatchId: $fromBatchId,
                 toBatchId: $targetBatchId
-            );
-            $this->movementRepository->save($movementEntity);
+            ));
 
             // 8. Recalculate average weight of the target batch
-            $this->batchWeightService->recalculateBatchWeight($targetBatchId, BatchWeightCause::MOVEMENT_IN);
+            if ($recalculateTargetWeight) {
+                $this->batchWeightService->recalculateBatchWeight($targetBatchId, BatchWeightCause::MOVEMENT_IN);
+            }
+
+            return (int) $movement->getId();
         });
     }
 }

@@ -53,6 +53,25 @@ final class UpsertCaravanUseCase
         return $this->handleNewArrival($identification, $activeCompanyId, $dto, $category);
     }
 
+    /**
+     * Registers the animal as a new arrival of the active company, skipping the lookup that
+     * would otherwise route an existing tag into an update or a transfer.
+     *
+     * The caller is responsible for having proved the tag is not registered anywhere; the
+     * unique index on `identification` is the last line of defence if it was not.
+     */
+    public function registerNewArrival(RegisterCaravanDTO $dto): UpsertCaravanResultDTO
+    {
+        $category = $dto->category !== null ? AnimalCategory::tryFrom($dto->category) : null;
+
+        return $this->handleNewArrival(
+            new CaravanNumber($dto->identification),
+            $this->companyContext->getCompanyId(),
+            $dto,
+            $category
+        );
+    }
+
     private function handleUpdate(CaravanEntity $entity, RegisterCaravanDTO $dto, ?AnimalCategory $category): UpsertCaravanResultDTO
     {
         $oldBatchId = $entity->getBatchId();

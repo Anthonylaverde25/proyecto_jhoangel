@@ -6,6 +6,7 @@ namespace Tests\Feature\WorkTemplates;
 
 use App\Models\Activity;
 use App\Models\AnimalCategory;
+use App\Models\AnimalSubcategory;
 use App\Models\Batch;
 use App\Models\BatchType;
 use App\Models\BatchWeight;
@@ -97,22 +98,24 @@ class Cact01TemplateProcessingTest extends VeterinaryTestCase
             $this->animal($tag, 200, 2);
         }
 
+        // Three destinations, one activity: a sheet declares a single destination stage, and
+        // splitting a troop inside it is exactly what several destinations are for.
         $existingA = $this->existingBatch('Recría Este', 'RECRIA', true);
-        $existingB = $this->existingBatch('Invernada Sur', 'INVERNADA', false);
+        $existingB = $this->existingBatch('Recría Sur', 'RECRIA', false);
 
         $before = $this->seriesCount($this->sourceBatch->id);
 
         $response = $this->submit(
             [
                 ['key' => 'RECRIA ESTE', 'target_batch_id' => $existingA->id, 'new_batch' => null],
-                ['key' => 'INVERNADA SUR', 'target_batch_id' => $existingB->id, 'new_batch' => null],
+                ['key' => 'RECRIA SUR', 'target_batch_id' => $existingB->id, 'new_batch' => null],
                 $this->newDestination('RECRIA OESTE', 'Recría Oeste', 'RECRIA', isConfined: false),
             ],
             [
                 $this->row('CACT-10', 'RECRIA ESTE', 240, null),
                 $this->row('CACT-11', 'RECRIA ESTE', 245, null),
-                $this->row('CACT-12', 'INVERNADA SUR', 250, null),
-                $this->row('CACT-13', 'INVERNADA SUR', 255, null),
+                $this->row('CACT-12', 'RECRIA SUR', 250, null),
+                $this->row('CACT-13', 'RECRIA SUR', 255, null),
                 $this->row('CACT-14', 'RECRIA OESTE', 260, null),
                 $this->row('CACT-15', 'RECRIA OESTE', 265, null),
             ]
@@ -374,6 +377,140 @@ class Cact01TemplateProcessingTest extends VeterinaryTestCase
         $this->assertNull($existing->fresh()->is_confined, 'La planilla no completa el manejo de un lote existente');
     }
 
+    // ------------------------------------------- one destination activity per sheet
+
+    /**
+     * The invariant of a movement: it goes from one productive stage to ONE other, so a batch
+     * of a different activity cannot receive these animals however plainly its name was
+     * written on the paper.
+     */
+    public function test_an_existing_destination_of_another_activity_is_rejected(): void
+    {
+        $this->animal('CACT-AD1', 200, 2);
+        $elsewhere = $this->existingBatch('Invernada Ajena', 'INVERNADA', false);
+
+        $response = $this->submit(
+            [['key' => 'INVERNADA AJENA', 'target_batch_id' => $elsewhere->id, 'new_batch' => null]],
+            [$this->row('CACT-AD1', 'INVERNADA AJENA', 240, null)],
+            ['actividad_destino_id' => $this->activityId('RECRIA')]
+        );
+
+        $response->assertStatus(422);
+        $this->assertContains('DESTINATION_ACTIVITY_MISMATCH', array_column($response->json('header_errors'), 'code'));
+    }
+
+    public function test_a_new_batch_is_born_in_the_declared_destination_activity(): void
+    {
+        $this->animal('CACT-AD2', 200, 2);
+
+        $response = $this->submit(
+            [$this->newDestination('INVERNADA NUEVA', 'Invernada Nueva', 'INVERNADA', isConfined: false)],
+            [$this->row('CACT-AD2', 'INVERNADA NUEVA', 240, null)],
+            ['actividad_destino_id' => $this->activityId('RECRIA')]
+        );
+
+        $response->assertStatus(422);
+        $this->assertNothingPersisted('Invernada Nueva');
+    }
+
+    /**
+     * The dead end the rule creates, and the one that needs its own message: the written name
+     * belongs to an active batch of another stage, so it can neither receive the animals nor be
+     * created. Only a person can rename it or point somewhere else.
+     */
+    public function test_a_name_taken_in_another_activity_is_reported_as_such(): void
+    {
+        $this->animal('CACT-AD3', 200, 2);
+        $this->existingBatch('Nombre Ocupado', 'INVERNADA', false);
+
+        $response = $this->submit(
+            [$this->newDestination('NOMBRE OCUPADO', 'Nombre Ocupado', 'RECRIA', isConfined: false)],
+            [$this->row('CACT-AD3', 'NOMBRE OCUPADO', 240, null)]
+        );
+
+        $response->assertStatus(422);
+        $codes = array_column($response->json('header_errors'), 'code');
+        $this->assertContains('DESTINATION_NAME_IN_OTHER_ACTIVITY', $codes);
+        $this->assertNotContains('BATCH_NAME_IN_USE', $codes, 'Los dos callejones sin salida no son el mismo');
+    }
+
+    public function test_a_sheet_without_destination_activity_is_rejected(): void
+    {
+        $this->animal('CACT-AD4', 200, 2);
+
+        $response = $this->submit(
+            [$this->newDestination('RECRIA SIN ACTIVIDAD', 'Recría Sin Actividad', 'RECRIA', isConfined: false)],
+            [$this->row('CACT-AD4', 'RECRIA SIN ACTIVIDAD', 240, null)],
+            ['actividad_destino_id' => null]
+        );
+
+        $response->assertStatus(422);
+    }
+
+    // ------------------------------------------------------- the M cell of each row
+
+    /**
+     * The M cell describes the destination BATCH of the row, so a single letter against a batch
+     * is as good a declaration as the one the screen would have made.
+     */
+    public function test_the_m_cell_declares_the_management_of_a_new_batch(): void
+    {
+        $this->animal('CACT-M1', 200, 2);
+        $this->animal('CACT-M2', 200, 2);
+
+        $response = $this->submit(
+            [$this->newDestination('RECRIA POR CELDA', 'Recría Por Celda', 'RECRIA', isConfined: null)],
+            [
+                $this->row('CACT-M1', 'RECRIA POR CELDA', 240, null, manejo: 'C'),
+                $this->row('CACT-M2', 'RECRIA POR CELDA', 245, null, manejo: 'C'),
+            ]
+        );
+
+        $response->assertStatus(201);
+        $this->assertTrue((bool) Batch::where('name', 'Recría Por Celda')->value('is_confined'));
+    }
+
+    /**
+     * A batch cannot be born penned on one line and grazing on another. Nobody but the operator
+     * can say which one it was.
+     */
+    public function test_two_m_letters_for_the_same_new_batch_are_rejected(): void
+    {
+        $this->animal('CACT-M3', 200, 2);
+        $this->animal('CACT-M4', 200, 2);
+
+        $response = $this->submit(
+            [$this->newDestination('RECRIA CONTRADICTORIA', 'Recría Contradictoria', 'RECRIA', isConfined: null)],
+            [
+                $this->row('CACT-M3', 'RECRIA CONTRADICTORIA', 240, null, manejo: 'C'),
+                $this->row('CACT-M4', 'RECRIA CONTRADICTORIA', 245, null, manejo: 'P'),
+            ]
+        );
+
+        $response->assertStatus(422);
+        $this->assertContains('MANAGEMENT_SYSTEM_CONFLICT', array_column($response->json('header_errors'), 'code'));
+        $this->assertNothingPersisted('Recría Contradictoria');
+    }
+
+    /**
+     * Against a batch that already exists the letter is confirmation, never overwrite: the same
+     * rule the header box has always obeyed.
+     */
+    public function test_an_m_cell_that_contradicts_an_existing_batch_only_warns(): void
+    {
+        $this->animal('CACT-M5', 200, 2);
+        $existing = $this->existingBatch('Recría Ya Declarada', 'RECRIA', true);
+
+        $response = $this->submit(
+            [['key' => 'RECRIA YA DECLARADA', 'target_batch_id' => $existing->id, 'new_batch' => null]],
+            [$this->row('CACT-M5', 'RECRIA YA DECLARADA', 240, null, manejo: 'P')]
+        );
+
+        $response->assertStatus(201);
+        $this->assertContains('MANAGEMENT_SYSTEM_DIFFERS', array_column($response->json('data.warnings'), 'code'));
+        $this->assertTrue((bool) $existing->fresh()->is_confined, 'La celda M no pisa el manejo de un lote existente');
+    }
+
     // ---------------------------------------------------------------- destinations
 
     public function test_the_source_batch_cannot_be_its_own_destination(): void
@@ -456,7 +593,7 @@ class Cact01TemplateProcessingTest extends VeterinaryTestCase
 
     // ---------------------------------------------------------------- advisory only
 
-    public function test_mismatched_activity_sex_and_totals_warn_without_blocking(): void
+    public function test_mismatched_activity_and_totals_warn_without_blocking(): void
     {
         $this->animal('CACT-A1', 200, 2, 'M');
 
@@ -474,8 +611,61 @@ class Cact01TemplateProcessingTest extends VeterinaryTestCase
 
         $codes = array_column($response->json('data.warnings'), 'code');
         $this->assertContains('ACTIVITY_MISMATCH', $codes);
-        $this->assertContains('SEX_MISMATCH', $codes);
         $this->assertContains('SHEET_TOTAL_MISMATCH', $codes);
+    }
+
+    /**
+     * The sex a transfer sheet prints is only there to be read in the field: the animal's is the
+     * one its tag identifies. A different one on paper is neither a warning nor an overwrite.
+     */
+    public function test_sex_on_the_sheet_is_ignored(): void
+    {
+        $caravan = $this->animal('CACT-A1', 200, 2, 'M');
+
+        $response = $this->submit(
+            [$this->newDestination('RECRIA SEXO', 'Recría Sexo', 'RECRIA', isConfined: false)],
+            [array_merge($this->row('CACT-A1', 'RECRIA SEXO', 240, null), ['sexo' => 'H'])]
+        );
+
+        $response->assertStatus(201);
+        $this->assertNotContains('SEX_MISMATCH', array_column($response->json('data.warnings'), 'code'));
+        $this->assertSame('M', $caravan->fresh()->sex->value);
+    }
+
+    /**
+     * The sheet prints the current category as its C/S label. The control compares the pair it
+     * names, not the text: "Vaquillona / Reposición" is what a Vaquillona/Reposición IS.
+     */
+    public function test_the_current_category_is_controlled_as_a_pair(): void
+    {
+        $this->heifer('CACT-V1');
+        $this->heifer('CACT-V2');
+        $this->animal('CACT-V3', 200, 2);
+        $this->heifer('CACT-V4');
+
+        $response = $this->submit(
+            [$this->newDestination('RECRIA PAR', 'Recría Par', 'RECRIA', isConfined: false)],
+            [
+                // The printed label: the same pair.
+                array_merge($this->row('CACT-V1', 'RECRIA PAR', 240, null), ['categoria' => 'Vaquillona / Reposición']),
+                // Only the category: says nothing about the subcategory.
+                array_merge($this->row('CACT-V2', 'RECRIA PAR', 240, null), ['categoria' => 'Vaquillona']),
+                // A Ternero written as Novillito: a real contradiction.
+                array_merge($this->row('CACT-V3', 'RECRIA PAR', 240, null), ['categoria' => 'Novillito']),
+                // Left blank: nothing to control.
+                $this->row('CACT-V4', 'RECRIA PAR', 240, null),
+            ]
+        );
+
+        $response->assertStatus(201);
+
+        $mismatches = array_values(array_filter(
+            $response->json('data.warnings'),
+            static fn (array $warning): bool => $warning['code'] === 'CATEGORY_MISMATCH'
+        ));
+
+        $this->assertCount(1, $mismatches, json_encode($mismatches));
+        $this->assertStringContainsString('CACT-V3', $mismatches[0]['message']);
     }
 
     /**
@@ -499,6 +689,75 @@ class Cact01TemplateProcessingTest extends VeterinaryTestCase
         $this->assertSame(2, $response->json('data.destinations.0.count'), 'Las dos filas caen en el mismo destino');
     }
 
+    /**
+     * The transfer screen records a multi-destination movement through this same channel:
+     * bulk-transfer resolves exactly one target batch and cannot carry the case at all.
+     * Nobody is weighed on a screen, so the source curve must get its closing point and its
+     * MOVEMENT_OUT and NO weighing point in between.
+     */
+    public function test_a_movement_ordered_from_the_screen_records_without_weights(): void
+    {
+        foreach (['CACT-S1', 'CACT-S2', 'CACT-S3', 'CACT-S4'] as $tag) {
+            $this->animal($tag, 210, 2);
+        }
+
+        $existing = $this->existingBatch('Recría Orden Pantalla', 'RECRIA', true);
+        $before = $this->seriesCount($this->sourceBatch->id);
+
+        $response = $this->submit(
+            [
+                ['key' => 'A', 'target_batch_id' => $existing->id, 'new_batch' => null],
+                $this->newDestination('B', 'Recría Orden Pantalla 2', 'RECRIA', isConfined: false),
+            ],
+            [
+                $this->row('CACT-S1', 'A', null, null),
+                $this->row('CACT-S2', 'A', null, null),
+                $this->row('CACT-S3', 'B', null, null),
+                $this->row('CACT-S4', 'B', null, null),
+            ],
+            ['origin' => 'SCREEN']
+        );
+
+        $response->assertStatus(201);
+        $this->assertCount(2, $response->json('data.destinations'));
+
+        $new = array_slice($this->series($this->sourceBatch->id), $before);
+        $this->assertSame(['CONTROL', 'MOVEMENT_OUT'], array_column($new, 'type'));
+
+        foreach ([$existing->id, (int) $response->json('data.destinations.1.batch_id')] as $batchId) {
+            $this->assertSame(1, BatchWeight::where('batch_id', $batchId)->where('type', 'MOVEMENT_IN')->count());
+        }
+    }
+
+    /**
+     * A movement recorded from a screen must not leave a history claiming there was a sheet.
+     */
+    public function test_the_notes_say_where_the_order_was_born(): void
+    {
+        $fromScreen = $this->animal('CACT-S10', 210, 2);
+        $fromSheet = $this->animal('CACT-S11', 210, 2);
+
+        $this->submit(
+            [$this->newDestination('P', 'Recría Desde Pantalla', 'RECRIA', isConfined: true)],
+            [$this->row('CACT-S10', 'P', null, null)],
+            ['origin' => 'SCREEN']
+        )->assertStatus(201);
+
+        $this->submit(
+            [$this->newDestination('H', 'Recría Desde Planilla', 'RECRIA', isConfined: true)],
+            [$this->row('CACT-S11', 'H', 240, null)]
+        )->assertStatus(201);
+
+        $this->assertStringContainsString(
+            'orden generada desde el sistema',
+            (string) CaravanMovement::where('caravan_id', $fromScreen->id)->value('observations')
+        );
+        $this->assertStringContainsString(
+            'planilla escaneada',
+            (string) CaravanMovement::where('caravan_id', $fromSheet->id)->value('observations')
+        );
+    }
+
     public function test_the_tenant_seed_registers_cact01_and_archives_op02(): void
     {
         $template = \App\Models\WorkTemplate::where('code', 'CACT-01')->first();
@@ -511,6 +770,7 @@ class Cact01TemplateProcessingTest extends VeterinaryTestCase
         $this->assertTrue($columns->has('peso_actual'));
         $this->assertTrue($columns->has('dientes'));
         $this->assertTrue($columns->has('lote_destino'));
+        $this->assertTrue($columns->has('manejo'), 'La celda M del manejo por fila quedó en el esquema');
         $this->assertFalse($columns->has('estado_corporal'), 'El estado corporal quedó fuera de alcance');
 
         $this->assertSame('archived', \App\Models\WorkTemplate::where('code', 'OP-02')->value('status'));
@@ -530,6 +790,9 @@ class Cact01TemplateProcessingTest extends VeterinaryTestCase
             'source_batch_id' => $this->sourceBatch->id,
             'fecha_movimiento' => now()->toDateString(),
             'responsable' => 'Operador de manga',
+            // One destination activity per sheet. Derived from the destinations so every case
+            // does not have to repeat it; a case that puts it in question passes it in $header.
+            'actividad_destino_id' => $this->destinationActivityOf($destinations),
             ...$header,
             'destinations' => $destinations,
             'rows' => $rows,
@@ -537,17 +800,45 @@ class Cact01TemplateProcessingTest extends VeterinaryTestCase
     }
 
     /**
+     * @param list<array<string, mixed>> $destinations
+     */
+    private function destinationActivityOf(array $destinations): ?int
+    {
+        foreach ($destinations as $destination) {
+            if (is_array($destination['new_batch'] ?? null)) {
+                return (int) $destination['new_batch']['activity_id'];
+            }
+
+            $batch = ($destination['target_batch_id'] ?? null) !== null
+                ? Batch::find($destination['target_batch_id'])
+                : null;
+
+            if ($batch !== null) {
+                return (int) $batch->activity_id;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @return array<string, mixed>
      */
-    private function row(string $tag, string $destinationKey, int|float|null $weight, ?string $teeth): array
-    {
+    private function row(
+        string $tag,
+        string $destinationKey,
+        int|float|null $weight,
+        ?string $teeth,
+        ?string $manejo = null
+    ): array {
         return [
             'caravana' => $tag,
             'peso_actual' => $weight,
-            'sexo' => null,
             'categoria' => null,
             'dientes' => $teeth,
             'destination_key' => $destinationKey,
+            // The M cell speaks about the destination BATCH of this row, never about the animal.
+            'manejo' => $manejo,
             'observations' => null,
         ];
     }
@@ -597,6 +888,20 @@ class Cact01TemplateProcessingTest extends VeterinaryTestCase
             'weight' => $weight,
             'current' => true,
             'weighing_date' => now()->subMonths(3)->toDateString(),
+        ]);
+
+        return $caravan;
+    }
+
+    /** A female already classified as Vaquillona / Reposición. */
+    private function heifer(string $tag): Caravan
+    {
+        $caravan = $this->animal($tag, 200, 2, 'H');
+        $vaquillona = (int) AnimalCategory::withoutGlobalScopes()->where('code', 'VAQUILLONA')->value('id');
+
+        $caravan->update([
+            'category_id' => $vaquillona,
+            'subcategory_id' => (int) AnimalSubcategory::where('category_id', $vaquillona)->where('code', 'REPOSICION')->value('id'),
         ]);
 
         return $caravan;

@@ -94,6 +94,44 @@ class EloquentCaravanRepository implements ICaravanRepository
         return $resolved;
     }
 
+    public function findOwnershipByIdentifications(array $identifications): array
+    {
+        $values = array_values(array_unique(array_filter(
+            array_map(static fn ($raw) => trim((string) $raw), $identifications),
+            static fn (string $value): bool => $value !== ''
+        )));
+
+        if ($values === []) {
+            return [];
+        }
+
+        $rows = Caravan::withoutGlobalScopes()
+            ->leftJoin('batches', 'batches.id', '=', 'caravans.batch_id')
+            ->whereIn('caravans.identification', $values)
+            ->get([
+                'caravans.id',
+                'caravans.identification',
+                'caravans.company_id',
+                'caravans.batch_id',
+                'batches.name as batch_name',
+            ]);
+
+        $resolved = [];
+
+        foreach ($rows as $row) {
+            $identification = (string) $row->identification;
+            $resolved[$identification] = new \App\Core\ValueObjects\CaravanOwnership(
+                (int) $row->id,
+                $identification,
+                (int) $row->company_id,
+                $row->batch_id !== null ? (int) $row->batch_id : null,
+                $row->batch_name !== null ? (string) $row->batch_name : null,
+            );
+        }
+
+        return $resolved;
+    }
+
     public function findByIdentificationGlobal(CaravanNumber $identification): ?CaravanEntity
     {
         $model = Caravan::withoutGlobalScopes()
@@ -296,7 +334,9 @@ class EloquentCaravanRepository implements ICaravanRepository
                     calfBatchName: $lineage->caravan?->batch?->name,
                     calfBatchId: $lineage->caravan?->batch_id !== null ? (int) $lineage->caravan->batch_id : null,
                     motherBatchId: $g->caravan?->batch_id !== null ? (int) $g->caravan->batch_id : null,
-                    motherBatchName: $g->caravan?->batch?->name
+                    motherBatchName: $g->caravan?->batch?->name,
+                    calfCategoryId: $lineage->caravan?->category_id !== null ? (int) $lineage->caravan->category_id : null,
+                    calfSubcategoryId: $lineage->caravan?->subcategory_id !== null ? (int) $lineage->caravan->subcategory_id : null
                 );
             }
         }
@@ -314,6 +354,15 @@ class EloquentCaravanRepository implements ICaravanRepository
             $data['subcategory_id'] = $subcategoryId;
         }
         Caravan::where('id', $caravanId)->update($data);
+    }
+
+    public function updateBatchAndReclassify(int $caravanId, int $batchId, int $categoryId, ?int $subcategoryId = null): void
+    {
+        Caravan::where('id', $caravanId)->update([
+            'batch_id' => $batchId,
+            'category_id' => $categoryId,
+            'subcategory_id' => $subcategoryId,
+        ]);
     }
 
     public function updateTeeth(int $caravanId, int $teeth): void

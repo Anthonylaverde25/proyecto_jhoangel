@@ -37,6 +37,15 @@ interface ICaravanRepository
     public function findByIdentificationGlobal(CaravanNumber $identification): ?CaravanEntity;
 
     /**
+     * Resolves who holds each of the given tags across every company of the tenant, in a
+     * single query. Tags that nobody holds are simply absent from the returned map.
+     *
+     * @param string[] $identifications
+     * @return array<string, \App\Core\ValueObjects\CaravanOwnership> keyed by identification
+     */
+    public function findOwnershipByIdentifications(array $identifications): array;
+
+    /**
      * @param int $id
      * @return CaravanEntity|null
      */
@@ -96,6 +105,13 @@ interface ICaravanRepository
      * Update the batch assignment and optionally the category/subcategory IDs of a caravan.
      */
     public function updateBatchAndCategory(int $caravanId, int $batchId, ?int $categoryId = null, ?int $subcategoryId = null): void;
+
+    /**
+     * Moves the animal and reclassifies it. The old subcategory belongs to the old category, so
+     * it is replaced by the one given, or cleared rather than left pointing at a category the
+     * animal no longer has.
+     */
+    public function updateBatchAndReclassify(int $caravanId, int $batchId, int $categoryId, ?int $subcategoryId = null): void;
 
     /**
      * Narrow write of the dentition read at the chute.

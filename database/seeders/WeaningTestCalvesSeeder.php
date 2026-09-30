@@ -7,12 +7,19 @@ namespace Database\Seeders;
 use App\Models\Activity;
 use App\Models\AnimalCategory;
 use App\Models\Batch;
+use App\Models\BatchWeight;
 use App\Models\BatchType;
 use App\Models\Caravan;
 use App\Models\CaravanGestation;
 use App\Models\CaravanLineage;
+use App\Models\CaravanMovement;
+use App\Models\CaravanWeight;
 use App\Models\Company;
+use App\Models\WeaningOrder;
+use App\Models\WeaningOrderAnimal;
+use App\Models\WeaningOrderDestination;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Calves at foot for the DEST-01 test sheets in `ai-agent/image_test/dest001/`
@@ -22,9 +29,23 @@ use Illuminate\Database\Seeder;
  *    "Lote Testing Cría (destete)", born BIRTH_DATE. Every third calf is a female.
  *  - DST-T-47: a calf already weaned into the existing weaning batch "Destete Septiembre 2026",
  *    so the invalid sheet can show ALREADY_WEANED and the "existing batch" destination.
+ *  - DST-T-48: at foot (mother DST-V-48) but in ANOTHER breeding batch,
+ *    "Lote Testing Cría (otro rodeo)", for the sheet whose header names the first one.
+ *  - DST-T-49..70: calves at foot for the sheets that fulfil a weaning order; DST-T-67..70 in the
+ *    other breeding batch, because one order may take calves of several. Three orders are issued
+ *    with fixed codes, the ones the order-bearing images print:
+ *      · DS-20260915-0001 — DST-T-49..56 and 67..68, every calf to "Destete Septiembre 2026",
+ *        category unchanged, traditional weaning.
+ *      · DS-20260915-0002 — DST-T-57..62, per animal: males to the new batch
+ *        "Destete Machos Prueba 2026" (pasture) as Novillito, females to "Destete Septiembre
+ *        2026" as Vaquillona / Reposición.
+ *      · DS-20260915-0003 — DST-T-63..66 and 69..70, every calf to "Destete Septiembre 2026",
+ *        category decided at the chute, weaning type left to be marked.
  *
- * Re-running it puts DST-T-01..46 back at foot in the breeding batch, so the valid sheets can be
- * loaded again without a migrate:fresh:
+ * Re-running it puts DST-T-01..48 back where they started and erases what the loads wrote: the
+ * weaning weights and movements of those calves, the weight curve of the test batches, and the
+ * weaning batches the sheets create ({@see self::SHEET_CREATED_BATCHES}) — otherwise the second
+ * load of a "new batch" sheet finds it and stops testing that path. No migrate:fresh needed:
  *     php artisan tenants:seed --class=WeaningTestCalvesSeeder
  */
 class WeaningTestCalvesSeeder extends Seeder
@@ -33,6 +54,33 @@ class WeaningTestCalvesSeeder extends Seeder
     private const WEANING_BATCH_NAME = 'Destete Septiembre 2026';
     private const NURSING_CALVES = 46;
     private const WEANED_CALF = 47;
+    private const OTHER_HERD_CALF = 48;
+    private const OTHER_HERD_BATCH_NAME = 'Lote Testing Cría (otro rodeo)';
+    private const LAST_CALF = 70;
+    /** Order calves that live in the other breeding batch. */
+    private const OTHER_HERD_ORDER_CALVES = [67, 68, 69, 70];
+
+    /** Fixed, not generated: the scanned images print them and must keep resolving. */
+    public const ORDER_SINGLE_CODE = 'DS-20260915-0001';
+    public const ORDER_PER_ANIMAL_CODE = 'DS-20260915-0002';
+    public const ORDER_AT_CHUTE_CODE = 'DS-20260915-0003';
+    private const ORDER_DATE = '2026-09-15';
+    public const NEW_MALES_BATCH_NAME = 'Destete Machos Prueba 2026';
+
+    /** Written on the sheets as batches to create; never seeded. */
+    private const SHEET_CREATED_BATCHES = [
+        'Destete Prueba Septiembre 2026',
+        'Destete Prueba Completa 2026',
+        'Destete Prueba Dos Hojas 2026',
+        'Destete Prueba Fechas 2026',
+        'Destete Prueba Madres 2026',
+        'Destete Prueba Pesos 2026',
+        'Destete Prueba Otro Rodeo 2026',
+        'Destete Prueba Tipo 2026',
+        self::NEW_MALES_BATCH_NAME,
+        'Destete Por Animal Prueba 2026',
+        'Destete Corral Prueba 2026',
+    ];
     private const BIRTH_DATE = '2026-02-10';
     private const SERVICE_START_DATE = '2025-05-05';
 
@@ -50,24 +98,34 @@ class WeaningTestCalvesSeeder extends Seeder
         $cowCategoryId = AnimalCategory::withoutGlobalScopes()->where('code', 'VACA')->value('id');
         $calfCategoryId = AnimalCategory::withoutGlobalScopes()->where('code', 'TERNERO')->value('id');
 
-        $breedingBatch = $this->resolveBreedingBatch($companyId);
+        $breedingBatch = $this->resolveBreedingBatch($companyId, self::BREEDING_BATCH_NAME, 'Lote propio reservado a pruebas de DEST-01: vacas con cría al pie.');
+        $otherHerd = $this->resolveBreedingBatch($companyId, self::OTHER_HERD_BATCH_NAME, 'Otro rodeo de cría: una planilla que declara el primero y trae esta cría la desteta desde acá.');
         $weaningBatch = $this->resolveWeaningBatch($companyId);
 
-        for ($n = 1; $n <= self::WEANED_CALF; $n++) {
+        $calfIds = [];
+        for ($n = 1; $n <= self::LAST_CALF; $n++) {
             $weaned = $n === self::WEANED_CALF;
-            $this->seedCalfAtFoot(
+            $herdId = $n === self::OTHER_HERD_CALF || in_array($n, self::OTHER_HERD_ORDER_CALVES, true)
+                ? (int) $otherHerd->id
+                : (int) $breedingBatch->id;
+            $calfIds[] = $this->seedCalfAtFoot(
                 $companyId,
                 $n,
-                (int) $breedingBatch->id,
-                $weaned ? (int) $weaningBatch->id : (int) $breedingBatch->id,
+                $herdId,
+                $weaned ? (int) $weaningBatch->id : $herdId,
                 !$weaned,
                 $cowCategoryId,
                 $calfCategoryId
             );
         }
 
+        $batchIds = [(int) $breedingBatch->id, (int) $otherHerd->id, (int) $weaningBatch->id];
+        $this->eraseLoads($companyId, $calfIds, $batchIds);
+        $this->seedOrders($companyId, $weaningBatch);
+        $this->refreshBatchCaches($batchIds);
+
         $this->command?->info(sprintf(
-            'WeaningTestCalvesSeeder: %d crías al pie (DST-T-01..%02d) en "%s" y DST-T-%02d destetada en "%s".',
+            'WeaningTestCalvesSeeder: %d crías al pie (DST-T-01..%02d) en "%s", DST-T-%02d destetada en "%s", DST-T-48 al pie en "' . self::OTHER_HERD_BATCH_NAME . '" y las órdenes ' . self::ORDER_SINGLE_CODE . ', ' . self::ORDER_PER_ANIMAL_CODE . ' y ' . self::ORDER_AT_CHUTE_CODE . ' emitidas (DST-T-49..70).',
             self::NURSING_CALVES,
             self::NURSING_CALVES,
             $breedingBatch->name,
@@ -76,19 +134,19 @@ class WeaningTestCalvesSeeder extends Seeder
         ));
     }
 
-    private function resolveBreedingBatch(int $companyId): Batch
+    private function resolveBreedingBatch(int $companyId, string $name, string $observaciones): Batch
     {
         $criaActivity = Activity::withoutGlobalScopes()->where('code', 'CRIA')->first()
             ?? Activity::create(['code' => 'CRIA', 'name' => 'Cría']);
 
         return Batch::withoutGlobalScopes()->updateOrCreate(
-            ['company_id' => $companyId, 'name' => self::BREEDING_BATCH_NAME],
+            ['company_id' => $companyId, 'name' => $name],
             [
                 'farm_id' => null,
                 'activity_id' => $criaActivity->id,
                 'is_active' => true,
                 'is_system' => false,
-                'observaciones' => 'Lote propio reservado a pruebas de DEST-01: vacas con cría al pie.',
+                'observaciones' => $observaciones,
             ]
         );
     }
@@ -119,7 +177,7 @@ class WeaningTestCalvesSeeder extends Seeder
         bool $nursing,
         ?int $cowCategoryId,
         ?int $calfCategoryId
-    ): void {
+    ): int {
         $number = str_pad((string) $n, 2, '0', STR_PAD_LEFT);
 
         $mother = Caravan::withoutGlobalScopes()->updateOrCreate(
@@ -146,5 +204,174 @@ class WeaningTestCalvesSeeder extends Seeder
                 'is_nursing' => $nursing,
             ]
         );
+
+        return (int) $calf->id;
+    }
+
+    /**
+     * What previous loads left behind. DST-T-47 keeps nothing either: its weaning is a seeded
+     * fact, not a load, and it has no weight of its own to lose.
+     *
+     * @param list<int> $calfIds
+     * @param list<int> $batchIds
+     */
+    private function eraseLoads(int $companyId, array $calfIds, array $batchIds): void
+    {
+        CaravanWeight::whereIn('caravan_id', $calfIds)->delete();
+        CaravanMovement::withoutGlobalScopes()->whereIn('caravan_id', $calfIds)->delete();
+        BatchWeight::whereIn('batch_id', $batchIds)->delete();
+
+        // Every load leaves a weaning order behind — the one a blank sheet gets, a registration, an
+        // order built by hand from /weaning-orders. An open one would hold its calves, so every
+        // order of these calves goes; the fixed-code ones are seeded again right after.
+        $orderIds = WeaningOrderAnimal::withoutGlobalScopes()->whereIn('caravan_id', $calfIds)->pluck('weaning_order_id')->unique();
+        WeaningOrder::withoutGlobalScopes()->whereIn('id', $orderIds)->delete();
+
+        $created = Batch::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->whereIn('name', self::SHEET_CREATED_BATCHES)
+            ->get();
+
+        foreach ($created as $batch) {
+            if (Caravan::withoutGlobalScopes()->where('batch_id', $batch->id)->exists()) {
+                $this->command?->warn("WeaningTestCalvesSeeder: el lote '{$batch->name}' tiene animales; no se borra.");
+
+                continue;
+            }
+
+            BatchWeight::where('batch_id', $batch->id)->delete();
+            $batch->delete();
+        }
+    }
+
+    /**
+     * The three ISSUED orders the order-bearing sheets resolve against, at their starting point:
+     * roll PENDING, no resolved batch, one history line.
+     */
+    private function seedOrders(int $companyId, Batch $weaningBatch): void
+    {
+        $novillito = (int) AnimalCategory::withoutGlobalScopes()->where('code', 'NOVILLITO')->value('id');
+        $vaquillona = (int) AnimalCategory::withoutGlobalScopes()->where('code', 'VAQUILLONA')->value('id');
+        $reposicion = \App\Models\AnimalSubcategory::withoutGlobalScopes()
+            ->where('category_id', $vaquillona)
+            ->where('code', 'REPOSICION')
+            ->value('id');
+
+        $existing = ['key' => 'DESTETE SEPTIEMBRE 2026', 'label' => $weaningBatch->name, 'target_batch_id' => (int) $weaningBatch->id, 'new_batch_name' => null, 'is_confined' => null];
+        $males = ['key' => 'DESTETE MACHOS PRUEBA 2026', 'label' => self::NEW_MALES_BATCH_NAME, 'target_batch_id' => null, 'new_batch_name' => self::NEW_MALES_BATCH_NAME, 'is_confined' => false];
+
+        $this->seedOrder($companyId, self::ORDER_SINGLE_CODE, 'single', 'KEEP', 'TRADITIONAL', [$existing],
+            array_map(fn (int $n) => [$n, $existing['key'], null, null], [...range(49, 56), 67, 68]));
+
+        $this->seedOrder($companyId, self::ORDER_PER_ANIMAL_CODE, 'per_animal', 'DECLARED', 'TRADITIONAL', [$existing, $males],
+            array_map(
+                fn (int $n) => $n % 3 === 0
+                    ? [$n, $existing['key'], $vaquillona, $reposicion !== null ? (int) $reposicion : null]
+                    : [$n, $males['key'], $novillito, null],
+                range(57, 62)
+            ));
+
+        $this->seedOrder($companyId, self::ORDER_AT_CHUTE_CODE, 'single', 'AT_CHUTE', null, [$existing],
+            array_map(fn (int $n) => [$n, $existing['key'], null, null], [...range(63, 66), 69, 70]));
+    }
+
+    /**
+     * @param list<array{key: string, label: string, target_batch_id: ?int, new_batch_name: ?string, is_confined: ?bool}> $destinations
+     * @param list<array{0: int, 1: string, 2: ?int, 3: ?int}> $lines calf number, destination key, target category, target subcategory
+     */
+    private function seedOrder(
+        int $companyId,
+        string $code,
+        string $destinationMode,
+        string $categoryMode,
+        ?string $weaningType,
+        array $destinations,
+        array $lines
+    ): void {
+        $activityId = BatchType::withoutGlobalScopes()->where('code', 'WEANING')->value('activity_id')
+            ?? Activity::withoutGlobalScopes()->where('code', 'CRIA')->value('id');
+
+        $order = WeaningOrder::withoutGlobalScopes()->create([
+            'company_id' => $companyId,
+            'code' => $code,
+            'status' => 'ISSUED',
+            'kind' => 'PLANNED',
+            'destination_mode' => $destinationMode,
+            'category_mode' => $categoryMode,
+            'destination_activity_id' => $activityId,
+            'weaning_type' => $weaningType,
+            'planned_head_count' => count($lines),
+            'weaning_date' => self::ORDER_DATE,
+            'emitted_at' => self::ORDER_DATE . ' 08:00:00',
+            'printed_at' => self::ORDER_DATE . ' 08:05:00',
+            'responsable' => 'Encargado de prueba',
+            'observations' => 'Orden de prueba de las planillas DEST-01 escaneadas.',
+        ]);
+
+        $destinationIds = [];
+        foreach ($destinations as $destination) {
+            $destinationIds[$destination['key']] = (int) WeaningOrderDestination::withoutGlobalScopes()->create([
+                'company_id' => $companyId,
+                'weaning_order_id' => $order->id,
+                'destination_key' => $destination['key'],
+                'label' => $destination['label'],
+                'target_batch_id' => $destination['target_batch_id'],
+                'new_batch_name' => $destination['new_batch_name'],
+                'is_confined' => $destination['is_confined'],
+            ])->id;
+        }
+
+        foreach ($lines as [$n, $key, $categoryId, $subcategoryId]) {
+            $calf = Caravan::withoutGlobalScopes()
+                ->where('company_id', $companyId)
+                ->where('identification', sprintf('DST-T-%02d', $n))
+                ->firstOrFail();
+
+            WeaningOrderAnimal::withoutGlobalScopes()->create([
+                'company_id' => $companyId,
+                'weaning_order_id' => $order->id,
+                'caravan_id' => $calf->id,
+                'source_batch_id' => $calf->batch_id,
+                'weaning_order_destination_id' => $destinationIds[$key],
+                'target_category_id' => $categoryId,
+                'target_subcategory_id' => $subcategoryId,
+                'status' => 'PENDING',
+            ]);
+        }
+
+        $order->history()->create([
+            'company_id' => $companyId,
+            'from_status' => null,
+            'to_status' => 'ISSUED',
+            'action_reason' => 'Orden sembrada para las pruebas de escaneo DEST-01',
+        ]);
+    }
+
+    /**
+     * The head count and weight figures of a batch are a cache that only a recalculation
+     * refreshes; putting the calves back without it leaves the screens announcing the last load.
+     *
+     * @param list<int> $batchIds
+     */
+    private function refreshBatchCaches(array $batchIds): void
+    {
+        foreach ($batchIds as $batchId) {
+            $stats = DB::table('caravans')
+                ->leftJoin('caravan_weights', function ($join) {
+                    $join->on('caravan_weights.caravan_id', '=', 'caravans.id')->where('caravan_weights.current', true);
+                })
+                ->where('caravans.batch_id', $batchId)
+                ->selectRaw('COUNT(caravans.id) AS heads, COUNT(caravan_weights.id) AS weighed, SUM(caravan_weights.weight) AS total, MIN(caravan_weights.weight) AS min_w, MAX(caravan_weights.weight) AS max_w')
+                ->first();
+
+            Batch::withoutGlobalScopes()->whereKey($batchId)->update([
+                'caravans_count' => (int) $stats->heads,
+                'weighed_count' => (int) $stats->weighed,
+                'total_weight' => (float) ($stats->total ?? 0.0),
+                'current_weight' => $stats->weighed > 0 ? round((float) $stats->total / (int) $stats->weighed, 2) : null,
+                'min_weight' => $stats->min_w,
+                'max_weight' => $stats->max_w,
+            ]);
+        }
     }
 }

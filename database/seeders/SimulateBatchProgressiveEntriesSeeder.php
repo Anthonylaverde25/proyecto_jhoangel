@@ -7,6 +7,7 @@ namespace Database\Seeders;
 use App\Models\Activity;
 use App\Models\AnimalCategory;
 use App\Models\Batch;
+use App\Models\BatchType;
 use App\Models\BatchWeight;
 use App\Models\Breed;
 use App\Models\Caravan;
@@ -18,7 +19,12 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 
 /**
- * Simulates progressive entries of steer cohorts over 5 months into batch "lote ejemplo peso 1" (ID: 20).
+ * Simulates progressive entries of steer cohorts over 5 months into batch "lote ejemplo peso 1".
+ *
+ * The batch is resolved by NAME only, and created when missing. It used to fall back to id 20,
+ * which on a fresh `migrate:fresh --seed` is whatever batch the seeders before this one happened
+ * to create twentieth — "Test CACT Cría" today — so every full seed dropped 26 LEP1 steers and a
+ * Recría weight curve into the CACT-01 scan scenario.
  *
  * Reproduces real biological herd dynamics:
  *  - Cohort 1 (May 2026): 8 steers (~175.8 kg avg)
@@ -43,21 +49,21 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
 
         $companyId = (int) $company->id;
 
-        // Resolve Batch 20
-        $batch = Batch::withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where(function ($query) {
-                $query->where('id', 20)
-                    ->orWhere('name', self::BATCH_NAME);
-            })
-            ->first();
+        $recriaActivityId = Activity::withoutGlobalScopes()->where('code', 'RECRIA')->value('id');
 
-        if (!$batch) {
-            $this->command?->error('SimulateBatchProgressiveEntriesSeeder: Target batch not found.');
-            return;
-        }
+        $batch = Batch::withoutGlobalScopes()->firstOrCreate(
+            ['company_id' => $companyId, 'name' => self::BATCH_NAME],
+            [
+                'activity_id' => $recriaActivityId,
+                'batch_type_id' => BatchType::withoutGlobalScopes()->where('code', 'GROWING_STEERS')->value('id')
+                    ?? BatchType::withoutGlobalScopes()->where('code', 'OPERATIONAL')->value('id'),
+                'is_confined' => false,
+                'is_active' => true,
+                'is_system' => false,
+            ]
+        );
 
-        $recriaActivityId = Activity::withoutGlobalScopes()->where('code', 'RECRIA')->value('id') ?? $batch->activity_id;
+        $recriaActivityId ??= $batch->activity_id;
         $novillitoCategoryId = AnimalCategory::withoutGlobalScopes()->where('code', 'NOVILLITO')->value('id');
 
         // Available breeds and colors
@@ -668,7 +674,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             'updated_at' => $dateM5,
         ]);
 
-        // Pre-existing caravan in batch 20 (DST-T-20, weight: 199.00 kg)
+        // A caravan already in the batch before the simulation, if any (DST-T-20 in older databases).
         $preExistingCaravan = Caravan::withoutGlobalScopes()
             ->where('batch_id', $batch->id)
             ->where('identification', 'not like', 'LEP1-%')

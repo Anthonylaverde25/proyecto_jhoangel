@@ -19,4 +19,10 @@ interface ICaravanWeightRepository
     public function findByCaravanId(int $caravanId): array;
 
     public function markAllNonCurrentForCaravan(int $caravanId): void;
+
+    /**
+     * Whether the animal already has a weighing dated after this day: a weighing loaded late
+     * then belongs to the history and must not displace the current one.
+     */
+    public function hasWeighingAfter(int $caravanId, \DateTimeInterface $date): bool;
 }

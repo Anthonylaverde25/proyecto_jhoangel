@@ -180,6 +180,43 @@ class Dest01TemplateProcessingTest extends VeterinaryTestCase
         $this->assertNothingPersisted('Destete DEST Errores');
     }
 
+    public function test_a_weight_of_zero_or_less_is_rejected(): void
+    {
+        $this->nursingCalf('DEST-T-60', 'DEST-V-60', 'M');
+        $this->nursingCalf('DEST-T-61', 'DEST-V-61', 'M');
+
+        $response = $this->submit(['new_batch_name' => 'Destete DEST Peso Cero'], [
+            $this->row('DEST-T-60', 0),
+            $this->row('DEST-T-61', 172),
+        ]);
+
+        $response->assertStatus(422);
+        $this->assertSame(['INVALID_WEIGHT'], array_column($response->json('row_errors.0.errors'), 'code'));
+        $this->assertSame(0, $response->json('row_errors.0.row_index'));
+        $this->assertNothingPersisted('Destete DEST Peso Cero');
+    }
+
+    public function test_a_weight_far_from_the_troop_is_warned_and_still_saved(): void
+    {
+        foreach (['70', '71', '72', '73'] as $n) {
+            $this->nursingCalf("DEST-T-{$n}", "DEST-V-{$n}", 'M');
+        }
+
+        $response = $this->submit(['new_batch_name' => 'Destete DEST Peso Raro'], [
+            $this->row('DEST-T-70', 172),
+            $this->row('DEST-T-71', 1850),
+            $this->row('DEST-T-72', 185.5),
+            $this->row('DEST-T-73', 176),
+        ]);
+
+        // The person reviewing the sheet saw it marked and confirmed: it is a warning, not a block.
+        $response->assertStatus(201);
+        $warnings = $response->json('data.warnings');
+        $this->assertSame(['WEIGHT_OUTLIER'], array_column($warnings, 'code'));
+        $this->assertStringContainsString("'DEST-T-71' (1.850 kg)", $warnings[0]['message']);
+        $this->assertStringContainsString('mediana 180,8 kg', $warnings[0]['message']);
+    }
+
     public function test_the_declared_destination_is_checked(): void
     {
         $this->nursingCalf('DEST-T-50', 'DEST-V-50', 'M');
@@ -188,12 +225,17 @@ class Dest01TemplateProcessingTest extends VeterinaryTestCase
         $inUse = $this->submit(['new_batch_name' => 'Cría Origen DEST'], $rows);
         $inUse->assertStatus(422);
         $this->assertSame(['BATCH_NAME_IN_USE'], array_column($inUse->json('header_errors'), 'code'));
+        // A breeding batch never shows up among the weaning batches to pick from.
+        $this->assertStringContainsString('no es un lote de destete', $inUse->json('header_errors.0.message'));
 
         $notWeaning = $this->submit(['target_batch_id' => $this->breedingBatch->id], $rows);
         $notWeaning->assertStatus(422);
         $this->assertSame(['BATCH_NOT_FOUND'], array_column($notWeaning->json('header_errors'), 'code'));
 
-        $this->submit([], $rows)->assertStatus(422)->assertJsonValidationErrors(['target_batch_id']);
+        $missing = $this->submit([], $rows);
+        $missing->assertStatus(422);
+        $this->assertSame(['BATCH_TARGET_MISSING'], array_column($missing->json('header_errors'), 'code'));
+        $this->assertSame('lote_destete', $missing->json('header_errors.0.field'));
         $this->submit(['target_batch_id' => $this->breedingBatch->id, 'new_batch_name' => 'Doble'], $rows)
             ->assertStatus(422)
             ->assertJsonValidationErrors(['target_batch_id']);
@@ -222,36 +264,6 @@ class Dest01TemplateProcessingTest extends VeterinaryTestCase
         $this->assertSame(['NO_CALVES'], array_column($response->json('header_errors'), 'code'));
     }
 
-    public function test_bulk_wean_now_records_the_origin_and_target_batches_and_still_requires_weight(): void
-    {
-        $calf = $this->nursingCalf('DEST-T-70', 'DEST-V-70', 'M');
-        $target = Batch::create([
-            'company_id' => $this->company->id,
-            'name' => 'Destete Bulk DEST',
-            'batch_type_id' => $this->weaningTypeId,
-            'is_active' => true,
-        ]);
-        $weaning = [
-            'caravan_id' => $calf->id,
-            'target_batch_id' => $target->id,
-            'weaning_date' => now()->toDateString(),
-        ];
-
-        $this->apiAs('POST', '/caravans/bulk-wean', ['weanings' => [$weaning]])
-            ->assertStatus(422)
-            ->assertJsonValidationErrors(['weanings.0.weaning_weight']);
-
-        $this->apiAs('POST', '/caravans/bulk-wean', ['weanings' => [[...$weaning, 'weaning_weight' => 175]]])
-            ->assertSuccessful();
-
-        $this->assertDatabaseHas('caravan_movements', [
-            'caravan_id' => $calf->id,
-            'type' => 'WEANING',
-            'from_batch_id' => $this->breedingBatch->id,
-            'to_batch_id' => $target->id,
-        ]);
-    }
-
     public function test_the_tenant_seed_registers_dest01(): void
     {
         $template = WorkTemplate::withoutGlobalScopes()
@@ -261,11 +273,16 @@ class Dest01TemplateProcessingTest extends VeterinaryTestCase
 
         $this->assertSame('WEANING', $template->category);
         $this->assertSame(
-            ['lote_destete', 'fecha_destete', 'tipo_destete', 'lote_origen', 'responsable', 'hoja_numero', 'hoja_total', 'observaciones'],
+            ['orden_destete', 'lote_destete', 'sistema_manejo', 'fecha_destete', 'tipo_destete', 'lote_origen', 'responsable', 'hoja_numero', 'hoja_total', 'observaciones'],
             array_column($template->schema_definition['header_fields'], 'name')
         );
         $columns = collect($template->schema_definition['table_columns'])->keyBy('name');
-        $this->assertSame(['caravana', 'caravana_madre', 'peso', 'observations'], $columns->keys()->all());
+        $this->assertSame(
+            ['caravana', 'caravana_madre', 'categoria', 'cs_nueva', 'peso', 'lote_destino', 'manejo', 'observations'],
+            $columns->keys()->all()
+        );
+        // The batch of each calf is never completed from the header.
+        $this->assertStringContainsString('NO completar con el encabezado', $columns['lote_destino']['ai_hint']);
         $this->assertFalse($columns['peso']['required']);
         $this->assertFalse($columns['caravana_madre']['required']);
     }
@@ -281,6 +298,8 @@ class Dest01TemplateProcessingTest extends VeterinaryTestCase
             'fecha_destete' => now()->toDateString(),
             'tipo_destete' => 'TRADICIONAL',
             'responsable' => 'Operador de manga',
+            // The box of the header: the management system of the one new weaning batch.
+            'sistema_manejo' => 'PASTURA',
             ...$header,
             'rows' => $rows,
         ]);

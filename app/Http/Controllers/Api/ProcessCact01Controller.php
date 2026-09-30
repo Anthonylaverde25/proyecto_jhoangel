@@ -30,7 +30,7 @@ final class ProcessCact01Controller extends Controller
         }
 
         try {
-            $dto = Cact01SubmissionDTO::fromArray($request->validated(), $companyId);
+            $dto = Cact01SubmissionDTO::fromArray($request->validated(), $companyId, $request->user('sanctum')?->id);
             $result = ($this->useCases->processCact01)($dto);
         } catch (Cact01ValidationException $e) {
             return response()->json([

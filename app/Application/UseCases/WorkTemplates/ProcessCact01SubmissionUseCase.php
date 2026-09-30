@@ -6,22 +6,30 @@ namespace App\Application\UseCases\WorkTemplates;
 
 use App\Application\DTOs\Cact01\Cact01SubmissionDTO;
 use App\Application\DTOs\CreateBatchDTO;
+use App\Application\Services\TransferOrderExecutionService;
 use App\Application\UseCases\Batches\CreateBatchUseCase;
 use App\Core\Entities\BatchEntity;
 use App\Core\Entities\CaravanEntity;
 use App\Core\Entities\CaravanMovementEntity;
 use App\Core\Entities\CaravanWeightEntity;
+use App\Core\Entities\TransferOrderEntity;
 use App\Core\Enums\AnimalDentition;
 use App\Core\Enums\BatchWeightCause;
 use App\Core\Exceptions\Cact01ValidationException;
 use App\Core\Exceptions\DomainException;
+use App\Core\Entities\AnimalCategoryEntity;
+use App\Core\Entities\AnimalSubcategoryEntity;
+use App\Core\Enums\TransferOrderCategoryMode;
 use App\Core\Interfaces\IActivityRepository;
+use App\Core\Interfaces\IAnimalCategoryRepository;
 use App\Core\Interfaces\IBatchRepository;
 use App\Core\Interfaces\ICaravanMovementRepository;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Interfaces\ICaravanWeightRepository;
 use App\Core\Interfaces\ICompanyRepository;
 use App\Core\Interfaces\IFarmRepository;
+use App\Core\Services\AnimalCategoryResolution;
+use App\Core\Services\AnimalCategoryTextResolver;
 use App\Core\Services\BatchWeightService;
 use App\Core\Services\CaravanValueParser;
 use Illuminate\Support\Facades\DB;
@@ -46,6 +54,12 @@ final class ProcessCact01SubmissionUseCase
 {
     private const NON_PRODUCTIVE_ACTIVITY = 'INTERNAL';
 
+    /** Destination activities a pregnant female is warned about: finishing, and the internal ones (consumption, death). */
+    private const CULL_ACTIVITIES = ['INVERNADA', 'INTERNAL'];
+
+    /** Subcategories that mean the female leaves the breeding herd. */
+    private const CULL_SUBCATEGORIES = ['DESCARTE_CUT', 'DESCARTE_FAENA'];
+
     public function __construct(
         private readonly ICaravanRepository $caravanRepository,
         private readonly IBatchRepository $batchRepository,
@@ -55,7 +69,9 @@ final class ProcessCact01SubmissionUseCase
         private readonly IFarmRepository $farmRepository,
         private readonly ICompanyRepository $companyRepository,
         private readonly BatchWeightService $batchWeightService,
-        private readonly CreateBatchUseCase $createBatch
+        private readonly CreateBatchUseCase $createBatch,
+        private readonly TransferOrderExecutionService $orderExecution,
+        private readonly IAnimalCategoryRepository $categoryRepository
     ) {
     }
 
@@ -66,6 +82,56 @@ final class ProcessCact01SubmissionUseCase
      * @throws DomainException
      */
     public function __invoke(Cact01SubmissionDTO $dto): array
+    {
+        $checked = $this->validate($dto);
+
+        return $this->persist(
+            $checked['dto'],
+            $checked['source_batch'],
+            $checked['destinations'],
+            $checked['animals_by_row'],
+            $checked['teeth_by_row'],
+            $checked['movement_date'],
+            $checked['warnings'],
+            $checked['order'],
+            $checked['category_by_row']
+        );
+    }
+
+    /**
+     * "Obtener orden de transferencia": the sheet names no order that exists, and the operator
+     * asks for one generated from the paper BEFORE confirming, so the review goes on against a
+     * real order with a real code.
+     *
+     * Whatever the code box says is ignored — that code is why an order is being asked for. The
+     * sheet goes through exactly the checks confirming it would, so the order is never created
+     * for a sheet that could not be executed afterwards. Nothing moves: the order is issued and
+     * waits for "Confirmar movimiento".
+     *
+     * @throws Cact01ValidationException
+     * @throws DomainException
+     */
+    public function obtainOrder(Cact01SubmissionDTO $dto): TransferOrderEntity
+    {
+        $checked = $this->validate($dto->withoutOrder());
+
+        return DB::transaction(fn (): TransferOrderEntity => $this->orderExecution->createFromSheet(
+            $checked['dto'],
+            $checked['destinations'],
+            $checked['animals_by_row'],
+            'Orden obtenida desde la revisión de una planilla escaneada que no traía una orden existente'
+        ));
+    }
+
+    /**
+     * Every check of the sheet, collected and thrown together. Shared by confirming the sheet
+     * and by obtaining its order, so both answer the same about the same paper.
+     *
+     * @return array{dto: Cact01SubmissionDTO, source_batch: BatchEntity, destinations: array<string, array<string, mixed>>, animals_by_row: array<int, CaravanEntity>, teeth_by_row: array<int, int>, category_by_row: array<int, array{category: AnimalCategoryEntity, subcategory: ?AnimalSubcategoryEntity}>, movement_date: string, warnings: list<array{code: string, message: string}>, order: ?TransferOrderEntity}
+     *
+     * @throws Cact01ValidationException
+     */
+    private function validate(Cact01SubmissionDTO $dto): array
     {
         $headerErrors = [];
         $warnings = [];
@@ -93,6 +159,11 @@ final class ProcessCact01SubmissionUseCase
                 );
             }
         }
+
+        // 1b. The transfer order the sheet fulfils, when it names one. Loaded before the
+        //     destinations so a second round can reuse the batches the first one created.
+        $order = $this->orderExecution->load($dto, $headerErrors);
+        $dto = $this->orderExecution->adoptResolvedDestinations($order, $dto);
 
         // 2. Destinations. They arrive resolved; what is checked here is that each one
         //    points somewhere real, somewhere different, and somewhere only once.
@@ -122,6 +193,15 @@ final class ProcessCact01SubmissionUseCase
         $animalsByRow = [];
         /** @var array<int, int> $teethByRow */
         $teethByRow = [];
+        /**
+         * The category an animal changes to, only when it differs from the one it has. It comes
+         * from the C/S cell of the sheet, from the order when it declared it, or from
+         * "Registrar transferencia".
+         *
+         * @var array<int, array{category: AnimalCategoryEntity, subcategory: ?AnimalSubcategoryEntity}> $categoryByRow
+         */
+        $categoryByRow = [];
+        $categoryResolver = new AnimalCategoryTextResolver($this->categoryRepository->all());
         /** @var array<int, array<int, array{code: string, message: string}>> $errorsByRow */
         $errorsByRow = [];
         $seenTags = [];
@@ -158,10 +238,17 @@ final class ProcessCact01SubmissionUseCase
             }
 
             if ($sourceBatch !== null && $animal->getBatchId() !== $sourceBatch->getId()) {
-                $errorsByRow[$index][] = $this->error(
-                    'NOT_IN_SOURCE_BATCH',
-                    "La caravana '{$tag}' no está en el lote '{$sourceBatch->getName()}'."
-                );
+                // The order may know why: the animal already travelled with it.
+                $explained = $this->orderExecution->absenceFromSource($order, (int) $animal->getId(), $tag);
+
+                if ($explained === null) {
+                    $errorsByRow[$index][] = $this->error(
+                        'NOT_IN_SOURCE_BATCH',
+                        "La caravana '{$tag}' no está en el lote '{$sourceBatch->getName()}'."
+                    );
+                } elseif ($explained !== []) {
+                    $errorsByRow[$index][] = $explained;
+                }
             }
 
             // Dentition. parseTeeth() never fails: it answers 0 for a blank cell and 0
@@ -180,6 +267,17 @@ final class ProcessCact01SubmissionUseCase
                 }
             }
 
+            $categoryErrors = [];
+            $change = $this->categoryChange($row, $animal, $order, $categoryResolver, $categoryErrors, $warnings);
+
+            foreach ($categoryErrors as $categoryError) {
+                $errorsByRow[$index][] = $categoryError;
+            }
+
+            if ($change !== null) {
+                $categoryByRow[$index] = $change;
+            }
+
             $animalsByRow[$index] = $animal;
         }
 
@@ -189,20 +287,15 @@ final class ProcessCact01SubmissionUseCase
 
         // Advisory row-level mismatches: what the paper says about what the animal IS
         // does not overwrite the system. A difference is worth showing, not writing.
+        // The sex is not even compared: a transfer moves animals the business already has,
+        // their sex is the one the tag identifies and the sheet prints it only to be read.
         foreach ($animalsByRow as $index => $animal) {
             $row = $dto->rows[$index];
             $tag = $row['caravana'];
 
-            if ($row['sexo'] !== null) {
-                $declared = mb_strtoupper(trim($row['sexo']))[0] ?? '';
-                if ($declared !== '' && $declared !== $animal->getSex()->value) {
-                    $warnings[] = $this->warning('SEX_MISMATCH', "El papel dice que '{$tag}' es {$row['sexo']}, el sistema dice {$animal->getSex()->value}. No se modifica.");
-                }
-            }
-
             if ($row['categoria'] !== null && $animal->getCategoryName() !== null
-                && mb_strtoupper(trim($row['categoria'])) !== mb_strtoupper(trim($animal->getCategoryName()))) {
-                $warnings[] = $this->warning('CATEGORY_MISMATCH', "El papel dice que '{$tag}' es {$row['categoria']}, el sistema dice {$animal->getCategoryName()}. No se modifica.");
+                && $this->categoryDiffers($row['categoria'], $animal, $categoryResolver)) {
+                $warnings[] = $this->warning('CATEGORY_MISMATCH', "El papel dice que '{$tag}' es {$row['categoria']}, el sistema dice {$this->currentCategoryLabel($animal)}. No se modifica.");
             }
 
             if (isset($teethByRow[$index]) && $teethByRow[$index] < $animal->getTeeth()) {
@@ -214,7 +307,12 @@ final class ProcessCact01SubmissionUseCase
             }
         }
 
-        $warnings = array_merge($warnings, $this->sheetTotalWarnings($dto, count($animalsByRow)));
+        $warnings = array_merge(
+            $warnings,
+            $this->zootechnicalWarnings($dto, $animalsByRow, $categoryByRow, $activitiesById),
+            $this->sheetTotalWarnings($dto, count($animalsByRow)),
+            $this->orderExecution->rowWarnings($order, $animalsByRow)
+        );
 
         $rowErrors = [];
         ksort($errorsByRow);
@@ -231,7 +329,17 @@ final class ProcessCact01SubmissionUseCase
         }
 
         /** @var BatchEntity $sourceBatch */
-        return $this->persist($dto, $sourceBatch, $destinations, $animalsByRow, $teethByRow, $movementDate, $warnings);
+        return [
+            'dto' => $dto,
+            'source_batch' => $sourceBatch,
+            'destinations' => $destinations,
+            'animals_by_row' => $animalsByRow,
+            'teeth_by_row' => $teethByRow,
+            'category_by_row' => $categoryByRow,
+            'movement_date' => $movementDate,
+            'warnings' => $warnings,
+            'order' => $order,
+        ];
     }
 
     /**
@@ -241,6 +349,7 @@ final class ProcessCact01SubmissionUseCase
      * @param array<int, CaravanEntity> $animalsByRow
      * @param array<int, int> $teethByRow
      * @param list<array{code: string, message: string}> $warnings
+     * @param array<int, array{category: AnimalCategoryEntity, subcategory: ?AnimalSubcategoryEntity}> $categoryByRow
      * @return array{source: array<string, mixed>, destinations: list<array<string, mixed>>, warnings: list<array{code: string, message: string}>}
      */
     private function persist(
@@ -250,15 +359,25 @@ final class ProcessCact01SubmissionUseCase
         array $animalsByRow,
         array $teethByRow,
         string $movementDate,
-        array $warnings
+        array $warnings,
+        ?TransferOrderEntity $order = null,
+        array $categoryByRow = []
     ): array {
         $date = new \DateTime($movementDate);
         $sourceBatchId = (int) $sourceBatch->getId();
         $headerNotes = $this->headerNotes($dto);
 
         return DB::transaction(function () use (
-            $dto, $sourceBatchId, $sourceBatch, $destinations, $animalsByRow, $teethByRow, $date, $headerNotes, $warnings
+            $dto, $sourceBatchId, $sourceBatch, $destinations, $animalsByRow, $teethByRow, $date, $headerNotes, $warnings, $order, $categoryByRow
         ) {
+            // STEP 0. A sheet printed blank gets its order now, before anything moves: every
+            // CACT-01 movement ends up with one, and it is recorded in step 6 like any other.
+            $createdFromSheet = $this->orderExecution->needsOrderFromSheet($order, $dto);
+
+            if ($createdFromSheet) {
+                $order = $this->orderExecution->createFromSheet($dto, $destinations, $animalsByRow);
+            }
+
             // STEP 1. Close every composition about to change, on both sides. Without
             // this the step would be drawn spread over every day since the last
             // weighing, which reads as a gradual loss instead of an instant change.
@@ -294,12 +413,19 @@ final class ProcessCact01SubmissionUseCase
                 $row = $dto->rows[$index];
 
                 if ($row['peso_actual'] !== null) {
-                    $this->caravanWeightRepository->markAllNonCurrentForCaravan($caravanId);
+                    // A weighing loaded late (a registered transfer, a sheet scanned days after)
+                    // joins the history without displacing a later one as the current weight.
+                    $isCurrent = !$this->caravanWeightRepository->hasWeighingAfter($caravanId, $date);
+
+                    if ($isCurrent) {
+                        $this->caravanWeightRepository->markAllNonCurrentForCaravan($caravanId);
+                    }
+
                     $this->caravanWeightRepository->save(new CaravanWeightEntity(
                         null,
                         $caravanId,
                         $row['peso_actual'],
-                        true,
+                        $isCurrent,
                         $date,
                         $headerNotes
                     ));
@@ -354,31 +480,49 @@ final class ProcessCact01SubmissionUseCase
                 ];
             }
 
+            $movementIdByCaravanId = [];
+
             foreach ($animalsByRow as $index => $animal) {
                 $row = $dto->rows[$index];
                 $target = $resolved[$row['destination_key']];
                 $targetBatchId = (int) $target['batch']->getId();
                 $caravanId = (int) $animal->getId();
 
-                $this->caravanRepository->updateBatchAndCategory($caravanId, $targetBatchId, null);
+                $reclassified = $categoryByRow[$index] ?? null;
+                $notes = $this->movementNotes($headerNotes, $row['observations'], $target['batch']->getName());
+
+                if ($reclassified !== null) {
+                    $this->caravanRepository->updateBatchAndReclassify(
+                        $caravanId,
+                        $targetBatchId,
+                        (int) $reclassified['category']->getId(),
+                        $reclassified['subcategory']?->getId()
+                    );
+                    // There is no category history: the movement is where the change is recorded.
+                    $notes .= ' Categoría: ' . $this->currentCategoryLabel($animal)
+                        . ' → ' . AnimalCategoryTextResolver::label($reclassified['category'], $reclassified['subcategory']) . '.';
+                } else {
+                    $this->caravanRepository->updateBatchAndCategory($caravanId, $targetBatchId, null);
+                }
 
                 $renspa = $target['renspa'];
                 if ($renspa === '' && $animal->getCompanyId() !== null) {
                     $renspa = $this->companyRepository->findById($animal->getCompanyId())?->getRenspa() ?? '';
                 }
 
-                $this->movementRepository->save(new CaravanMovementEntity(
+                $movement = $this->movementRepository->save(new CaravanMovementEntity(
                     id: null,
                     caravanId: $caravanId,
                     companyId: $animal->getCompanyId(),
                     renspa: $renspa,
                     type: 'TRANSFER',
                     movementDate: $date,
-                    observations: $this->movementNotes($headerNotes, $row['observations'], $target['batch']->getName()),
+                    observations: $notes,
                     fromBatchId: $animal->getBatchId(),
                     toBatchId: $targetBatchId
                 ));
 
+                $movementIdByCaravanId[$caravanId] = (int) $movement->getId();
                 $resolved[$row['destination_key']]['count']++;
             }
 
@@ -396,6 +540,24 @@ final class ProcessCact01SubmissionUseCase
                 $seenBatchIds[$batchId] = true;
 
                 $this->batchWeightService->recalculateBatchWeight($batchId, BatchWeightCause::MOVEMENT_IN, $date);
+            }
+
+            // STEP 6. The order, in this same transaction: if it cannot record what was moved,
+            // nothing is moved.
+            // Stamped with the instant it was recorded: the movement date already lives on each
+            // movement and in the history metadata.
+            $orderSummary = $this->orderExecution->recordExecution($order, $dto, $movementIdByCaravanId, $resolved, new \DateTimeImmutable());
+
+            if ($orderSummary !== null) {
+                // Said apart so the screen can ask for the code to be written on the paper.
+                $orderSummary['created_from_sheet'] = $createdFromSheet;
+            }
+
+            if ($orderSummary !== null && $orderSummary['pending_head_count'] > 0) {
+                $warnings[] = $this->warning(
+                    'TRANSFER_ORDER_PARTIAL',
+                    "La orden {$orderSummary['code']} queda parcial: faltan {$orderSummary['pending_head_count']} de {$orderSummary['planned_head_count']} cabezas."
+                );
             }
 
             $source = $this->batchRepository->findById($sourceBatchId);
@@ -429,6 +591,7 @@ final class ProcessCact01SubmissionUseCase
                 ],
                 'destinations' => $destinationSummaries,
                 'warnings' => array_values($warnings),
+                'transfer_order' => $orderSummary,
             ];
         });
     }
@@ -450,6 +613,20 @@ final class ProcessCact01SubmissionUseCase
         $seenBatchIds = [];
         $seenNames = [];
         $declaredManagement = $this->declaredManagement($dto->sistemaManejo);
+        $managementByKey = $this->managementByDestination($dto);
+
+        // The destination activity of the whole sheet. Every destination below is checked
+        // against it: that is what makes a movement readable as one stage to another, instead
+        // of a pile of batches that happened to be picked from the same list.
+        $destinationActivity = $activitiesById[$dto->actividadDestinoId] ?? null;
+
+        if ($destinationActivity === null) {
+            $headerErrors[] = $this->headerError(
+                'actividad_destino',
+                'DESTINATION_ACTIVITY_NOT_FOUND',
+                'La actividad de destino de la planilla no existe o está deshabilitada.'
+            );
+        }
 
         foreach ($dto->destinations as $destination) {
             $key = $destination['key'];
@@ -467,24 +644,53 @@ final class ProcessCact01SubmissionUseCase
                     continue;
                 }
 
+                // The invariant of the movement. A batch of another productive stage cannot
+                // receive these animals, however plainly its name was written on the paper.
+                if ($destinationActivity !== null
+                    && (int) $batch->getActivityId() !== (int) $destinationActivity->getId()) {
+                    $batchActivity = $activitiesById[$batch->getActivityId()] ?? null;
+                    $headerErrors[] = $this->headerError(
+                        'destinations',
+                        'DESTINATION_ACTIVITY_MISMATCH',
+                        "El lote '{$batch->getName()}' es de " . ($batchActivity?->getName() ?? 'otra actividad')
+                        . ", pero la planilla declara destino {$destinationActivity->getName()}."
+                    );
+                    continue;
+                }
+
                 if (isset($seenBatchIds[(int) $batch->getId()])) {
                     $headerErrors[] = $this->headerError('destinations', 'DUPLICATED_DESTINATION', "El lote '{$batch->getName()}' figura dos veces como destino. Uní los dos grupos en uno solo.");
                     continue;
                 }
                 $seenBatchIds[(int) $batch->getId()] = true;
 
-                // An existing batch is never overwritten from a sheet. What the box says
-                // is reported next to what the batch declares, and the operator decides.
-                if ($declaredManagement !== null) {
+                // An existing batch is never overwritten from a sheet. What the paper says is
+                // reported next to what the batch declares, and the operator decides.
+                //
+                // The M cells of this destination's rows outrank the header box: they are the
+                // ones written about THIS batch, while the box speaks for the whole sheet.
+                $writtenLetters = $managementByKey[$key] ?? [];
+
+                if (count($writtenLetters) > 1) {
+                    $warnings[] = $this->warning(
+                        'MANAGEMENT_SYSTEM_CONFLICT',
+                        "Las filas del lote '{$batch->getName()}' escriben corral en una y pastura en otra. No se modifica el lote: vale lo que el lote declara."
+                    );
+                }
+
+                $writtenManagement = count($writtenLetters) === 1 ? $writtenLetters[0] : $declaredManagement;
+                $source = count($writtenLetters) === 1 ? 'La celda M' : 'El casillero';
+
+                if ($writtenManagement !== null) {
                     if ($batch->isConfined() === null) {
                         $warnings[] = $this->warning(
                             'MANAGEMENT_SYSTEM_UNDECLARED',
                             "El lote '{$batch->getName()}' no tiene declarado el sistema de manejo. La planilla no lo completa: cambialo desde el lote."
                         );
-                    } elseif ($batch->isConfined() !== $declaredManagement) {
+                    } elseif ($batch->isConfined() !== $writtenManagement) {
                         $warnings[] = $this->warning(
                             'MANAGEMENT_SYSTEM_DIFFERS',
-                            "El casillero dice " . ($declaredManagement ? 'CORRAL' : 'PASTURA') . ", pero el lote '{$batch->getName()}' está declarado como " . ($batch->isConfined() ? 'corral' : 'pastura') . ". No se modifica."
+                            "{$source} dice " . ($writtenManagement ? 'CORRAL' : 'PASTURA') . ", pero el lote '{$batch->getName()}' está declarado como " . ($batch->isConfined() ? 'corral' : 'pastura') . ". No se modifica."
                         );
                     }
                 }
@@ -512,16 +718,66 @@ final class ProcessCact01SubmissionUseCase
             }
             $seenNames[$normalizedName] = true;
 
-            if ($this->batchRepository->findActiveByName($newBatch['name']) !== null) {
+            $existingWithName = $this->batchRepository->findActiveByName($newBatch['name']);
+
+            if ($existingWithName !== null) {
+                // Two different dead ends, and telling them apart is the whole point. Inside the
+                // destination activity the fix is one click: pick that batch instead. Outside it
+                // the name is unusable — the batch cannot receive these animals and the name
+                // cannot be reused — so somebody has to rename or point somewhere else.
+                if ($destinationActivity !== null
+                    && (int) $existingWithName->getActivityId() !== (int) $destinationActivity->getId()) {
+                    $otherActivity = $activitiesById[$existingWithName->getActivityId()] ?? null;
+                    $headerErrors[] = $this->headerError(
+                        'destinations',
+                        'DESTINATION_NAME_IN_OTHER_ACTIVITY',
+                        "Ya existe un lote activo '{$existingWithName->getName()}' en " . ($otherActivity?->getName() ?? 'otra actividad')
+                        . ", y la planilla declara destino {$destinationActivity->getName()}. Renombralo o elegí otro lote."
+                    );
+                    continue;
+                }
+
                 $headerErrors[] = $this->headerError('destinations', 'BATCH_NAME_IN_USE', "Ya existe un lote activo llamado '{$newBatch['name']}'. Elegilo como lote existente o cambiá el nombre.");
                 continue;
+            }
+
+            $activity = $activitiesById[$newBatch['activity_id']] ?? null;
+
+            // A batch to be created is born in the destination activity of the sheet. This used
+            // to be a warning comparing the free text of the header; it is the invariant, so it
+            // rejects instead of commenting, and it compares ids.
+            if ($destinationActivity !== null
+                && (int) $newBatch['activity_id'] !== (int) $destinationActivity->getId()) {
+                $headerErrors[] = $this->headerError(
+                    'destinations',
+                    'NEW_BATCH_ACTIVITY_MISMATCH',
+                    "El lote nuevo '{$newBatch['name']}' se crearía en " . ($activity?->getName() ?? 'otra actividad')
+                    . ", pero la planilla declara destino {$destinationActivity->getName()}."
+                );
+                continue;
+            }
+
+            // The same batch cannot be born penned on one line and grazing on another.
+            $writtenLetters = $managementByKey[$key] ?? [];
+
+            if (count($writtenLetters) > 1) {
+                $headerErrors[] = $this->headerError(
+                    'destinations',
+                    'MANAGEMENT_SYSTEM_CONFLICT',
+                    "El lote nuevo '{$newBatch['name']}' aparece como corral en una fila y como pastura en otra. Un lote es una cosa o la otra."
+                );
+                continue;
+            }
+
+            // The paper answered it: a single M letter against this batch is as good a
+            // declaration as the one the screen would have made.
+            if ($newBatch['is_confined'] === null && count($writtenLetters) === 1) {
+                $newBatch['is_confined'] = $writtenLetters[0];
             }
 
             // The management system belongs to every productive batch, not to Recría
             // alone. A new batch that does not declare it would be born asserting a
             // fact nobody stated.
-            $activity = $activitiesById[$newBatch['activity_id']] ?? null;
-
             if ($newBatch['is_confined'] === null
                 && $activity !== null
                 && $activity->getCode() !== self::NON_PRODUCTIVE_ACTIVITY) {
@@ -537,7 +793,7 @@ final class ProcessCact01SubmissionUseCase
                 && !$this->sameActivity($dto->actividadDestino, $activity->getName(), $activity->getCode())) {
                 $warnings[] = $this->warning(
                     'ACTIVITY_MISMATCH',
-                    "La planilla dice que el destino es '{$dto->actividadDestino}', pero el lote '{$newBatch['name']}' se crea en {$activity->getName()}."
+                    "La planilla dice que el destino es '{$dto->actividadDestino}', pero el movimiento se registra hacia {$activity->getName()}. Vale la actividad elegida en pantalla."
                 );
             }
 
@@ -548,6 +804,271 @@ final class ProcessCact01SubmissionUseCase
         }
 
         return $destinations;
+    }
+
+    /**
+     * The category this row asks the animal to change to, or null when it keeps its own.
+     *
+     * Three sources, in this order: a pair chosen on a screen ("Registrar transferencia"), the
+     * C/S cell written at the chute, and the target the order declared. What was written at the
+     * chute beats the order, because that is where somebody looked at the animal; the difference
+     * is reported, not hidden.
+     *
+     * The same category with no subcategory written is not a change: it confirms the category and
+     * says nothing about the subcategory, which is kept.
+     *
+     * @param array<string, mixed> $row
+     * @param list<array{code: string, message: string}> $errors
+     * @param list<array{code: string, message: string}> $warnings
+     * @return array{category: AnimalCategoryEntity, subcategory: ?AnimalSubcategoryEntity}|null
+     */
+    private function categoryChange(
+        array $row,
+        CaravanEntity $animal,
+        ?TransferOrderEntity $order,
+        AnimalCategoryTextResolver $resolver,
+        array &$errors,
+        array &$warnings
+    ): ?array {
+        $tag = $row['caravana'];
+        $sex = $animal->getSex()->value;
+        // A sheet with no order was printed blank: whatever its C/S cell says was decided there.
+        $mode = $order?->getCategoryMode() ?? TransferOrderCategoryMode::AT_CHUTE;
+        $line = $order?->animalByCaravanId((int) $animal->getId());
+        $written = $row['cs_nueva'] ?? null;
+
+        if (($row['category_id'] ?? null) !== null) {
+            $resolution = $resolver->resolveIds((int) $row['category_id'], $row['subcategory_id'] ?? null, $sex);
+            $origin = 'La categoría elegida';
+
+            // Chosen on a screen over an order that had declared another one: the same fact the
+            // sheet reports when the chute crosses out the printed C/S.
+            if ($resolution->isResolved() && $line !== null && $line->hasTargetCategory()
+                && ($line->getTargetCategoryId() !== $resolution->category?->getId()
+                    || $line->getTargetSubcategoryId() !== $resolution->subcategory?->getId())) {
+                $warnings[] = $this->warning(
+                    'CATEGORY_DIFFERS_FROM_ORDER',
+                    "La orden pedía '{$line->getTargetCategoryLabel()}' para '{$tag}' y se eligió '"
+                    . AnimalCategoryTextResolver::label($resolution->category, $resolution->subcategory) . "'. Vale lo elegido."
+                );
+            }
+        } elseif (!AnimalCategoryTextResolver::isBlank($written)) {
+            if ($mode === TransferOrderCategoryMode::KEEP) {
+                $warnings[] = $this->warning(
+                    'CATEGORY_CHANGE_NOT_EXPECTED',
+                    "La planilla escribe '{$written}' como categoría nueva de '{$tag}', pero la orden {$order?->getCode()} dice que la categoría no cambia. No se modifica."
+                );
+
+                return null;
+            }
+
+            $resolution = $resolver->resolve((string) $written, $sex);
+            $origin = "'{$written}'";
+
+            if ($resolution->isResolved() && $line !== null && $line->hasTargetCategory()
+                && ($line->getTargetCategoryId() !== $resolution->category?->getId()
+                    || $line->getTargetSubcategoryId() !== $resolution->subcategory?->getId())) {
+                $warnings[] = $this->warning(
+                    'CATEGORY_DIFFERS_FROM_ORDER',
+                    "La orden pedía '{$line->getTargetCategoryLabel()}' para '{$tag}' y en la manga se escribió '{$written}'. Vale lo escrito en la manga."
+                );
+            }
+        } elseif ($mode === TransferOrderCategoryMode::DECLARED && $line !== null && $line->hasTargetCategory()) {
+            $resolution = $resolver->resolveIds((int) $line->getTargetCategoryId(), $line->getTargetSubcategoryId(), $sex);
+            $origin = "La categoría que declara la orden ('{$line->getTargetCategoryLabel()}')";
+        } else {
+            return null;
+        }
+
+        if (!$resolution->isResolved()) {
+            $errors[] = ($row['category_id'] ?? null) !== null && $resolution->status === AnimalCategoryResolution::NOT_FOUND
+                ? $this->error('CATEGORY_NOT_FOUND', "La categoría elegida para '{$tag}' no existe, o la subcategoría no es de esa categoría.")
+                : $this->categoryError($resolution, $origin, $tag, $sex);
+
+            return null;
+        }
+
+        $category = $resolution->category;
+        $subcategory = $resolution->subcategory;
+
+        if ($category === null) {
+            return null;
+        }
+
+        if ((int) $category->getId() === $animal->getCategoryId()
+            && ($subcategory === null || (int) $subcategory->getId() === $animal->getSubcategoryId())) {
+            return null;
+        }
+
+        return ['category' => $category, 'subcategory' => $subcategory];
+    }
+
+    /**
+     * What the herd says about a movement the paper or the screen asked for. Warnings, never
+     * blockers: the decision stays with whoever is moving the animals, but not in the dark.
+     *
+     * - A female with a recorded pregnancy that goes to finishing, to an internal activity, or to
+     *   a cull subcategory. Selling pregnant cows is a valid decision; doing it unawares is not.
+     * - A new category whose weight range the animal is outside of, with the weight of the day or,
+     *   if it was not weighed, its current one. Only the category range: the subcategory weight is
+     *   a growth target, and being below it is not being misclassified.
+     *
+     * @param array<int, CaravanEntity> $animalsByRow
+     * @param array<int, array{category: AnimalCategoryEntity, subcategory: ?AnimalSubcategoryEntity}> $categoryByRow
+     * @param array<int, \App\Core\Entities\ActivityEntity> $activitiesById
+     * @return list<array{code: string, message: string}>
+     */
+    private function zootechnicalWarnings(Cact01SubmissionDTO $dto, array $animalsByRow, array $categoryByRow, array $activitiesById): array
+    {
+        $warnings = [];
+        $destinationActivity = $activitiesById[$dto->actividadDestinoId] ?? null;
+        $destinationCode = $destinationActivity?->getCode();
+        $toCull = in_array($destinationCode, self::CULL_ACTIVITIES, true);
+
+        foreach ($animalsByRow as $index => $animal) {
+            $tag = $dto->rows[$index]['caravana'];
+            $change = $categoryByRow[$index] ?? null;
+            $subcategoryCode = $change !== null ? $change['subcategory']?->getCode() : $animal->getSubcategoryCode();
+            $gestation = $animal->getActiveGestation();
+
+            if ($gestation !== null && ($toCull || in_array($subcategoryCode, self::CULL_SUBCATEGORIES, true))) {
+                $due = $gestation->getEstimatedDueDate();
+                $warnings[] = $this->warning(
+                    'PREGNANT_TO_CULL',
+                    "'{$tag}' tiene preñez registrada de " . rtrim(rtrim(number_format($gestation->getGestationMonths(), 1, ',', ''), '0'), ',')
+                    . ' meses' . ($due !== null ? ' (parto estimado ' . date('d/m/Y', (int) strtotime($due)) . ')' : '')
+                    . ' y va ' . ($toCull ? 'a ' . ($destinationActivity?->getName() ?? 'otra actividad') : 'a descarte') . '.'
+                );
+            }
+
+            if ($change === null) {
+                continue;
+            }
+
+            $weight = $dto->rows[$index]['peso_actual'] ?? $animal->getCurrentWeight();
+            $min = $change['category']->getMinWeightKg();
+            $max = $change['category']->getMaxWeightKg();
+
+            if ($weight !== null && (($min !== null && $weight < $min) || ($max !== null && $weight > $max))) {
+                $warnings[] = $this->warning(
+                    'CATEGORY_WEIGHT_OUT_OF_RANGE',
+                    "'{$tag}' pasa a {$change['category']->getName()} con " . round((float) $weight) . ' kg; el rango de la categoría es '
+                    . ($min !== null ? round($min) : '—') . '–' . ($max !== null ? round($max) : '—') . ' kg.'
+                );
+            }
+        }
+
+        return $warnings;
+    }
+
+    /**
+     * @return array{code: string, message: string}
+     */
+    private function categoryError(AnimalCategoryResolution $resolution, string $origin, string $tag, string $sex): array
+    {
+        $options = implode(', ', $resolution->candidates);
+
+        return match ($resolution->status) {
+            AnimalCategoryResolution::AMBIGUOUS => $this->error(
+                'CATEGORY_TEXT_AMBIGUOUS',
+                "{$origin} para '{$tag}' puede ser {$options}. Elegí cuál."
+            ),
+            AnimalCategoryResolution::SEX_MISMATCH => $this->error(
+                'CATEGORY_SEX_MISMATCH',
+                "{$origin} ({$options}) no corresponde al sexo de '{$tag}' ({$sex})."
+            ),
+            default => $this->error(
+                'CATEGORY_TEXT_NOT_FOUND',
+                "{$origin} para '{$tag}' no es una categoría ni una subcategoría del catálogo."
+            ),
+        };
+    }
+
+    /**
+     * Whether the current category written on the sheet contradicts the animal.
+     *
+     * Compared as a category/subcategory pair, not as text: the sheet prints the C/S label
+     * ("Vaquillona / Reposición") and the animal's category name is only "Vaquillona", so a text
+     * comparison flagged every animal with a subcategory. A paper that names only the category
+     * says nothing about the subcategory, so it is not contradicting it.
+     *
+     * Text that does not resolve to one pair is compared as written, against both the name and
+     * the label: the result is only ever a warning.
+     */
+    private function categoryDiffers(string $written, CaravanEntity $animal, AnimalCategoryTextResolver $resolver): bool
+    {
+        if (AnimalCategoryTextResolver::isBlank($written)) {
+            return false;
+        }
+
+        $resolution = $resolver->resolve($written, $animal->getSex()->value);
+
+        if ($resolution->isResolved() && $resolution->category !== null) {
+            if ((int) $resolution->category->getId() !== $animal->getCategoryId()) {
+                return true;
+            }
+
+            return $resolution->subcategory !== null
+                && (int) $resolution->subcategory->getId() !== $animal->getSubcategoryId();
+        }
+
+        $text = mb_strtoupper(trim($written));
+
+        return $text !== mb_strtoupper(trim((string) $animal->getCategoryName()))
+            && $text !== mb_strtoupper($this->currentCategoryLabel($animal));
+    }
+
+    /**
+     * The C/S label of what the animal is before the change, written as the sheet writes it.
+     */
+    private function currentCategoryLabel(CaravanEntity $animal): string
+    {
+        $category = $animal->getCategoryId() !== null ? $this->categoryRepository->findById($animal->getCategoryId()) : null;
+
+        if ($category === null) {
+            return 'sin categoría';
+        }
+
+        $subcategory = null;
+        foreach ($category->getSubcategories() as $candidate) {
+            if ((int) $candidate->getId() === $animal->getSubcategoryId()) {
+                $subcategory = $candidate;
+            }
+        }
+
+        return AnimalCategoryTextResolver::label($category, $subcategory);
+    }
+
+    /**
+     * The distinct M letters written against each destination.
+     *
+     * The letter of a row describes the destination BATCH written beside it, never the animal:
+     * it rides on the row only because that is where the paper has room for it. One distinct
+     * value is therefore an answer about that batch, and two is a contradiction about it.
+     *
+     * @return array<string, list<bool>>
+     */
+    private function managementByDestination(Cact01SubmissionDTO $dto): array
+    {
+        $byKey = [];
+
+        foreach ($dto->rows as $row) {
+            if ($row['caravana'] === '' || ($row['manejo'] ?? null) === null) {
+                continue;
+            }
+
+            $key = $row['destination_key'];
+
+            if (!isset($byKey[$key])) {
+                $byKey[$key] = [];
+            }
+
+            if (!in_array($row['manejo'], $byKey[$key], true)) {
+                $byKey[$key][] = $row['manejo'];
+            }
+        }
+
+        return $byKey;
     }
 
     /**
@@ -667,7 +1188,16 @@ final class ProcessCact01SubmissionUseCase
 
     private function headerNotes(Cact01SubmissionDTO $dto): string
     {
-        $parts = ['Cambio de actividad CACT-01'];
+        // The same movement reaches this use case from a scanned sheet and from the
+        // transfer screen. Saying which one it was keeps the history of the animal from
+        // asserting a piece of paper that never existed.
+        $parts = [
+            match ($dto->origin) {
+                Cact01SubmissionDTO::ORIGIN_SCREEN => 'Cambio de actividad CACT-01 (orden generada desde el sistema)',
+                Cact01SubmissionDTO::ORIGIN_REGISTRATION => 'Cambio de actividad CACT-01 (transferencia registrada después del hecho)',
+                default => 'Cambio de actividad CACT-01 (planilla escaneada)',
+            },
+        ];
 
         if ($dto->responsable !== null) {
             $parts[] = "Responsable: {$dto->responsable}";

@@ -11,6 +11,8 @@ use App\Models\BatchType;
 use App\Models\Caravan;
 use App\Models\CaravanWeight;
 use App\Models\Company;
+use App\Models\TransferOrder;
+use App\Models\TransferOrderDestination;
 use Illuminate\Database\Seeder;
 
 /**
@@ -28,8 +30,10 @@ use Illuminate\Database\Seeder;
  *      "Recría Testing Declarada"   -> is_confined = true  (declared, so a PASTURA box differs)
  *      "Recría Testing Sin Declarar" -> is_confined = null  (nobody was ever asked)
  *
- * Re-running it puts every animal back in its batch with its baseline weight, so the valid sheets
- * can be loaded again without a migrate:fresh:
+ * Re-running it puts every animal back in its batch with its baseline weight — CAC-B included,
+ * which an order executed from /transfer can carry off — and deletes the batches the sheets
+ * create ({@see self::SHEET_CREATED_BATCHES}) once they are empty, so the valid sheets can be
+ * loaded again without a migrate:fresh:
  *     php artisan tenants:seed --class=ActivityChangeTestAnimalsSeeder
  */
 class ActivityChangeTestAnimalsSeeder extends Seeder
@@ -42,6 +46,14 @@ class ActivityChangeTestAnimalsSeeder extends Seeder
     private const SOURCE_ANIMALS = 40;
     private const FOREIGN_ANIMALS = 4;
     private const BASELINE_DATE = '2026-06-15';
+
+    /** Written by hand on the sheets as batches to create; never seeded. */
+    private const SHEET_CREATED_BATCHES = [
+        'Recría Prueba Única 2026',
+        'Recría Prueba Sin Pesos 2026',
+        'Invernada Prueba Nueva',
+        'Cria Prueba Sin Manejo',
+    ];
 
     public function run(): void
     {
@@ -85,6 +97,16 @@ class ActivityChangeTestAnimalsSeeder extends Seeder
             );
         }
 
+        // A sheet loaded without an order creates a REGISTERED one; it would hold the batch it
+        // created and the cleanup below could not delete it.
+        TransferOrder::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->where('source_batch_id', $sourceBatch->id)
+            ->where('kind', 'REGISTERED')
+            ->delete();
+
+        $this->deleteSheetCreatedBatches($companyId);
+
         $this->command?->info(sprintf(
             'ActivityChangeTestAnimalsSeeder: %d animales (CAC-A-01..%02d) en "%s" y %d ajenos (CAC-B-01..0%d) en "%s".',
             self::SOURCE_ANIMALS,
@@ -94,6 +116,32 @@ class ActivityChangeTestAnimalsSeeder extends Seeder
             self::FOREIGN_ANIMALS,
             $foreignBatch->name
         ));
+    }
+
+    /**
+     * Runs after the animals went back, so a batch a previous load created is empty by now. One
+     * that still holds animals or an order is left alone and reported.
+     */
+    private function deleteSheetCreatedBatches(int $companyId): void
+    {
+        $created = Batch::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->whereIn('name', self::SHEET_CREATED_BATCHES)
+            ->get();
+
+        foreach ($created as $batch) {
+            $held = Caravan::withoutGlobalScopes()->where('batch_id', $batch->id)->exists()
+                || TransferOrder::withoutGlobalScopes()->where('source_batch_id', $batch->id)->exists()
+                || TransferOrderDestination::withoutGlobalScopes()->where('target_batch_id', $batch->id)->exists();
+
+            if ($held) {
+                $this->command?->warn("ActivityChangeTestAnimalsSeeder: el lote '{$batch->name}' tiene animales u órdenes; no se borra.");
+
+                continue;
+            }
+
+            $batch->delete();
+        }
     }
 
     private function resolveBatch(int $companyId, string $name, string $activityCode, ?bool $isConfined, string $observaciones): Batch

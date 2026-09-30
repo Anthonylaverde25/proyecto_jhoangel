@@ -7,6 +7,8 @@ use App\Http\Controllers\Api\BreedController;
 use App\Http\Controllers\Api\CaravanController;
 use App\Http\Controllers\Api\FieldMappingController;
 use App\Http\Controllers\Api\ImportCaravansController;
+use App\Http\Controllers\Api\LookupCaravansController;
+use App\Http\Controllers\Api\RegisterNewCaravansController;
 use App\Http\Controllers\Api\ImportOCRGestationController;
 use App\Http\Controllers\Api\ProviderController;
 use App\Http\Controllers\Api\FarmController;
@@ -18,11 +20,17 @@ use App\Http\Controllers\Api\WorkTemplateIdentifyController;
 use App\Http\Controllers\Api\ProcessIng01Controller;
 use App\Http\Controllers\Api\ProcessTor01Controller;
 use App\Http\Controllers\Api\ProcessLser01Controller;
+use App\Http\Controllers\Api\ObtainCact01OrderController;
 use App\Http\Controllers\Api\ProcessCact01Controller;
+use App\Http\Controllers\Api\ResolveCact01SourceBatchController;
 use App\Http\Controllers\Api\ProcessDest01Controller;
+use App\Http\Controllers\Api\ProcessPar01Controller;
+use App\Http\Controllers\Api\BirthOrderController;
 use App\Http\Controllers\Api\ProcessLabResultsController;
 use App\Http\Controllers\Api\BatchTypeController;
 use App\Http\Controllers\Api\ServiceOrderController;
+use App\Http\Controllers\Api\TransferOrderController;
+use App\Http\Controllers\Api\WeaningOrderController;
 use App\Http\Controllers\Api\BirthController;
 use App\Http\Controllers\Api\AnimalCategoryController;
 use App\Http\Controllers\Api\DiagnosticProtocolController;
@@ -60,8 +68,6 @@ Route::middleware([
     Route::post('/caravans/{id}/gestation-loss', [CaravanController::class, 'gestationLoss']);
     Route::post('/caravans/bulk-gestation-diagnosis', [CaravanController::class, 'bulkGestationDiagnosis']);
     Route::post('/caravans/{id}/gestation-diagnosis', [CaravanController::class, 'registerGestationDiagnosis']);
-    Route::patch('/caravans/{id}/wean', [CaravanController::class, 'wean']);
-    Route::post('/caravans/bulk-wean', [CaravanController::class, 'bulkWean']);
     Route::post('/caravans/bulk-transfer', [CaravanController::class, 'bulkTransfer']);
     Route::get('/caravans/births-history', [BirthController::class, 'index']);
     Route::get('/caravans/pending-sires', [BirthController::class, 'pendingSires']);
@@ -98,8 +104,63 @@ Route::middleware([
     Route::post('/work-templates/tor-01/process', ProcessTor01Controller::class);
     Route::post('/work-templates/lser-01/process', ProcessLser01Controller::class);
     Route::post('/work-templates/dest-01/process', ProcessDest01Controller::class);
+    Route::post('/work-templates/par-01/process', ProcessPar01Controller::class);
     Route::post('/work-templates/cact-01/process', ProcessCact01Controller::class);
+    Route::post('/work-templates/cact-01/order', ObtainCact01OrderController::class);
+    Route::post('/work-templates/cact-01/source-batch', ResolveCact01SourceBatchController::class);
     Route::get('/work-templates/{code}', [WorkTemplateController::class, 'show']);
+
+    // Lector electrónico en manga: alta estricta de animales nuevos
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/caravans/lookup', LookupCaravansController::class);
+        Route::post('/caravans/register-new', RegisterNewCaravansController::class);
+    });
+
+    // Órdenes de Transferencia (CACT-01)
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/transfer-orders', [TransferOrderController::class, 'index']);
+        Route::post('/transfer-orders', [TransferOrderController::class, 'store']);
+        Route::post('/transfer-orders/register', [TransferOrderController::class, 'register']);
+        Route::get('/transfer-orders/by-code/{code}', [TransferOrderController::class, 'byCode']);
+        Route::get('/transfer-orders/{id}', [TransferOrderController::class, 'show'])->whereNumber('id');
+        Route::put('/transfer-orders/{id}', [TransferOrderController::class, 'update'])->whereNumber('id');
+        Route::post('/transfer-orders/{id}/issue', [TransferOrderController::class, 'issue'])->whereNumber('id');
+        Route::post('/transfer-orders/{id}/printed', [TransferOrderController::class, 'printed'])->whereNumber('id');
+        Route::post('/transfer-orders/{id}/execute', [TransferOrderController::class, 'execute'])->whereNumber('id');
+        Route::post('/transfer-orders/{id}/close-incomplete', [TransferOrderController::class, 'closeIncomplete'])->whereNumber('id');
+        Route::post('/transfer-orders/{id}/cancel', [TransferOrderController::class, 'cancel'])->whereNumber('id');
+    });
+
+    // Órdenes de Destete (DEST-01)
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/weaning-orders', [WeaningOrderController::class, 'index']);
+        Route::post('/weaning-orders', [WeaningOrderController::class, 'store']);
+        Route::post('/weaning-orders/register', [WeaningOrderController::class, 'register']);
+        Route::get('/weaning-orders/by-code/{code}', [WeaningOrderController::class, 'byCode']);
+        Route::get('/weaning-orders/{id}', [WeaningOrderController::class, 'show'])->whereNumber('id');
+        Route::put('/weaning-orders/{id}', [WeaningOrderController::class, 'update'])->whereNumber('id');
+        Route::post('/weaning-orders/{id}/issue', [WeaningOrderController::class, 'issue'])->whereNumber('id');
+        Route::post('/weaning-orders/{id}/printed', [WeaningOrderController::class, 'printed'])->whereNumber('id');
+        Route::post('/weaning-orders/{id}/execute', [WeaningOrderController::class, 'execute'])->whereNumber('id');
+        Route::post('/weaning-orders/{id}/close-incomplete', [WeaningOrderController::class, 'closeIncomplete'])->whereNumber('id');
+        Route::post('/weaning-orders/{id}/cancel', [WeaningOrderController::class, 'cancel'])->whereNumber('id');
+    });
+
+    // Órdenes de Parición (PAR-01)
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/birth-orders', [BirthOrderController::class, 'index']);
+        Route::post('/birth-orders', [BirthOrderController::class, 'store']);
+        Route::post('/birth-orders/register', [BirthOrderController::class, 'register']);
+        Route::get('/birth-orders/by-code/{code}', [BirthOrderController::class, 'byCode']);
+        Route::get('/birth-orders/open-mothers', [BirthOrderController::class, 'openMothers']);
+        Route::get('/birth-orders/{id}', [BirthOrderController::class, 'show'])->whereNumber('id');
+        Route::put('/birth-orders/{id}', [BirthOrderController::class, 'update'])->whereNumber('id');
+        Route::post('/birth-orders/{id}/issue', [BirthOrderController::class, 'issue'])->whereNumber('id');
+        Route::post('/birth-orders/{id}/printed', [BirthOrderController::class, 'printed'])->whereNumber('id');
+        Route::post('/birth-orders/{id}/execute', [BirthOrderController::class, 'execute'])->whereNumber('id');
+        Route::post('/birth-orders/{id}/close-incomplete', [BirthOrderController::class, 'closeIncomplete'])->whereNumber('id');
+        Route::post('/birth-orders/{id}/cancel', [BirthOrderController::class, 'cancel'])->whereNumber('id');
+    });
 
     // Órdenes de Servicio
     Route::middleware('auth:sanctum')->group(function () {

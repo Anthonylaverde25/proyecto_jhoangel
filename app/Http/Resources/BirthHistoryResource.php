@@ -32,8 +32,12 @@ class BirthHistoryResource extends JsonResource
             'calf_sex'              => $this->resource->getCalfSex(),
             'calf_batch_name'       => $this->resource->getCalfBatchName(),
             'calf_batch_id'         => $this->resource->getCalfBatchId(),
+            'calf_category_id'      => $this->resource->getCalfCategoryId(),
+            'calf_subcategory_id'   => $this->resource->getCalfSubcategoryId(),
             'mother_batch_id'       => $this->resource->getMotherBatchId(),
             'mother_batch_name'     => $this->resource->getMotherBatchName(),
+            // A calf pending in an open order cannot be ordered or weaned by another one.
+            'open_order_code'       => $this->resource->getOpenOrderCode(),
         ];
     }
 }

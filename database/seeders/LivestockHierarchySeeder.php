@@ -15,15 +15,28 @@ class LivestockHierarchySeeder extends Seeder
     public function run(): void
     {
         // 1. Limpiar tablas para permitir re-ejecución (idempotencia)
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+        } else {
+            DB::statement('PRAGMA foreign_keys = OFF;');
+        }
+
         DB::table('service_order_females')->delete();
         DB::table('service_order_males')->delete();
         DB::table('service_orders')->delete();
         DB::table('caravan_gestations')->delete();
         DB::table('female_caravan_details')->delete();
+        DB::table('caravan_weights')->delete();
         DB::table('caravans')->delete();
         DB::table('batches')->delete();
         DB::table('farms')->delete();
         DB::table('providers')->delete();
+
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+        } else {
+            DB::statement('PRAGMA foreign_keys = ON;');
+        }
 
         $serviceOrderData = null;
 

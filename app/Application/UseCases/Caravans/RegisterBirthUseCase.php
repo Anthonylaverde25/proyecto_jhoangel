@@ -32,9 +32,13 @@ final class RegisterBirthUseCase
     ) {
     }
 
-    public function __invoke(RegisterBirthDTO $dto): CaravanEntity
+    /**
+     * @param bool $recalculateBatchWeight false when the caller registers many calvings and
+     *        recalculates each batch once at the end (PAR-01), instead of once per calf.
+     */
+    public function __invoke(RegisterBirthDTO $dto, bool $recalculateBatchWeight = true): CaravanEntity
     {
-        return DB::transaction(function () use ($dto) {
+        return DB::transaction(function () use ($dto, $recalculateBatchWeight) {
             // 1. Validate mother
             $mother = $this->caravanRepository->findById($dto->motherId);
             if ($mother === null) {
@@ -43,6 +47,10 @@ final class RegisterBirthUseCase
             if ($mother->getSex() !== AnimalSex::FEMALE) {
                 throw new DomainException("El animal especificado como madre debe ser hembra.");
             }
+
+            // The calf is born where its mother is. The batch the caller sent is only a fallback for
+            // a mother that is in no batch.
+            $calfBatchId = $mother->getBatchId() ?? $dto->batchId;
 
             // 2. Resolve active gestation first
             $activeGestation = null;
@@ -122,7 +130,7 @@ final class RegisterBirthUseCase
                 sex: $calfSex,
                 entryDate: new \DateTime($dto->birthDate),
                 createdAt: null,
-                batchId: $dto->batchId,
+                batchId: $calfBatchId,
                 companyId: $mother->getCompanyId(),
                 batchName: null,
                 currentWeight: $dto->calfWeight,
@@ -206,9 +214,9 @@ final class RegisterBirthUseCase
             }
 
             // 9. Recalculate Batch weight for the calf's batch
-            if ($weightRecorded) {
+            if ($weightRecorded && $recalculateBatchWeight) {
                 // A newborn grows the set: for this series that is a change of composition.
-                $this->batchWeightService->recalculateBatchWeight($dto->batchId, BatchWeightCause::MOVEMENT_IN);
+                $this->batchWeightService->recalculateBatchWeight($calfBatchId, BatchWeightCause::MOVEMENT_IN);
             }
 
             // Reload calf with lineage relations

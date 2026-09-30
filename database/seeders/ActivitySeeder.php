@@ -34,8 +34,7 @@ class ActivitySeeder extends Seeder
             ],
         ];
 
-        $activityIds = [];
-        $companyId = \App\Models\Company::first()->id;
+        $companies = \App\Models\Company::all();
 
         $flowConfig = [
             'CRIA' => ['is_enabled' => true, 'is_initial' => true, 'is_final' => false, 'sort_order' => 1],
@@ -58,11 +57,13 @@ class ActivitySeeder extends Seeder
                 'sort_order' => 99,
             ];
 
-            // Configurar flujo automáticamente para la empresa (Tenant por defecto)
-            \App\Models\CompanyActivity::updateOrCreate(
-                ['company_id' => $companyId, 'activity_id' => $activity->id],
-                $config
-            );
+            // Configure default activity flow for all companies in the tenant
+            foreach ($companies as $company) {
+                \App\Models\CompanyActivity::updateOrCreate(
+                    ['company_id' => $company->id, 'activity_id' => $activity->id],
+                    $config
+                );
+            }
         }
 
         // Relacionar los lotes creados en LivestockHierarchySeeder con sus actividades

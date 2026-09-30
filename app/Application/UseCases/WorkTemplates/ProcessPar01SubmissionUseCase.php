@@ -1,0 +1,683 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Application\UseCases\WorkTemplates;
+
+use App\Application\DTOs\Par01\Par01SubmissionDTO;
+use App\Application\DTOs\RegisterBirthDTO;
+use App\Application\Services\BirthOrderExecutionService;
+use App\Application\UseCases\Caravans\RegisterBirthUseCase;
+use App\Application\UseCases\Caravans\RegisterGestationLossUseCase;
+use App\Core\Entities\BirthOrderEntity;
+use App\Core\Entities\CaravanEntity;
+use App\Core\Entities\GestationEntity;
+use App\Core\Enums\AnimalSex;
+use App\Core\Enums\BatchWeightCause;
+use App\Core\Enums\BirthOutcome;
+use App\Core\Exceptions\DomainException;
+use App\Core\Exceptions\Par01ValidationException;
+use App\Core\Interfaces\IBatchRepository;
+use App\Core\Interfaces\IBirthOrderRepository;
+use App\Core\Interfaces\IBreedRepository;
+use App\Core\Interfaces\ICaravanRepository;
+use App\Core\Services\BatchWeightService;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * PAR-01: the one path that registers calvings. A scanned sheet (one or several pages), an order
+ * executed from the screen and calvings registered afterwards all arrive here as the same
+ * submission, so the same checks hold for all of them.
+ *
+ * Each row is a pregnant female and what the round found: a live calf — created in the batch its
+ * mother is in, never in one the sheet names —, a stillbirth or an abortion. A row without an
+ * outcome is a female that did not calve yet and stays pending.
+ *
+ * All or nothing: every problem on the sheet is collected and reported together, and nothing is
+ * persisted until the sheet is clean. Every calving ends up in a birth order: the one the sheet
+ * names, or one created on confirming a sheet printed blank.
+ */
+final class ProcessPar01SubmissionUseCase
+{
+    /** How far from the due date a calving is still unremarkable. */
+    private const DUE_DATE_TOLERANCE_DAYS = 30;
+
+    public function __construct(
+        private readonly ICaravanRepository $caravanRepository,
+        private readonly IBatchRepository $batchRepository,
+        private readonly IBreedRepository $breedRepository,
+        private readonly IBirthOrderRepository $orderRepository,
+        private readonly RegisterBirthUseCase $registerBirth,
+        private readonly RegisterGestationLossUseCase $registerLoss,
+        private readonly BatchWeightService $batchWeightService,
+        private readonly BirthOrderExecutionService $orderExecution
+    ) {
+    }
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @throws Par01ValidationException
+     * @throws DomainException
+     */
+    public function __invoke(Par01SubmissionDTO $dto): array
+    {
+        return $this->persist($this->validate($dto));
+    }
+
+    /**
+     * Every check of the sheet, collected and thrown together.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws Par01ValidationException
+     */
+    private function validate(Par01SubmissionDTO $dto): array
+    {
+        $headerErrors = [];
+        $warnings = [];
+        $today = (new \DateTimeImmutable('today'))->format('Y-m-d');
+
+        if ($dto->fechaRecorrida !== null) {
+            $round = $this->parseDate($dto->fechaRecorrida);
+
+            if ($round === null) {
+                $headerErrors[] = $this->headerError('fecha_recorrida', 'DATE_INVALID', 'La fecha de recorrida no es una fecha válida.');
+            } elseif ($round > $today) {
+                $headerErrors[] = $this->headerError('fecha_recorrida', 'FUTURE_DATE', 'La fecha de recorrida no puede ser posterior a hoy.');
+            }
+        }
+
+        // 1. The birth order the sheet fulfils, when it names one.
+        $order = $this->orderExecution->load($dto, $headerErrors);
+
+        // 2. Everything the rows name, in one query each.
+        $motherTags = [];
+        $calfTags = [];
+        foreach ($dto->rows as $row) {
+            if ($row['caravana_madre'] !== '') {
+                $motherTags[] = $row['caravana_madre'];
+            }
+            if ($row['caravana_cria'] !== null) {
+                $calfTags[] = $row['caravana_cria'];
+            }
+        }
+
+        $mothersByTag = $this->caravanRepository->findByIdentifications($motherTags);
+        $existingCalves = $this->caravanRepository->findByIdentifications($calfTags);
+        $motherIds = array_values(array_map(fn (CaravanEntity $c) => (int) $c->getId(), $mothersByTag));
+        $committed = $this->orderRepository->findCommittedMothers($motherIds, $dto->companyId, $order?->getId());
+        $breeds = $this->breedsByName();
+        $fathers = [];
+        $lossReasonIds = [];
+
+        /** @var array<int, array<int, array{code: string, message: string, field?: string}>> $errorsByRow */
+        $errorsByRow = [];
+        $items = [];
+        $seenMothers = [];
+        $seenCalves = [];
+        $rowsWithMother = 0;
+
+        foreach ($dto->rows as $index => $row) {
+            $tag = $row['caravana_madre'];
+
+            if ($tag === '' && $this->isBlank($row)) {
+                // Blank lines of the printed table, not a missing female.
+                continue;
+            }
+
+            if ($tag === '') {
+                $errorsByRow[$index][] = $this->error('MOTHER_MISSING', 'La fila tiene datos pero no dice de qué hembra es.', 'caravana_madre');
+                continue;
+            }
+
+            $rowsWithMother++;
+            $upper = mb_strtoupper($tag);
+
+            if (isset($seenMothers[$upper])) {
+                $errorsByRow[$index][] = $this->error('DUPLICATED_IN_SHEET', "La hembra '{$tag}' ya figura en la fila " . ($seenMothers[$upper] + 1) . '.', 'caravana_madre');
+                continue;
+            }
+            $seenMothers[$upper] = $index;
+
+            // 3. The outcome is declared. A row without one is a female that did not calve yet —
+            //    unless something of a calf is written on it, and then it has to be declared.
+            $outcome = BirthOutcome::fromText($row['resultado']);
+
+            if ($row['resultado'] !== null && $outcome === null) {
+                $errorsByRow[$index][] = $this->error('OUTCOME_UNKNOWN', "El resultado marcado para '{$tag}' ('{$row['resultado']}') no es uno solo de V (parió), M (nacido muerto) o A (aborto).", 'resultado');
+                continue;
+            }
+
+            if ($outcome === null) {
+                if ($this->hasCalfData($row)) {
+                    $errorsByRow[$index][] = $this->error('OUTCOME_MISSING', "La fila de '{$tag}' tiene datos de cría pero no tiene marcado el resultado: V, M o A.", 'resultado');
+                }
+
+                continue;
+            }
+
+            $mother = $mothersByTag[$upper] ?? null;
+
+            if ($mother === null) {
+                $errorsByRow[$index][] = $this->error('MOTHER_NOT_FOUND', "No existe la caravana '{$tag}'.", 'caravana_madre');
+                continue;
+            }
+
+            if ($mother->getSex() !== AnimalSex::FEMALE) {
+                $errorsByRow[$index][] = $this->error('NOT_A_FEMALE', "La caravana '{$tag}' no es de una hembra.", 'caravana_madre');
+                continue;
+            }
+
+            $motherId = (int) $mother->getId();
+            $rowErrors = [];
+            $line = $order?->animalByMotherId($motherId);
+
+            // 4. Its place in the order.
+            if ($line !== null && !$line->isPending()) {
+                $errorsByRow[$index][] = $this->orderExecution->alreadyResolvedByOrder($order, $motherId, $tag)
+                    + ['field' => 'caravana_madre'];
+                continue;
+            }
+
+            $holder = $committed[$motherId] ?? null;
+            if ($line === null && $holder !== null) {
+                $rowErrors[] = $this->error('ANIMAL_IN_OPEN_ORDER', "La hembra '{$tag}' está en la orden de parición {$holder}. Registrala con esa orden.", 'caravana_madre');
+            }
+
+            // A calving outside the plan is declared with the "Fuera de orden" box, never inferred
+            // from a tag the order does not list: that could just as well be a misread tag.
+            if ($line === null && $order !== null) {
+                if ($dto->origin !== Par01SubmissionDTO::ORIGIN_SHEET) {
+                    $rowErrors[] = $this->error('ANIMAL_NOT_IN_ORDER', "La hembra '{$tag}' no está en la orden {$order->getCode()}.", 'caravana_madre');
+                } elseif (!$row['fuera_de_orden']) {
+                    $rowErrors[] = $this->error(
+                        'OUTSIDE_ORDER_NOT_DECLARED',
+                        "'{$tag}' no está en la orden {$order->getCode()}. Si parió sin estar en el plan, marcá «Fuera de orden»; si no, corregí la caravana.",
+                        'fuera_de_orden'
+                    );
+                }
+            }
+
+            if ($line !== null && $row['fuera_de_orden']) {
+                $warnings[] = $this->warning($index, 'OUTSIDE_ORDER_MARK_IGNORED', "'{$tag}' está en la orden {$order?->getCode()}: la marca «Fuera de orden» no aplica.", 'fuera_de_orden');
+            }
+
+            // 5. The gestation it closes.
+            $active = $mother->getActiveGestation();
+
+            if ($line !== null && $line->getGestationId() !== null && $active?->getId() !== $line->getGestationId()) {
+                $rowErrors[] = $this->error('GESTATION_CLOSED', "La preñez de '{$tag}' que listaba la orden ya se cerró por otro camino. Cerrá la orden incompleta si no queda nada por registrar.", 'resultado');
+            }
+
+            if ($outcome !== BirthOutcome::LIVE && $active === null) {
+                $rowErrors[] = $this->error('NO_ACTIVE_GESTATION', "'{$tag}' no tiene una preñez en curso: no hay pérdida que registrar.", 'resultado');
+            }
+
+            if ($outcome !== BirthOutcome::LIVE && !isset($lossReasonIds[$outcome->value])) {
+                $lossReasonIds[$outcome->value] = $this->orderRepository->lossReasonIdByCode((string) $outcome->lossReasonCode(), $dto->companyId);
+
+                if ($lossReasonIds[$outcome->value] === null) {
+                    $headerErrors[] = $this->headerError('rows', 'LOSS_REASON_MISSING', "La empresa no tiene configurado el motivo de pérdida '{$outcome->label()}'.");
+                }
+            }
+
+            // 6. The date, per row: never taken from the header.
+            $date = $this->eventDate($row['fecha_nacimiento'], $active, $tag, $index, $today, $rowErrors, $warnings);
+
+            // 7. Where the calf is born: the batch the mother is in now.
+            $calfBatchId = $mother->getBatchId() ?? $line?->getSourceBatchId();
+
+            if ($line?->getSourceBatchId() !== null && $mother->getBatchId() !== null && $mother->getBatchId() !== $line->getSourceBatchId()) {
+                $batchName = $this->batchRepository->findById((int) $mother->getBatchId())?->getName() ?? 'otro lote';
+                $warnings[] = $this->warning($index, 'MOTHER_MOVED', "'{$tag}' ahora está en {$batchName}: la cría queda ahí, con su madre.");
+            }
+
+            $calf = null;
+            if ($outcome === BirthOutcome::LIVE) {
+                if ($calfBatchId === null) {
+                    $rowErrors[] = $this->error('MOTHER_WITHOUT_BATCH', "'{$tag}' no está en ningún lote: la cría no tiene dónde nacer.", 'caravana_madre');
+                }
+
+                $calf = $this->calf($row, $tag, $index, $active, $existingCalves, $seenCalves, $breeds, $fathers, $rowErrors, $warnings);
+            } elseif ($this->hasCalfData($row, withDate: false)) {
+                $warnings[] = $this->warning($index, 'CALF_DATA_IGNORED', "'{$tag}': con {$outcome->label()} no se da de alta ninguna cría; los datos de cría escritos se ignoran.");
+            }
+
+            if ($rowErrors !== []) {
+                $errorsByRow[$index] = array_merge($errorsByRow[$index] ?? [], $rowErrors);
+                continue;
+            }
+
+            $items[] = [
+                'index' => $index,
+                'mother' => $mother,
+                'outcome' => $outcome,
+                'date' => (string) $date,
+                'in_order' => $line !== null,
+                'gestation_id' => $active?->getId(),
+                'batch_id' => $calfBatchId,
+                'calf' => $calf,
+                'observations' => $row['observations'],
+            ];
+        }
+
+        if ($rowsWithMother === 0) {
+            $headerErrors[] = $this->headerError('rows', 'NO_ROWS', 'La planilla no tiene vientres cargados.');
+        } elseif ($items === [] && $errorsByRow === []) {
+            $headerErrors[] = $this->headerError('rows', 'NOTHING_RESOLVED', 'Ningún vientre tiene resultado marcado: no hay partos que registrar.');
+        }
+
+        $rowErrors = [];
+        ksort($errorsByRow);
+        foreach ($errorsByRow as $index => $errors) {
+            $rowErrors[] = [
+                'row_index' => $index,
+                'caravana_madre' => $dto->rows[$index]['caravana_madre'],
+                'errors' => $errors,
+            ];
+        }
+
+        if ($headerErrors !== [] || $rowErrors !== []) {
+            throw new Par01ValidationException($headerErrors, $rowErrors);
+        }
+
+        return [
+            'dto' => $dto,
+            'order' => $order,
+            'items' => $items,
+            'loss_reason_ids' => $lossReasonIds,
+            'warnings' => $warnings,
+        ];
+    }
+
+    /**
+     * Registers the checked sheet in one transaction: order first (a blank sheet gets one), each
+     * calving or loss, one weight recalculation per batch that received weighed calves, and the
+     * order's record of it.
+     *
+     * @param array<string, mixed> $checked
+     * @return array<string, mixed>
+     */
+    private function persist(array $checked): array
+    {
+        /** @var Par01SubmissionDTO $dto */
+        $dto = $checked['dto'];
+        /** @var ?BirthOrderEntity $order */
+        $order = $checked['order'];
+        $items = $checked['items'];
+        $warnings = $checked['warnings'];
+
+        return DB::transaction(function () use ($dto, $order, $items, $warnings, $checked): array {
+            $females = array_map(fn (array $item) => [
+                'mother_id' => (int) $item['mother']->getId(),
+                'gestation_id' => $item['gestation_id'],
+                'batch_id' => $item['mother']->getBatchId(),
+            ], $items);
+
+            // STEP 0. A sheet printed blank gets its order now, with every female it resolved.
+            $createdFromSheet = $this->orderExecution->needsOrderFromSheet($order, $dto);
+
+            if ($createdFromSheet) {
+                $order = $this->orderExecution->createFromSheet($dto, $females);
+            }
+
+            if ($order === null) {
+                throw new DomainException('Los partos se registran siempre con una orden de parición.');
+            }
+
+            $unplanned = [];
+            foreach ($items as $position => $item) {
+                if (!$item['in_order'] && !$createdFromSheet) {
+                    $unplanned[] = $females[$position];
+                }
+            }
+
+            // STEP 1. Each calving or loss.
+            $results = [];
+            $calves = [];
+            $weighedBatches = [];
+            $counts = ['males' => 0, 'females' => 0];
+
+            foreach ($items as $item) {
+                /** @var CaravanEntity $mother */
+                $mother = $item['mother'];
+                $motherId = (int) $mother->getId();
+                /** @var BirthOutcome $outcome */
+                $outcome = $item['outcome'];
+                $calfId = null;
+
+                if ($outcome === BirthOutcome::LIVE) {
+                    $calfData = $item['calf'];
+                    $created = ($this->registerBirth)(new RegisterBirthDTO(
+                        calfIdentification: $calfData['identification'],
+                        calfSex: $calfData['sex'],
+                        calfCategory: $calfData['sex'] === AnimalSex::MALE->value ? 'ternero' : 'ternera',
+                        calfTeeth: $calfData['teeth'],
+                        calfWeight: $calfData['weight'],
+                        calfBreedId: $calfData['breed_id'],
+                        birthDate: $item['date'],
+                        batchId: (int) $item['batch_id'],
+                        motherId: $motherId,
+                        fatherId: $calfData['father_id'],
+                        gestationId: $item['gestation_id']
+                    ), false);
+
+                    $calfId = (int) $created->getId();
+                    $counts[$calfData['sex'] === AnimalSex::MALE->value ? 'males' : 'females']++;
+
+                    if ($calfData['weight'] !== null) {
+                        $weighedBatches[(int) $item['batch_id']] = true;
+                    }
+
+                    $calves[] = [
+                        'mother' => $mother->getIdentification()->getValue(),
+                        'calf' => $calfData['identification'],
+                        'sex' => $calfData['sex'],
+                        'batch_id' => $created->getBatchId(),
+                        'father_id' => $created->getLineage()?->getFatherId(),
+                    ];
+                } else {
+                    ($this->registerLoss)(
+                        $motherId,
+                        (int) $checked['loss_reason_ids'][$outcome->value],
+                        $item['observations'],
+                        $item['date'],
+                        promoteToCow: $outcome->isCalving()
+                    );
+                }
+
+                $results[$motherId] = [
+                    'outcome' => $outcome,
+                    'event_date' => $item['date'],
+                    'calf_caravan_id' => $calfId,
+                    'calf_batch_id' => $outcome === BirthOutcome::LIVE ? (int) $item['batch_id'] : null,
+                    'observations' => $item['observations'],
+                ];
+            }
+
+            // STEP 2. The compositional effect, once per batch that received weighed calves.
+            foreach (array_keys($weighedBatches) as $batchId) {
+                $this->batchWeightService->recalculateBatchWeight($batchId, BatchWeightCause::MOVEMENT_IN);
+            }
+
+            // STEP 3. The order, in this same transaction: if it cannot record what happened,
+            // nothing happened.
+            $orderSummary = $this->orderExecution->recordExecution($order, $dto, $results, $unplanned, new \DateTimeImmutable());
+            $orderSummary['created_from_sheet'] = $createdFromSheet;
+
+            if ($orderSummary['pending_head_count'] > 0) {
+                $warnings[] = $this->warning(
+                    null,
+                    'BIRTH_ORDER_PARTIAL',
+                    "La orden {$orderSummary['code']} queda parcial: faltan {$orderSummary['pending_head_count']} vientre(s) por parir."
+                );
+            }
+
+            $batchNames = [];
+            foreach ($calves as $position => $calf) {
+                $batchId = $calf['batch_id'];
+                $batchNames[$batchId] ??= $batchId !== null ? $this->batchRepository->findById((int) $batchId)?->getName() : null;
+                $calves[$position]['batch_name'] = $batchNames[$batchId];
+            }
+
+            return [
+                'resolved_count' => count($items),
+                'live_count' => count(array_filter($items, fn (array $i) => $i['outcome'] === BirthOutcome::LIVE)),
+                'stillborn_count' => count(array_filter($items, fn (array $i) => $i['outcome'] === BirthOutcome::STILLBORN)),
+                'abortion_count' => count(array_filter($items, fn (array $i) => $i['outcome'] === BirthOutcome::ABORTION)),
+                'males_count' => $counts['males'],
+                'females_count' => $counts['females'],
+                'unplanned_count' => count($unplanned),
+                'calves' => $calves,
+                'warnings' => array_values($warnings),
+                'birth_order' => $orderSummary,
+            ];
+        });
+    }
+
+    /**
+     * The date of a row: required, a real date, not in the future and not before the gestation
+     * began. Far from the due date is only a warning — the due date is an estimate.
+     *
+     * @param list<array{code: string, message: string, field?: string}> $rowErrors
+     * @param list<array<string, mixed>> $warnings
+     */
+    private function eventDate(?string $raw, ?GestationEntity $active, string $tag, int $index, string $today, array &$rowErrors, array &$warnings): ?string
+    {
+        if ($raw === null) {
+            $rowErrors[] = $this->error('DATE_MISSING', "Falta la fecha del parto de '{$tag}'.", 'fecha_nacimiento');
+
+            return null;
+        }
+
+        $date = $this->parseDate($raw);
+
+        if ($date === null) {
+            $rowErrors[] = $this->error('DATE_INVALID', "La fecha '{$raw}' de '{$tag}' no es una fecha válida.", 'fecha_nacimiento');
+
+            return null;
+        }
+
+        if ($date > $today) {
+            $rowErrors[] = $this->error('FUTURE_DATE', "La fecha del parto de '{$tag}' es posterior a hoy.", 'fecha_nacimiento');
+
+            return $date;
+        }
+
+        $start = $active?->getStartDate() !== null ? substr((string) $active->getStartDate(), 0, 10) : null;
+
+        if ($start !== null && $date < $start) {
+            $rowErrors[] = $this->error('DATE_BEFORE_GESTATION', "La fecha del parto de '{$tag}' es anterior al inicio de su preñez (" . $this->display($start) . ').', 'fecha_nacimiento');
+
+            return $date;
+        }
+
+        $due = $active?->getEstimatedDueDate();
+
+        if ($due !== null) {
+            $days = (int) round(((int) strtotime($date) - (int) strtotime(substr($due, 0, 10))) / 86400);
+
+            if (abs($days) > self::DUE_DATE_TOLERANCE_DAYS) {
+                $warnings[] = $this->warning(
+                    $index,
+                    'DATE_FAR_FROM_DUE',
+                    "El parto de '{$tag}' es " . abs($days) . ' días ' . ($days < 0 ? 'antes' : 'después') . ' de su fecha probable (' . $this->display($due) . ').',
+                    'fecha_nacimiento'
+                );
+            }
+        }
+
+        return $date;
+    }
+
+    /**
+     * The calf of a live calving: tag, sex, weight, breed, teeth and, optionally, sire.
+     *
+     * @param array<string, mixed> $row
+     * @param array<string, CaravanEntity> $existingCalves
+     * @param array<string, int> $seenCalves
+     * @param array<string, int> $breeds normalised name => id
+     * @param array<int, ?CaravanEntity> $fathers cache
+     * @param list<array{code: string, message: string, field?: string}> $rowErrors
+     * @param list<array<string, mixed>> $warnings
+     * @return array{identification: string, sex: string, weight: ?float, breed_id: ?int, teeth: int, father_id: ?int}|null
+     */
+    private function calf(
+        array $row,
+        string $tag,
+        int $index,
+        ?GestationEntity $active,
+        array $existingCalves,
+        array &$seenCalves,
+        array $breeds,
+        array &$fathers,
+        array &$rowErrors,
+        array &$warnings
+    ): ?array {
+        $calfTag = $row['caravana_cria'];
+
+        if ($calfTag === null) {
+            $rowErrors[] = $this->error('CALF_TAG_MISSING', "Falta la caravana de la cría de '{$tag}'.", 'caravana_cria');
+        } else {
+            $upper = mb_strtoupper($calfTag);
+
+            if (isset($seenCalves[$upper])) {
+                $rowErrors[] = $this->error('CALF_TAG_DUPLICATED', "La caravana de cría '{$calfTag}' ya figura en la fila " . ($seenCalves[$upper] + 1) . '.', 'caravana_cria');
+            } elseif (isset($existingCalves[$upper])) {
+                $rowErrors[] = $this->error('CALF_TAG_IN_USE', "Ya existe un animal con la caravana '{$calfTag}'.", 'caravana_cria');
+            }
+
+            $seenCalves[$upper] = $index;
+        }
+
+        $sex = $this->sex($row['sexo']);
+
+        if ($row['sexo'] === null) {
+            $rowErrors[] = $this->error('CALF_SEX_MISSING', "Falta el sexo de la cría de '{$tag}'.", 'sexo');
+        } elseif ($sex === null) {
+            $rowErrors[] = $this->error('CALF_SEX_UNKNOWN', "El sexo '{$row['sexo']}' de la cría de '{$tag}' no es M (macho) ni H (hembra).", 'sexo');
+        }
+
+        if ($row['peso'] !== null && $row['peso'] <= 0) {
+            $rowErrors[] = $this->error('INVALID_WEIGHT', "El peso de la cría de '{$tag}' tiene que ser mayor a cero. Corregilo o dejalo vacío.", 'peso');
+        }
+
+        if ($row['dientes'] < 0) {
+            $rowErrors[] = $this->error('INVALID_TEETH', "Los dientes de la cría de '{$tag}' no pueden ser negativos.", 'dientes');
+        }
+
+        $breedId = null;
+        if ($row['breed_id'] !== null) {
+            $breedId = in_array($row['breed_id'], $breeds, true) ? $row['breed_id'] : null;
+
+            if ($breedId === null) {
+                $rowErrors[] = $this->error('BREED_UNKNOWN', "La raza elegida para la cría de '{$tag}' no existe.", 'raza');
+            }
+        } elseif ($row['raza'] !== null) {
+            $breedId = $breeds[$this->normalize($row['raza'])] ?? null;
+
+            if ($breedId === null) {
+                $rowErrors[] = $this->error('BREED_UNKNOWN', "La raza '{$row['raza']}' de la cría de '{$tag}' no está en el catálogo. Elegila de la lista o dejala vacía.", 'raza');
+            }
+        }
+
+        // The sire is optional: left empty, the gestation's single or confirmed sire is used, or
+        // the calf waits in "Sires pendientes".
+        $fatherId = $row['father_id'];
+        if ($fatherId !== null) {
+            $fathers[$fatherId] ??= $this->caravanRepository->findById($fatherId);
+            $father = $fathers[$fatherId];
+
+            if ($father === null) {
+                $rowErrors[] = $this->error('FATHER_NOT_FOUND', "El padre elegido para la cría de '{$tag}' no existe.", 'father_id');
+            } elseif ($father->getSex() !== AnimalSex::MALE) {
+                $rowErrors[] = $this->error('FATHER_NOT_MALE', "El padre elegido para la cría de '{$tag}' no es un macho.", 'father_id');
+            } elseif ($active !== null && $active->getSires() !== []) {
+                $inService = array_filter($active->getSires(), fn ($sire) => $sire->getSireId() === $fatherId);
+
+                if ($inService === []) {
+                    $warnings[] = $this->warning($index, 'FATHER_NOT_IN_SERVICE', "El padre {$father->getIdentification()->getValue()} no estaba entre los toros del servicio de '{$tag}'. Se agrega como padre confirmado.", 'father_id');
+                }
+            }
+        }
+
+        if ($calfTag === null || $sex === null) {
+            return null;
+        }
+
+        return [
+            'identification' => $calfTag,
+            'sex' => $sex,
+            'weight' => $row['peso'],
+            'breed_id' => $breedId,
+            'teeth' => max(0, (int) $row['dientes']),
+            'father_id' => $fatherId,
+        ];
+    }
+
+    private function sex(?string $raw): ?string
+    {
+        return match (mb_strtoupper(trim((string) $raw))) {
+            'M', 'MACHO' => AnimalSex::MALE->value,
+            'H', 'HEMBRA', 'F' => AnimalSex::FEMALE->value,
+            default => null,
+        };
+    }
+
+    /**
+     * @return array<string, int> normalised name => id
+     */
+    private function breedsByName(): array
+    {
+        $breeds = [];
+
+        foreach ($this->breedRepository->getAll() as $breed) {
+            $breeds[$this->normalize($breed->getName())] = (int) $breed->getId();
+        }
+
+        return $breeds;
+    }
+
+    private function normalize(string $text): string
+    {
+        $text = strtr(mb_strtolower(trim($text)), ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ñ' => 'n']);
+
+        return (string) preg_replace('/[^a-z0-9]+/', '', $text);
+    }
+
+    private function parseDate(string $raw): ?string
+    {
+        return Par01SubmissionDTO::parseDate($raw);
+    }
+
+    private function display(string $date): string
+    {
+        return date('d/m/Y', (int) strtotime(substr($date, 0, 10)));
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function isBlank(array $row): bool
+    {
+        return $row['resultado'] === null && !$this->hasCalfData($row);
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function hasCalfData(array $row, bool $withDate = true): bool
+    {
+        return $row['caravana_cria'] !== null
+            || $row['sexo'] !== null
+            || $row['peso'] !== null
+            || ($withDate && $row['fecha_nacimiento'] !== null);
+    }
+
+    /**
+     * @return array{field: string, code: string, message: string}
+     */
+    private function headerError(string $field, string $code, string $message): array
+    {
+        return ['field' => $field, 'code' => $code, 'message' => $message];
+    }
+
+    /**
+     * @return array{code: string, message: string, field?: string}
+     */
+    private function error(string $code, string $message, ?string $field = null): array
+    {
+        return $field !== null ? ['code' => $code, 'message' => $message, 'field' => $field] : ['code' => $code, 'message' => $message];
+    }
+
+    /**
+     * @return array{code: string, message: string, row_index: ?int, field?: string}
+     */
+    private function warning(?int $rowIndex, string $code, string $message, ?string $field = null): array
+    {
+        $warning = ['code' => $code, 'message' => $message, 'row_index' => $rowIndex];
+
+        return $field !== null ? $warning + ['field' => $field] : $warning;
+    }
+}

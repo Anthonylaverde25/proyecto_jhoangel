@@ -43,6 +43,10 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(ICompanyContext::class, \App\Core\Contexts\CompanyContext::class);
         $this->app->bind(ICaravanRepository::class, EloquentCaravanRepository::class);
+        $this->app->bind(
+            \App\Core\Interfaces\ICaravanRegistrationSubmissionRepository::class,
+            \App\Infrastructure\Persistence\EloquentCaravanRegistrationSubmissionRepository::class
+        );
         $this->app->bind(ICaravanLineageRepository::class, EloquentCaravanLineageRepository::class);
         $this->app->bind(ICaravanWeightRepository::class, EloquentCaravanWeightRepository::class);
         $this->app->bind(IFieldMappingResolver::class, EloquentFieldMappingResolver::class);
@@ -57,6 +61,9 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(IWorkTemplateRepository::class, EloquentWorkTemplateRepository::class);
         $this->app->bind(IBatchTypeRepository::class, \App\Infrastructure\Persistence\EloquentBatchTypeRepository::class);
         $this->app->bind(IServiceOrderRepository::class, EloquentServiceOrderRepository::class);
+        $this->app->bind(\App\Core\Interfaces\ITransferOrderRepository::class, \App\Infrastructure\Persistence\EloquentTransferOrderRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IWeaningOrderRepository::class, \App\Infrastructure\Persistence\EloquentWeaningOrderRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IBirthOrderRepository::class, \App\Infrastructure\Persistence\EloquentBirthOrderRepository::class);
         $this->app->bind(\App\Core\Interfaces\IAnimalCategoryRepository::class, \App\Infrastructure\Persistence\EloquentAnimalCategoryRepository::class);
         $this->app->bind(\App\Core\Interfaces\IPathogenRepository::class, \App\Infrastructure\Persistence\EloquentPathogenRepository::class);
         $this->app->bind(\App\Core\Interfaces\IVeterinaryDiagnosisRepository::class, \App\Infrastructure\Persistence\EloquentVeterinaryDiagnosisRepository::class);

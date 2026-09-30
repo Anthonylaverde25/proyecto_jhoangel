@@ -219,16 +219,18 @@ class PedigreeLineageTest extends TestCase
             'is_nursing' => true,
         ]);
 
-        // 2. Call wean endpoint
-        $response = $this->patchJson("http://test.localhost/api/caravans/{$calf->id}/wean", [
+        // 2. Wean it. The endpoint is gone (every weaning now has a weaning order), but this use
+        // case is still the last step of every weaning, so its behaviour is checked directly.
+        $movementId = $this->wean(\App\Application\DTOs\WeanCaravanDTO::fromArray([
+            'caravan_id' => $calf->id,
             'target_batch_id' => $batch->id,
             'weaning_date' => '2026-05-30',
             'weaning_weight' => 180.5,
             'new_category' => 'novillito',
-            'notes' => 'Weaning in test'
-        ]);
+            'notes' => 'Weaning in test',
+        ]));
 
-        $response->assertStatus(204);
+        $this->assertGreaterThan(0, $movementId);
 
         // 3. Verify calf is weaned
         $lineage->refresh();
@@ -252,17 +254,17 @@ class PedigreeLineageTest extends TestCase
         $this->assertEquals('WEANING', $movement->type);
         $this->assertEquals('Weaning in test', $movement->observations);
 
-        // 7. Subsequent weaning call should fail
-        $responseDuplicate = $this->patchJson("http://test.localhost/api/caravans/{$calf->id}/wean", [
+        // 7. A second weaning of the same calf is a broken domain invariant.
+        $this->expectException(\App\Core\Exceptions\DomainException::class);
+        $this->wean(\App\Application\DTOs\WeanCaravanDTO::fromArray([
+            'caravan_id' => $calf->id,
             'target_batch_id' => $batch->id,
             'weaning_date' => '2026-05-30',
-            'weaning_weight' => 180.5
-        ]);
-        // AGENT.md 3.5: una invariante de dominio rota devuelve 422, no 500.
-        $responseDuplicate->assertStatus(422);
+            'weaning_weight' => 180.5,
+        ]));
     }
 
-    public function test_can_bulk_wean_calves(): void
+    public function test_can_wean_several_calves_with_their_own_category(): void
     {
         $batch = \App\Models\Batch::first();
         $this->assertNotNull($batch);
@@ -303,29 +305,19 @@ class PedigreeLineageTest extends TestCase
             'is_nursing' => true,
         ]);
 
-        // Call bulk-wean endpoint
-        $response = $this->postJson("http://test.localhost/api/caravans/bulk-wean", [
-            'weanings' => [
-                [
-                    'caravan_id' => $calf1->id,
-                    'target_batch_id' => $batch->id,
-                    'weaning_date' => '2026-05-30',
-                    'weaning_weight' => 190.0,
-                    'new_category' => 'novillito',
-                    'notes' => 'Bulk weaning calf 1'
-                ],
-                [
-                    'caravan_id' => $calf2->id,
-                    'target_batch_id' => $batch->id,
-                    'weaning_date' => '2026-05-30',
-                    'weaning_weight' => 175.0,
-                    'new_category' => 'vaquillona',
-                    'notes' => 'Bulk weaning calf 2'
-                ]
-            ]
-        ]);
-
-        $response->assertStatus(204);
+        foreach ([
+            [$calf1, 190.0, 'novillito', 'Bulk weaning calf 1'],
+            [$calf2, 175.0, 'vaquillona', 'Bulk weaning calf 2'],
+        ] as [$calf, $weight, $category, $notes]) {
+            $this->wean(\App\Application\DTOs\WeanCaravanDTO::fromArray([
+                'caravan_id' => $calf->id,
+                'target_batch_id' => $batch->id,
+                'weaning_date' => '2026-05-30',
+                'weaning_weight' => $weight,
+                'new_category' => $category,
+                'notes' => $notes,
+            ]));
+        }
 
         // Verify both are weaned
         $lineage1->refresh();
@@ -352,7 +344,7 @@ class PedigreeLineageTest extends TestCase
         $this->assertEquals(175.0, $weight2->weight);
     }
 
-    public function test_can_bulk_wean_calves_with_atomic_new_batch_and_ternero_category(): void
+    public function test_can_wean_into_a_new_batch_and_keep_ternero_category(): void
     {
         $mother = Caravan::create([
             'company_id' => $this->company->id,
@@ -389,34 +381,28 @@ class PedigreeLineageTest extends TestCase
             'is_nursing' => true,
         ]);
 
-        // Post bulk-wean with new_batch and ternero / ternera categories (no target_batch_id)
-        $response = $this->postJson("http://test.localhost/api/caravans/bulk-wean", [
-            'new_batch' => [
-                'name' => 'Lote Destete Atomico 2026',
-            ],
-            'weanings' => [
-                [
-                    'caravan_id' => $calf1->id,
-                    'weaning_date' => '2026-06-01',
-                    'weaning_weight' => 205.5,
-                    'new_category' => 'ternero',
-                    'notes' => 'Atomic wean calf 1'
-                ],
-                [
-                    'caravan_id' => $calf2->id,
-                    'weaning_date' => '2026-06-01',
-                    'weaning_weight' => 195.0,
-                    'new_category' => 'ternera',
-                    'notes' => 'Atomic wean calf 2'
-                ],
-            ]
-        ]);
-
-        $response->assertStatus(204);
+        // The first calf creates the batch, the second one joins it (ternero / ternera categories).
+        $this->wean(\App\Application\DTOs\WeanCaravanDTO::fromArray([
+            'caravan_id' => $calf1->id,
+            'new_batch' => ['name' => 'Lote Destete Atomico 2026'],
+            'weaning_date' => '2026-06-01',
+            'weaning_weight' => 205.5,
+            'new_category' => 'ternero',
+            'notes' => 'Atomic wean calf 1',
+        ]));
 
         // Verify the new batch was created in DB
         $createdBatch = \App\Models\Batch::where('name', 'Lote Destete Atomico 2026')->first();
         $this->assertNotNull($createdBatch);
+
+        $this->wean(\App\Application\DTOs\WeanCaravanDTO::fromArray([
+            'caravan_id' => $calf2->id,
+            'target_batch_id' => $createdBatch->id,
+            'weaning_date' => '2026-06-01',
+            'weaning_weight' => 195.0,
+            'new_category' => 'ternera',
+            'notes' => 'Atomic wean calf 2',
+        ]));
 
         // Verify calves were placed into the new batch
         $calf1->refresh();
@@ -589,16 +575,15 @@ class PedigreeLineageTest extends TestCase
             'is_nursing' => true,
         ]);
 
-        // 3. Call wean endpoint targeting the own batch
-        $response = $this->patchJson("http://test.localhost/api/caravans/{$calf->id}/wean", [
+        // 3. Wean it into the own batch
+        $this->wean(\App\Application\DTOs\WeanCaravanDTO::fromArray([
+            'caravan_id' => $calf->id,
             'target_batch_id' => $ownBatch->id,
             'weaning_date' => '2026-05-30',
             'weaning_weight' => 195.0,
             'new_category' => 'novillito',
-            'notes' => 'Weaned to own batch'
-        ]);
-
-        $response->assertStatus(204);
+            'notes' => 'Weaned to own batch',
+        ]));
 
         // 4. Verify batch and category changed
         $calf->refresh();
@@ -689,7 +674,9 @@ class PedigreeLineageTest extends TestCase
         $this->assertEquals('SIRE-TEST-01', $response->json('tree.father.identification'));
         $this->assertEquals('DAM-TEST-01', $response->json('tree.mother.identification'));
     }
+
+    private function wean(\App\Application\DTOs\WeanCaravanDTO $dto): int
+    {
+        return app(\App\Application\UseCases\Caravans\WeanCaravanUseCase::class)($dto);
+    }
 }
-
-
-

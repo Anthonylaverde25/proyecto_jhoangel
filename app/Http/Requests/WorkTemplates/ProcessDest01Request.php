@@ -23,8 +23,22 @@ class ProcessDest01Request extends FormRequest
     public function rules(): array
     {
         return [
-            'target_batch_id'       => 'nullable|integer|required_without:new_batch_name|prohibits:new_batch_name',
-            'new_batch_name'        => 'nullable|string|max:255|required_without:target_batch_id',
+            // One weaning batch for every calf (the shape every sheet had before orders)…
+            'target_batch_id'       => 'nullable|integer|prohibits:new_batch_name',
+            'new_batch_name'        => 'nullable|string|max:255',
+            'new_batch_is_confined' => 'nullable|boolean',
+            // …or the destinations the operator resolved, one per batch named on the paper.
+            'destination_mode'                  => 'nullable|string|in:single,per_animal',
+            'destinations'                      => 'nullable|array',
+            'destinations.*.key'                => 'required|string|max:255',
+            'destinations.*.target_batch_id'    => 'nullable|integer',
+            'destinations.*.new_batch'          => 'nullable|array',
+            'destinations.*.new_batch.name'     => 'required_with:destinations.*.new_batch|string|max:255',
+            'destinations.*.new_batch.is_confined' => 'nullable|boolean',
+            'sistema_manejo'        => 'nullable|string|max:50',
+            // The weaning order the sheet fulfils, as resolved from its code, and the code as read.
+            'weaning_order_id'      => 'nullable|integer',
+            'orden_destete'         => 'nullable|string|max:64',
             'fecha_destete'         => 'required|date',
             'tipo_destete'          => 'nullable|string|max:50',
             'lote_origen'           => 'nullable|string|max:255',
@@ -35,6 +49,9 @@ class ProcessDest01Request extends FormRequest
             'rows.*.caravana_madre' => 'nullable|string|max:100',
             'rows.*.peso'           => 'nullable|numeric',
             'rows.*.observations'   => 'nullable|string',
+            'rows.*.destination_key' => 'nullable|string|max:255',
+            'rows.*.manejo'         => 'nullable|string|max:20',
+            'rows.*.cs_nueva'       => 'nullable|string|max:120',
         ];
     }
 
@@ -44,8 +61,6 @@ class ProcessDest01Request extends FormRequest
     public function messages(): array
     {
         return [
-            'target_batch_id.required_without' => 'Falta indicar el lote de destete: uno existente o el nombre de uno nuevo.',
-            'new_batch_name.required_without'  => 'Falta indicar el lote de destete: uno existente o el nombre de uno nuevo.',
             'target_batch_id.prohibits'        => 'Indique un lote de destete existente o uno nuevo, no los dos.',
             'fecha_destete.required'           => 'Falta la fecha de destete.',
             'fecha_destete.date'               => 'La fecha de destete no es válida.',
