@@ -63,6 +63,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(IServiceOrderRepository::class, EloquentServiceOrderRepository::class);
         $this->app->bind(\App\Core\Interfaces\ITransferOrderRepository::class, \App\Infrastructure\Persistence\EloquentTransferOrderRepository::class);
         $this->app->bind(\App\Core\Interfaces\IWeaningOrderRepository::class, \App\Infrastructure\Persistence\EloquentWeaningOrderRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IEntryOrderRepository::class, \App\Infrastructure\Persistence\EloquentEntryOrderRepository::class);
         $this->app->bind(\App\Core\Interfaces\IBirthOrderRepository::class, \App\Infrastructure\Persistence\EloquentBirthOrderRepository::class);
         $this->app->bind(\App\Core\Interfaces\IAnimalCategoryRepository::class, \App\Infrastructure\Persistence\EloquentAnimalCategoryRepository::class);
         $this->app->bind(\App\Core\Interfaces\IPathogenRepository::class, \App\Infrastructure\Persistence\EloquentPathogenRepository::class);

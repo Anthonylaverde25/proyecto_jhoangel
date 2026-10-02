@@ -24,6 +24,14 @@ interface IBatchRepository
     public function findActiveByName(string $name): ?BatchEntity;
 
     /**
+     * Every active batch of the current company with exactly this name: nothing keeps two batches
+     * of different types from sharing one.
+     *
+     * @return BatchEntity[]
+     */
+    public function findAllActiveByName(string $name): array;
+
+    /**
      * @return BatchEntity[]
      */
     public function findByFarmId(int $farmId, ?string $batchType = null): array;

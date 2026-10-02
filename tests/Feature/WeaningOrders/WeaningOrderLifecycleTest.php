@@ -158,9 +158,15 @@ class WeaningOrderLifecycleTest extends WeaningOrderTestCase
             'destinations' => [['key' => 'd1', 'label' => '', 'target_batch_id' => $this->breedingA->id]],
         ])->assertStatus(422)->assertJsonPath('code', 'NOT_A_WEANING_BATCH');
 
+        // A new batch named like another weaning batch is the same batch written twice.
         $this->emitSingle([$calf], [
-            'destinations' => [['key' => 'd1', 'label' => '', 'new_batch_name' => 'Rodeo Cría A WO']],
+            'destinations' => [['key' => 'd1', 'label' => '', 'new_batch_name' => $this->weaningBatch->name]],
         ])->assertStatus(422)->assertJsonPath('code', 'BATCH_NAME_IN_USE');
+
+        // Named like the breeding batch it is still a new weaning batch: the name is advised, not forbidden.
+        $this->emitSingle([$calf], [
+            'destinations' => [['key' => 'd1', 'label' => '', 'new_batch_name' => $this->breedingA->name, 'is_confined' => false]],
+        ])->assertStatus(201);
     }
 
     public function test_closing_incomplete_skips_the_pending_calves_and_frees_them(): void

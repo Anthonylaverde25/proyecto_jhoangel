@@ -66,6 +66,9 @@ class TenantDatabaseSeeder extends Seeder
             // Caravanas con número electrónico (032000000000001..012) que el simulador del lector BLE
             // vuelve a leer: ya registradas en la empresa activa y en Hacienda Secundaria.
             BleReaderTestCaravansSeeder::class,
+            // Órdenes de ingreso de hacienda externa (ING-02): una en espera de DTE, una parcial con
+            // su DTE cargado (ING-T-01..06) y un borrador, para probar /batches/external.
+            EntryOrderTestSeeder::class,
         ]);
     }
 }

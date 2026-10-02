@@ -222,11 +222,16 @@ class Dest01TemplateProcessingTest extends VeterinaryTestCase
         $this->nursingCalf('DEST-T-50', 'DEST-V-50', 'M');
         $rows = [$this->row('DEST-T-50', 170)];
 
-        $inUse = $this->submit(['new_batch_name' => 'Cría Origen DEST'], $rows);
+        Batch::create([
+            'company_id' => $this->company->id,
+            'name' => 'Destete DEST Ocupado',
+            'batch_type_id' => $this->weaningTypeId,
+            'is_active' => true,
+        ]);
+        $inUse = $this->submit(['new_batch_name' => 'Destete DEST Ocupado'], $rows);
         $inUse->assertStatus(422);
         $this->assertSame(['BATCH_NAME_IN_USE'], array_column($inUse->json('header_errors'), 'code'));
-        // A breeding batch never shows up among the weaning batches to pick from.
-        $this->assertStringContainsString('no es un lote de destete', $inUse->json('header_errors.0.message'));
+        $this->assertStringContainsString('Elíjalo como lote existente', $inUse->json('header_errors.0.message'));
 
         $notWeaning = $this->submit(['target_batch_id' => $this->breedingBatch->id], $rows);
         $notWeaning->assertStatus(422);
@@ -241,6 +246,24 @@ class Dest01TemplateProcessingTest extends VeterinaryTestCase
             ->assertJsonValidationErrors(['target_batch_id']);
 
         $this->assertSame(0, CaravanMovement::where('type', 'WEANING')->count());
+    }
+
+    public function test_a_new_weaning_batch_may_share_the_name_of_a_batch_of_another_type(): void
+    {
+        $this->nursingCalf('DEST-T-51', 'DEST-V-51', 'M');
+
+        // The sheet names the breeding batch itself: the calves go to a NEW weaning batch with that
+        // name, and the shared name is only advised to change.
+        $response = $this->submit(['new_batch_name' => 'Cría Origen DEST'], [$this->row('DEST-T-51', 170)]);
+
+        $response->assertStatus(201);
+        $this->assertTrue($response->json('data.batch_created'));
+        $this->assertNotSame($this->breedingBatch->id, $response->json('data.batch_id'));
+        $created = Batch::withoutGlobalScopes()->findOrFail($response->json('data.batch_id'));
+        $this->assertSame($this->weaningTypeId, (int) $created->batch_type_id);
+        $warnings = $response->json('data.warnings');
+        $this->assertSame(['BATCH_NAME_SHARED'], array_column($warnings, 'code'));
+        $this->assertStringContainsString('Conviene darle otro nombre', $warnings[0]['message']);
     }
 
     public function test_dates_are_checked_against_today_and_the_birth(): void

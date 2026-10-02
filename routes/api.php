@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\BatchTypeController;
 use App\Http\Controllers\Api\ServiceOrderController;
 use App\Http\Controllers\Api\TransferOrderController;
 use App\Http\Controllers\Api\WeaningOrderController;
+use App\Http\Controllers\Api\EntryOrderController;
 use App\Http\Controllers\Api\BirthController;
 use App\Http\Controllers\Api\AnimalCategoryController;
 use App\Http\Controllers\Api\DiagnosticProtocolController;
@@ -144,6 +145,22 @@ Route::middleware([
         Route::post('/weaning-orders/{id}/execute', [WeaningOrderController::class, 'execute'])->whereNumber('id');
         Route::post('/weaning-orders/{id}/close-incomplete', [WeaningOrderController::class, 'closeIncomplete'])->whereNumber('id');
         Route::post('/weaning-orders/{id}/cancel', [WeaningOrderController::class, 'cancel'])->whereNumber('id');
+    });
+
+    // Órdenes de Ingreso de hacienda externa (ING-02): la compra espera su DTE
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/entry-orders', [EntryOrderController::class, 'index']);
+        Route::get('/entry-orders/next-number', [EntryOrderController::class, 'nextNumber']);
+        Route::post('/entry-orders', [EntryOrderController::class, 'store']);
+        Route::post('/entry-orders/register', [EntryOrderController::class, 'register']);
+        Route::get('/entry-orders/by-code/{code}', [EntryOrderController::class, 'byCode']);
+        Route::get('/entry-orders/{id}', [EntryOrderController::class, 'show'])->whereNumber('id');
+        Route::put('/entry-orders/{id}', [EntryOrderController::class, 'update'])->whereNumber('id');
+        Route::post('/entry-orders/{id}/confirm', [EntryOrderController::class, 'confirm'])->whereNumber('id');
+        Route::post('/entry-orders/{id}/printed', [EntryOrderController::class, 'printed'])->whereNumber('id');
+        Route::post('/entry-orders/{id}/dtes', [EntryOrderController::class, 'loadDte'])->whereNumber('id');
+        Route::post('/entry-orders/{id}/close-incomplete', [EntryOrderController::class, 'closeIncomplete'])->whereNumber('id');
+        Route::post('/entry-orders/{id}/cancel', [EntryOrderController::class, 'cancel'])->whereNumber('id');
     });
 
     // Órdenes de Parición (PAR-01)

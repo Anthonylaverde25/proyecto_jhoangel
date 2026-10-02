@@ -9,6 +9,7 @@ use App\Application\DTOs\CreateServiceBatchDTO;
 use App\Application\DTOs\Batches\AssignExternalCaravansToOwnBatchDTO;
 use App\Application\UseCases\Batches\BatchUseCases;
 use App\Core\Interfaces\ICompanyContext;
+use App\Core\Interfaces\IEntryOrderRepository;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BatchResource;
 use App\Http\Resources\BatchWeightResource;
@@ -40,16 +41,24 @@ class BatchController extends Controller
     /**
      * Lista todos los lotes, opcionalmente filtrados por granja, tipo o alcance (own | external).
      */
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, IEntryOrderRepository $entryOrders, ICompanyContext $companyContext): JsonResponse
     {
         $farmId = $request->query('farm_id') ? (int) $request->query('farm_id') : null;
         $batchType = $request->query('batch_type') ? (string) $request->query('batch_type') : null;
         $scope = $request->query('scope') ? (string) $request->query('scope') : null;
         $entities = ($this->batch->list)($farmId, $batchType, $scope);
-        
-        return response()->json(
-            BatchResource::collection($entities)
+
+        // The external batches born from an entry order show it ("En espera de DTE", 38/40),
+        // read in one query for the whole list.
+        $summaries = $entryOrders->summariesByBatch(
+            array_values(array_filter(array_map(fn ($e) => $e->getProviderId() !== null ? $e->getId() : null, $entities))),
+            (int) $companyContext->getCompanyId()
         );
+
+        return response()->json(array_map(
+            fn ($entity) => (new BatchResource($entity))->withEntryOrder($summaries[$entity->getId()] ?? null)->resolve($request),
+            $entities
+        ));
     }
 
 
@@ -92,7 +101,7 @@ class BatchController extends Controller
         );
     }
 
-    public function show(int $id): JsonResponse
+    public function show(int $id, IEntryOrderRepository $entryOrders, ICompanyContext $companyContext): JsonResponse
     {
         $entity = ($this->batch->find)($id);
 
@@ -100,7 +109,9 @@ class BatchController extends Controller
             return response()->json(['message' => 'Lote no encontrado'], 404);
         }
 
-        return response()->json(new BatchResource($entity));
+        $summary = $entryOrders->summariesByBatch([(int) $entity->getId()], (int) $companyContext->getCompanyId());
+
+        return response()->json((new BatchResource($entity))->withEntryOrder($summary[$entity->getId()] ?? null));
     }
 
     public function changeActivity(ChangeBatchActivityRequest $request, int $id): JsonResponse

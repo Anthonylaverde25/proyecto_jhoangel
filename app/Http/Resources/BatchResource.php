@@ -14,6 +14,23 @@ use Illuminate\Http\Resources\Json\JsonResource;
 class BatchResource extends JsonResource
 {
     /**
+     * @var array<string, mixed>|null
+     */
+    private ?array $entryOrder = null;
+
+    /**
+     * The entry order the batch was born from, when it is an external batch of a purchase.
+     *
+     * @param array<string, mixed>|null $summary
+     */
+    public function withEntryOrder(?array $summary): self
+    {
+        $this->entryOrder = $summary;
+
+        return $this;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
@@ -62,6 +79,7 @@ class BatchResource extends JsonResource
                 'planned_end_date'        => $this->resource->getServiceDetail()->getPlannedEndDate(),
                 'notes'                   => $this->resource->getServiceDetail()->getNotes(),
             ] : null,
+            'entry_order'   => $this->entryOrder,
             'created_at'    => $this->resource->getCreatedAt()?->format('Y-m-d H:i:s'),
         ];
 

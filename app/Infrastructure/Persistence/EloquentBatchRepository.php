@@ -73,6 +73,16 @@ class EloquentBatchRepository implements IBatchRepository
         return $model ? BatchMapper::toEntity($model) : null;
     }
 
+    public function findAllActiveByName(string $name): array
+    {
+        return Batch::with($this->relations)
+            ->where('name', $name)
+            ->where('is_active', true)
+            ->get()
+            ->map(fn (Batch $model) => BatchMapper::toEntity($model))
+            ->all();
+    }
+
     public function findByFarmId(int $farmId, ?string $batchType = null): array
     {
         $query = Batch::with($this->relations)->where('farm_id', $farmId);

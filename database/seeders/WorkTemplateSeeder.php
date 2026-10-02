@@ -1000,6 +1000,188 @@ class WorkTemplateSeeder extends Seeder
                     ],
                 ]
             );
+
+            // Seed ING-02: Orden de Ingreso de Hacienda Externa. Es el documento de la compra: la
+            // orden nace sin caravanas (llegan después con el DTE), así que la hoja es sólo
+            // encabezado más la tabla de razas. Se imprime desde una orden (completa) o en blanco,
+            // para llenarla en el remate y escanearla después.
+            WorkTemplate::updateOrCreate(
+                ['company_id' => $company->id, 'code' => 'ING-02'],
+                [
+                    'category' => 'ENTRY',
+                    'title' => 'Orden de Ingreso de Hacienda Externa',
+                    'description' => 'Documento de la compra de una tropa externa (subasta o compra directa): lote externo, proveedor, establecimiento de origen, cabezas, categoría, sexo, razas, pesos, estado, edad, sabe comer, garrapata y desbaste. Las caravanas se cargan después, con el DTE.',
+                    'status' => 'active',
+                    'schema_definition' => [
+                        'header_fields' => [
+                            [
+                                'name' => 'orden_ingreso',
+                                'label' => 'Orden de Ingreso',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Código de la orden de ingreso, formato EN-AAAAMMDD-NNNN, impreso en el recuadro ORDEN DE INGRESO. No confundir con ING-02, que es el código de la planilla. Vacío en una hoja en blanco.',
+                            ],
+                            [
+                                'name' => 'nombre_lote',
+                                'label' => 'Nombre del Lote',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Nombre del lote externo, escrito en el recuadro LOTE EXTERNO (NOMBRE).',
+                            ],
+                            [
+                                'name' => 'proveedor',
+                                'label' => 'Proveedor / Vendedor',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Nombre o razón social del vendedor o consignataria.',
+                            ],
+                            [
+                                'name' => 'cuit_proveedor',
+                                'label' => 'CUIT del Proveedor',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'CUIT de 11 dígitos, con o sin guiones. Ej: 30-12345678-9.',
+                            ],
+                            [
+                                'name' => 'establecimiento',
+                                'label' => 'Establecimiento de Origen',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Nombre del campo o establecimiento de donde sale la hacienda.',
+                            ],
+                            [
+                                'name' => 'renspa_origen',
+                                'label' => 'RENSPA de Origen',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'RENSPA del establecimiento de origen. Formato XX.XXX.X.XXXXX/XX.',
+                            ],
+                            [
+                                'name' => 'fecha_compra',
+                                'label' => 'Fecha de Compra',
+                                'type' => 'date',
+                                'required' => true,
+                                'ai_hint' => 'Fecha de la compra o del remate (DD/MM/AAAA).',
+                            ],
+                            [
+                                'name' => 'cabezas',
+                                'label' => 'Cabezas',
+                                'type' => 'number',
+                                'required' => true,
+                                'ai_hint' => 'Cantidad de animales comprados, número entero.',
+                            ],
+                            [
+                                'name' => 'categoria',
+                                'label' => 'Categoría',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Categoría general de la tropa, tal como está escrita (Ternero, Vaquillona, Novillito, Novillo, Vaca, Toro).',
+                            ],
+                            [
+                                'name' => 'sexo',
+                                'label' => 'Sexo',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Casilla marcada entre MACHOS, HEMBRAS y AMBOS. Si hay más de una marcada, devolverlas todas separadas por coma.',
+                            ],
+                            [
+                                'name' => 'machos',
+                                'label' => 'Machos',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Sólo con AMBOS: cantidad de machos. Vacío en otro caso.',
+                            ],
+                            [
+                                'name' => 'hembras',
+                                'label' => 'Hembras',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Sólo con AMBOS: cantidad de hembras. Vacío en otro caso.',
+                            ],
+                            [
+                                'name' => 'peso_aprox',
+                                'label' => 'Peso Aproximado (kg)',
+                                'type' => 'number',
+                                'required' => true,
+                                'ai_hint' => 'Peso promedio aproximado por cabeza, en kg.',
+                            ],
+                            [
+                                'name' => 'peso_min',
+                                'label' => 'Peso Mínimo (kg)',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Peso mínimo por cabeza, en kg. Puede estar vacío.',
+                            ],
+                            [
+                                'name' => 'peso_max',
+                                'label' => 'Peso Máximo (kg)',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Peso máximo por cabeza, en kg. Puede estar vacío.',
+                            ],
+                            [
+                                'name' => 'desbaste',
+                                'label' => 'Desbaste (%)',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Porcentaje de desbaste, sin el signo %. Ej: 3,5. Puede estar vacío.',
+                            ],
+                            [
+                                'name' => 'estado',
+                                'label' => 'Estado',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Casilla marcada entre REGULAR, BUENO, MUY BUENO y EXCELENTE.',
+                            ],
+                            [
+                                'name' => 'edad',
+                                'label' => 'Edad Aproximada (meses)',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Rango de edad en meses escrito como mínimo/máximo, ej: 9/10. Devolverlo tal cual. Puede estar vacío.',
+                            ],
+                            [
+                                'name' => 'sabe_comer',
+                                'label' => 'Sabe Comer',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Casilla marcada: SI o NO.',
+                            ],
+                            [
+                                'name' => 'garrapata',
+                                'label' => 'Garrapata (vacunado)',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Casilla marcada: SI (vacunado contra la garrapata) o NO.',
+                            ],
+                            [
+                                'name' => 'observaciones',
+                                'label' => 'Observaciones',
+                                'type' => 'text',
+                                'required' => false,
+                                'ai_hint' => 'Notas generales de la compra.',
+                            ],
+                        ],
+                        // The breeds of the troop, one line each: the only table of the sheet.
+                        'table_columns' => [
+                            [
+                                'name' => 'raza',
+                                'label' => 'Raza',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Raza de ESTE renglón de la tabla RAZAS (Angus, Hereford, Braford, Brangus, Holando, Shorthorn, Limousin, Cruza).',
+                            ],
+                            [
+                                'name' => 'pelaje',
+                                'label' => 'Pelaje',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Pelaje del mismo renglón (Negro, Colorado, Pampa, Overo Negro…). Puede estar vacío.',
+                            ],
+                        ],
+                    ],
+                ]
+            );
         }
     }
 }

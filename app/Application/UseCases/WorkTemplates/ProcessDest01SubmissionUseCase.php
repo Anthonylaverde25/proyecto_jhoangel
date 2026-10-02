@@ -108,7 +108,7 @@ final class ProcessDest01SubmissionUseCase
             $headerErrors[] = $this->headerError('lote_destete', $e->getErrorCode(), $e->getMessage());
         }
 
-        $destinations = $this->resolveDestinations($dto, $activityId, $headerErrors);
+        $destinations = $this->resolveDestinations($dto, $activityId, $headerErrors, $warnings);
 
         $declaredKeys = [];
         foreach ($dto->destinations as $destination) {
@@ -467,9 +467,10 @@ final class ProcessDest01SubmissionUseCase
 
     /**
      * @param array<int, array{field: string, code: string, message: string}> $headerErrors
+     * @param list<array{code: string, message: string}> $warnings
      * @return array<string, array{target_batch_id: ?int, new_batch: ?array{name: string, is_confined: ?bool}, label: string}>
      */
-    private function resolveDestinations(Dest01SubmissionDTO $dto, ?int $activityId, array &$headerErrors): array
+    private function resolveDestinations(Dest01SubmissionDTO $dto, ?int $activityId, array &$headerErrors, array &$warnings): array
     {
         if ($dto->destinations === []) {
             $headerErrors[] = $this->headerError('lote_destete', 'BATCH_TARGET_MISSING', 'Falta indicar el lote de destete.');
@@ -529,19 +530,25 @@ final class ProcessDest01SubmissionUseCase
             }
             $seenNames[$upperName] = true;
 
-            $existingWithName = $this->batchRepository->findActiveByName($newBatch['name']);
+            $sameName = $this->batchRepository->findAllActiveByName($newBatch['name']);
+            $weaningWithName = array_filter($sameName, fn (BatchEntity $b) => $b->getBatchTypeCode() === WeaningOrderRosterBuilder::WEANING_BATCH_TYPE);
 
-            if ($existingWithName !== null) {
-                // Only a weaning batch can be picked as the existing destination, so telling the
-                // operator to pick one that is not would send them to a list where it never appears.
+            if ($weaningWithName !== []) {
                 $headerErrors[] = $this->headerError(
                     'lote_destete',
                     'BATCH_NAME_IN_USE',
-                    $existingWithName->getBatchTypeCode() === WeaningOrderRosterBuilder::WEANING_BATCH_TYPE
-                        ? "Ya existe un lote activo llamado '{$newBatch['name']}'. Elíjalo como lote existente o cambie el nombre."
-                        : "Ya existe un lote activo llamado '{$newBatch['name']}', y no es un lote de destete: no puede recibir las crías ni se puede crear otro con ese nombre. Cambie el nombre o elija un lote de destete."
+                    "Ya existe un lote de destete activo llamado '{$newBatch['name']}'. Elíjalo como lote existente o cambie el nombre."
                 );
                 continue;
+            }
+
+            // A batch of another type with the same name cannot receive the calves, but it does not
+            // stop the new weaning batch either: the name is only advised to change.
+            foreach ($sameName as $other) {
+                $warnings[] = $this->warning(
+                    'BATCH_NAME_SHARED',
+                    "El lote de destete nuevo '{$newBatch['name']}' se llama igual que un lote de {$this->typeLabel($other)} que ya existe. Conviene darle otro nombre para distinguirlos."
+                );
             }
 
             // The management system belongs to every productive batch. What the screen declared,
@@ -817,6 +824,14 @@ final class ProcessDest01SubmissionUseCase
     private function error(string $code, string $message): array
     {
         return ['code' => $code, 'message' => $message];
+    }
+
+    /**
+     * The batch type as the operator knows it, lower-cased to fit mid-sentence.
+     */
+    private function typeLabel(BatchEntity $batch): string
+    {
+        return mb_strtolower($batch->getBatchTypeName() ?? 'otro tipo');
     }
 
     /**

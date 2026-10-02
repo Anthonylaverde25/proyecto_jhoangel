@@ -190,15 +190,15 @@ final class WeaningOrderRosterBuilder
                 $label = $batch->getName();
             } else {
                 $label = (string) $destination['new_batch_name'];
-                $existing = $this->batchRepository->findActiveByName($label);
-
-                if ($existing !== null) {
-                    throw WeaningOrderDomainException::domainError(
-                        $existing->getBatchTypeCode() === self::WEANING_BATCH_TYPE
-                            ? "Ya existe un lote de destete activo llamado '{$label}'. Elegilo como lote existente o cambiá el nombre."
-                            : "Ya existe un lote activo llamado '{$label}', y no es de destete. Cambiá el nombre.",
-                        'BATCH_NAME_IN_USE'
-                    );
+                // Only another weaning batch blocks the name: one of another type can never be the
+                // destination, so sharing its name is advised against, not forbidden.
+                foreach ($this->batchRepository->findAllActiveByName($label) as $existing) {
+                    if ($existing->getBatchTypeCode() === self::WEANING_BATCH_TYPE) {
+                        throw WeaningOrderDomainException::domainError(
+                            "Ya existe un lote de destete activo llamado '{$label}'. Elegilo como lote existente o cambiá el nombre.",
+                            'BATCH_NAME_IN_USE'
+                        );
+                    }
                 }
             }
 

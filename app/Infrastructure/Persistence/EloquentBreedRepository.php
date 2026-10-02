@@ -38,13 +38,17 @@ final class EloquentBreedRepository implements IBreedRepository
 
     public function getAll(): array
     {
-        $models = Breed::orderBy('name')->get();
+        $models = Breed::with(['colors' => fn ($query) => $query->orderBy('name')])->orderBy('name')->get();
         $entities = [];
 
         foreach ($models as $model) {
             $entities[] = new BreedEntity(
                 id: $model->id,
-                name: $model->name
+                name: $model->name,
+                colors: $model->colors
+                    ->map(fn ($color) => ['id' => (int) $color->id, 'name' => (string) $color->name, 'code' => $color->code])
+                    ->values()
+                    ->all()
             );
         }
 
