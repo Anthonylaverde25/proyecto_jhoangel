@@ -41,6 +41,7 @@ use App\Http\Controllers\Api\VeterinarianBatchAssignmentController;
 use App\Http\Controllers\Api\VeterinarianController;
 use App\Http\Controllers\Api\VeterinaryPortalController;
 use App\Http\Controllers\Api\VeterinaryPortalTokenController;
+use App\Http\Controllers\Api\OperationalKpiController;
 use Illuminate\Support\Facades\Route;
 
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -115,6 +116,7 @@ Route::middleware([
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/caravans/lookup', LookupCaravansController::class);
         Route::post('/caravans/register-new', RegisterNewCaravansController::class);
+        Route::get('/dashboard/operational-kpis', [OperationalKpiController::class, 'index']);
     });
 
     // Órdenes de Transferencia (CACT-01)
@@ -159,6 +161,11 @@ Route::middleware([
         Route::post('/entry-orders/{id}/confirm', [EntryOrderController::class, 'confirm'])->whereNumber('id');
         Route::post('/entry-orders/{id}/printed', [EntryOrderController::class, 'printed'])->whereNumber('id');
         Route::post('/entry-orders/{id}/dtes', [EntryOrderController::class, 'loadDte'])->whereNumber('id');
+        Route::post('/entry-orders/{id}/receive', [EntryOrderController::class, 'receive'])->whereNumber('id');
+        Route::post('/entry-orders/{id}/receipt-sheets', [EntryOrderController::class, 'issueReceiptSheet'])->whereNumber('id');
+        Route::post('/entry-orders/{id}/receipt-sheets/{sheetId}/printed', [EntryOrderController::class, 'receiptSheetPrinted'])->whereNumber(['id', 'sheetId']);
+        Route::patch('/entry-orders/{id}/receipt-sheets/{sheetId}', [EntryOrderController::class, 'changeReceiptSheetWeighing'])->whereNumber(['id', 'sheetId']);
+        Route::post('/entry-orders/{id}/incidents/{incidentId}/resolve', [EntryOrderController::class, 'resolveIncident'])->whereNumber(['id', 'incidentId']);
         Route::post('/entry-orders/{id}/close-incomplete', [EntryOrderController::class, 'closeIncomplete'])->whereNumber('id');
         Route::post('/entry-orders/{id}/cancel', [EntryOrderController::class, 'cancel'])->whereNumber('id');
     });

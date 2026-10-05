@@ -8,8 +8,12 @@ use App\Core\Entities\EntryOrderAnimalEntity;
 use App\Core\Entities\EntryOrderBreedEntity;
 use App\Core\Entities\EntryOrderDteEntity;
 use App\Core\Entities\EntryOrderEntity;
+use App\Core\Entities\EntryOrderIncidentEntity;
+use App\Core\Entities\EntryOrderReceiptSheetEntity;
 use App\Core\Entities\TransferOrderHistoryEntity;
 use App\Core\Enums\AnimalSex;
+use App\Core\Enums\EntryOrderStatus;
+use App\Core\Enums\ReceptionStatus;
 use App\Core\Enums\SexComposition;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -49,6 +53,11 @@ class EntryOrderResource extends JsonResource
             'is_open' => $status->isOpen(),
             'is_editable' => $status->isEditable(),
             'accepts_dte' => $status->acceptsDte(),
+            'accepts_reception' => $status->acceptsReception() && $order->inTransitCount() > 0,
+            'can_cancel' => $status === EntryOrderStatus::DRAFT
+                || ($status === EntryOrderStatus::AWAITING_DTE && $order->getDtes() === []),
+            'can_close_incomplete' => ($status === EntryOrderStatus::AWAITING_DTE && $order->getDtes() !== [])
+                || $status === EntryOrderStatus::IN_TRANSIT,
             'kind' => $order->getKind()->value,
             'kind_label' => $order->getKind()->label(),
             'provider' => ['id' => $troop->providerId, 'name' => $order->name('provider'), 'cuit' => $order->name('provider_cuit')],
@@ -59,12 +68,12 @@ class EntryOrderResource extends JsonResource
             'batch_name_mode' => $order->getBatchNameMode()->value,
             'head_count' => $troop->headCount,
             'category' => ['id' => $troop->categoryId, 'name' => $order->name('category'), 'sex' => $order->name('category_sex')],
-            'sex_composition' => $troop->sexComposition->value,
-            'sex_composition_label' => $troop->sexComposition->label(),
+            'sex_composition' => $troop->sexComposition?->value,
+            'sex_composition_label' => $troop->sexComposition?->label(),
             'male_count' => $troop->maleCount,
             'female_count' => $troop->femaleCount,
-            'condition' => $troop->condition->value,
-            'condition_label' => $troop->condition->label(),
+            'condition' => $troop->condition?->value,
+            'condition_label' => $troop->condition?->label(),
             'age_min_months' => $troop->ageMinMonths,
             'age_max_months' => $troop->ageMaxMonths,
             'age_range' => $troop->ageRangeLabel(),
@@ -87,8 +96,12 @@ class EntryOrderResource extends JsonResource
                 'color_name' => $b->getColorName(),
                 'label' => $b->getLabel(),
             ], array_values($troop->breedsByPosition())),
-            'entered_count' => $order->enteredCount(),
-            'pending_count' => $order->pendingCount(),
+            'with_dte_count' => $order->withDteCount(),
+            'pending_dte_count' => $order->pendingDteCount(),
+            'in_transit_count' => $order->inTransitCount(),
+            'received_count' => $order->receivedCount(),
+            'missing_count' => $order->missingCount(),
+            'open_incidents_count' => $order->openIncidentsCount(),
             'dte_count' => count($order->getDtes()),
             'requested_by' => $order->getRequestedByUserId() !== null
                 ? ['id' => $order->getRequestedByUserId(), 'name' => $order->name('requested_by')]
@@ -105,8 +118,10 @@ class EntryOrderResource extends JsonResource
             'id' => $d->getId(),
             'dte_number' => $d->getDteNumber(),
             'dte_date' => $d->getDteDate(),
-            'entered_at' => $d->getEnteredAt(),
             'head_count' => $d->getHeadCount(),
+            'in_transit_count' => $d->countByReception(ReceptionStatus::PENDING),
+            'received_count' => $d->countByReception(ReceptionStatus::RECEIVED),
+            'missing_count' => $d->countByReception(ReceptionStatus::MISSING),
             'observations' => $d->getObservations(),
             'loaded_by' => $d->getLoadedByUserId() !== null ? ['id' => $d->getLoadedByUserId(), 'name' => $d->getLoadedByUserName()] : null,
             'created_at' => $d->getCreatedAt()?->format(DATE_ATOM),
@@ -119,18 +134,63 @@ class EntryOrderResource extends JsonResource
                 'breed_letter' => $a->getBreedPosition() !== null ? chr(64 + $a->getBreedPosition()) : null,
                 'entry_weight' => $a->getEntryWeight(),
                 'caravan_movement_id' => $a->getCaravanMovementId(),
+                'reception_status' => $a->getReceptionStatus()->value,
+                'reception_status_label' => $a->getReceptionStatus()->label(),
+                'received_at' => $a->getReceivedAt(),
+                'reception_method' => $a->getReceptionMethod()?->value,
             ], $d->getAnimals())] : []),
         ], $order->getDtes());
+
+        // The ING-03 sheets go in the list too: the tray opens the one still out from its row.
+        $data['receipt_sheets'] = array_map(fn (EntryOrderReceiptSheetEntity $r) => [
+            'id' => $r->getId(),
+            'number' => $r->getNumber(),
+            'label' => $r->label(),
+            'dte_id' => $r->getDteId(),
+            'dte_number' => $r->getDteNumber(),
+            'status' => $r->getStatus()->value,
+            'status_label' => $r->getStatus()->label(),
+            'is_active' => $r->getStatus()->isActive(),
+            'weighing_mode' => $r->getWeighingMode()->value,
+            'weighing_mode_label' => $r->getWeighingMode()->label(),
+            'caravan_ids' => $r->getCaravanIds(),
+            'page_count' => $r->getPageCount(),
+            'processed_pages' => $r->getProcessedPages(),
+            'missing_pages' => $r->missingPages(),
+            'issued_by' => $r->getIssuedByUserId() !== null ? ['id' => $r->getIssuedByUserId(), 'name' => $r->getIssuedByUserName()] : null,
+            'printed_at' => $r->getPrintedAt()?->format(DATE_ATOM),
+            'processed_at' => $r->getProcessedAt()?->format(DATE_ATOM),
+            'replaced_at' => $r->getReplacedAt()?->format(DATE_ATOM),
+            'created_at' => $r->getCreatedAt()?->format(DATE_ATOM),
+        ], $order->getReceiptSheets());
 
         if (!$this->detailed) {
             return $data;
         }
 
-        // Head entered by sex, only meaningful when the caravans were loaded (the detail).
+        // Head with DTE by sex, only meaningful when the caravans were loaded (the detail).
         if ($troop->sexComposition === SexComposition::MIXED) {
-            $data['entered_male_count'] = $order->enteredCountBySex(AnimalSex::MALE->value);
-            $data['entered_female_count'] = $order->enteredCountBySex(AnimalSex::FEMALE->value);
+            $data['with_dte_male_count'] = $order->withDteCountBySex(AnimalSex::MALE->value);
+            $data['with_dte_female_count'] = $order->withDteCountBySex(AnimalSex::FEMALE->value);
         }
+
+
+        $data['incidents'] = array_map(fn (EntryOrderIncidentEntity $i) => [
+            'id' => $i->getId(),
+            'type' => $i->getType()->value,
+            'type_label' => $i->getType()->label(),
+            'detail' => $i->getDetail(),
+            'metadata' => $i->getMetadata(),
+            'status' => $i->getStatus()->value,
+            'status_label' => $i->getStatus()->label(),
+            'dte_id' => $i->getDteId(),
+            'dte_number' => $i->getDteNumber(),
+            'resolution' => $i->getResolution(),
+            'raised_by' => $i->getRaisedByUserId() !== null ? ['id' => $i->getRaisedByUserId(), 'name' => $i->getRaisedByUserName()] : null,
+            'resolved_by' => $i->getResolvedByUserId() !== null ? ['id' => $i->getResolvedByUserId(), 'name' => $i->getResolvedByUserName()] : null,
+            'resolved_at' => $i->getResolvedAt()?->format(DATE_ATOM),
+            'created_at' => $i->getCreatedAt()?->format(DATE_ATOM),
+        ], $order->getIncidents());
 
         $data['history'] = array_map(fn (TransferOrderHistoryEntity $h) => [
             'id' => $h->getId(),

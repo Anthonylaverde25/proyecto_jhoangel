@@ -14,6 +14,7 @@ class CaravanWeight extends Model
         'weight',
         'current',
         'weighing_date',
+        'method',
         'notes',
     ];
 

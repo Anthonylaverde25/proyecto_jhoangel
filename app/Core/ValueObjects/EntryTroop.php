@@ -15,6 +15,9 @@ use App\Core\Exceptions\EntryOrderDomainException;
  * external batch only holds the purchase until its animals are assigned to an own batch, and that
  * one is classified when it is created.
  *
+ * A draft only needs the origin: the rest may still be missing, and what is there is checked.
+ * assertComplete() demands everything, and runs when the purchase is confirmed.
+ *
  * The rules that need nothing but these values live here. The ones that need the catalogues
  * (category sex, breed colours, the provider's farms) live in EntryOrderValidator.
  */
@@ -29,18 +32,18 @@ final readonly class EntryTroop
         public int $providerId,
         public int $farmId,
         public ?string $auctionNumber,
-        public int $headCount,
-        public int $categoryId,
-        public SexComposition $sexComposition,
+        public ?int $headCount,
+        public ?int $categoryId,
+        public ?SexComposition $sexComposition,
         public ?int $maleCount,
         public ?int $femaleCount,
-        public TroopCondition $condition,
+        public ?TroopCondition $condition,
         public ?int $ageMinMonths,
         public ?int $ageMaxMonths,
-        public bool $knowsToEat,
-        public bool $tickVaccinated,
+        public ?bool $knowsToEat,
+        public ?bool $tickVaccinated,
         public ?float $shrinkPercent,
-        public float $estimatedWeight,
+        public ?float $estimatedWeight,
         public ?float $minWeight,
         public ?float $maxWeight,
         public string $purchaseDate,
@@ -52,6 +55,45 @@ final readonly class EntryTroop
         $this->assertAge();
         $this->assertWeights();
         $this->assertBreeds();
+    }
+
+    /**
+     * Everything a confirmed purchase declares. The first thing missing is reported on its field.
+     *
+     * @throws EntryOrderDomainException
+     */
+    public function assertComplete(): void
+    {
+        $missing = [
+            'head_count' => [$this->headCount, 'Indicá cuántas cabezas se compraron.'],
+            'category_id' => [$this->categoryId, 'Elegí la categoría.'],
+            'sex_composition' => [$this->sexComposition, 'Indicá si la tropa es de machos, hembras o ambos.'],
+            'condition' => [$this->condition, 'Indicá el estado de la tropa.'],
+            'knows_to_eat' => [$this->knowsToEat, 'Indicá si la tropa sabe comer.'],
+            'tick_vaccinated' => [$this->tickVaccinated, 'Indicá si la tropa está vacunada contra la garrapata.'],
+            'estimated_weight' => [$this->estimatedWeight, 'Indicá el peso aproximado.'],
+        ];
+
+        foreach ($missing as $field => [$value, $message]) {
+            if ($value === null) {
+                throw EntryOrderDomainException::invalid($message . ' Hace falta para confirmar la compra.', 'TROOP_INCOMPLETE', $field);
+            }
+        }
+
+        if ($this->breeds === []) {
+            throw EntryOrderDomainException::invalid('Declará al menos una raza. Hace falta para confirmar la compra.', 'TROOP_INCOMPLETE', 'breeds');
+        }
+    }
+
+    public function isComplete(): bool
+    {
+        try {
+            $this->assertComplete();
+
+            return true;
+        } catch (EntryOrderDomainException) {
+            return false;
+        }
     }
 
     /**
@@ -87,8 +129,12 @@ final readonly class EntryTroop
 
     private function assertHeadAndSexes(): void
     {
-        if ($this->headCount < 1) {
+        if ($this->headCount !== null && $this->headCount < 1) {
             throw EntryOrderDomainException::invalid('La orden tiene que tener al menos una cabeza.', 'HEAD_COUNT_INVALID', 'head_count');
+        }
+
+        if ($this->sexComposition === null) {
+            return;
         }
 
         if ($this->sexComposition !== SexComposition::MIXED) {
@@ -111,7 +157,7 @@ final readonly class EntryTroop
             );
         }
 
-        if ($this->maleCount + $this->femaleCount !== $this->headCount) {
+        if ($this->headCount !== null && $this->maleCount + $this->femaleCount !== $this->headCount) {
             throw EntryOrderDomainException::invalid(
                 "Machos ({$this->maleCount}) y hembras ({$this->femaleCount}) suman " . ($this->maleCount + $this->femaleCount)
                     . ", pero la orden es por {$this->headCount} cabezas.",
@@ -142,7 +188,7 @@ final readonly class EntryTroop
 
     private function assertWeights(): void
     {
-        if ($this->estimatedWeight <= 0) {
+        if ($this->estimatedWeight !== null && $this->estimatedWeight <= 0) {
             throw EntryOrderDomainException::invalid('El peso aproximado tiene que ser mayor que cero.', 'WEIGHT_INVALID', 'estimated_weight');
         }
 
@@ -152,11 +198,11 @@ final readonly class EntryTroop
             }
         }
 
-        if ($this->minWeight !== null && $this->minWeight > $this->estimatedWeight) {
+        if ($this->minWeight !== null && $this->estimatedWeight !== null && $this->minWeight > $this->estimatedWeight) {
             throw EntryOrderDomainException::invalid('El peso mínimo no puede superar al aproximado.', 'WEIGHT_RANGE_INVALID', 'min_weight');
         }
 
-        if ($this->maxWeight !== null && $this->maxWeight < $this->estimatedWeight) {
+        if ($this->maxWeight !== null && $this->estimatedWeight !== null && $this->maxWeight < $this->estimatedWeight) {
             throw EntryOrderDomainException::invalid('El peso máximo no puede ser menor que el aproximado.', 'WEIGHT_RANGE_INVALID', 'max_weight');
         }
 
@@ -168,7 +214,7 @@ final readonly class EntryTroop
     private function assertBreeds(): void
     {
         if ($this->breeds === []) {
-            throw EntryOrderDomainException::invalid('Declará al menos una raza.', 'BREEDS_MISSING', 'breeds');
+            return;
         }
 
         $positions = [];

@@ -21,7 +21,6 @@ class EntryOrderDte extends Model
         'entry_order_id',
         'dte_number',
         'dte_date',
-        'entered_at',
         'head_count',
         'loaded_by_user_id',
         'observations',
@@ -34,7 +33,6 @@ class EntryOrderDte extends Model
         'company_id' => 'integer',
         'entry_order_id' => 'integer',
         'dte_date' => 'date:Y-m-d',
-        'entered_at' => 'date:Y-m-d',
         'head_count' => 'integer',
         'loaded_by_user_id' => 'integer',
     ];

@@ -1182,6 +1182,138 @@ class WorkTemplateSeeder extends Seeder
                     ],
                 ]
             );
+
+            // ING-03: the receipt sheet of one DTE, an appendix of the ING-02. Never printed blank:
+            // it is issued from the order with the caravans in transit of the DTE. Weighed per
+            // animal (a PESO column) or with one average (a PESO PROMEDIO cell in the header), and
+            // printed portrait or landscape: the same fields either way.
+            WorkTemplate::updateOrCreate(
+                ['company_id' => $company->id, 'code' => 'ING-03'],
+                [
+                    'category' => 'ENTRY',
+                    'title' => 'Recepción de DTE',
+                    'description' => 'Anexo de la ING-02: las caravanas de un DTE que siguen en tránsito, con su sexo, raza y pelaje (en columnas separadas), para marcar en la manga cuáles llegaron, cuáles no van a llegar, su estado corporal (EC, escala 1 a 5) y su peso, más renglones libres para animales que llegan sin figurar en el DTE. El peso es por animal (columna PESO) o un único peso promedio en el encabezado (recuadro PESO PROMEDIO), según la hoja. La hoja puede estar impresa en vertical o en horizontal (apaisada): los campos son los mismos. Cada hoja se identifica por la orden, el DTE, el número de hoja de recepción (R1, R2…) y "Hoja N de M".',
+                    'status' => 'active',
+                    'schema_definition' => [
+                        'header_fields' => [
+                            [
+                                'name' => 'orden_ingreso',
+                                'label' => 'Orden de Ingreso',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Código de la orden de ingreso, formato EN-AAAAMMDD-NNNN, impreso en el recuadro ORDEN DE INGRESO. No confundir con ING-03 ni con ING-02, que son códigos de planilla.',
+                            ],
+                            [
+                                'name' => 'hoja_recepcion',
+                                'label' => 'Hoja de Recepción',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Número de la hoja de recepción del recuadro HOJA DE RECEPCIÓN: una R seguida de un número (R1, R2…).',
+                            ],
+                            [
+                                'name' => 'dte',
+                                'label' => 'N° de DTE',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Número del DTE impreso en el recuadro N° DE DTE, tal como figura.',
+                            ],
+                            [
+                                'name' => 'hoja_numero',
+                                'label' => 'Hoja N°',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Número de hoja del recuadro "Hoja N de M" (el N).',
+                            ],
+                            [
+                                'name' => 'hoja_total',
+                                'label' => 'De (total de hojas)',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Total de hojas del recuadro "Hoja N de M" (el M).',
+                            ],
+                            [
+                                'name' => 'fecha_recepcion',
+                                'label' => 'Fecha de Recepción',
+                                'type' => 'date',
+                                'required' => false,
+                                'ai_hint' => 'Fecha escrita a mano en el recuadro FECHA DE RECEPCIÓN (DD/MM/AAAA). Vacío si no se escribió.',
+                            ],
+                            [
+                                'name' => 'peso_promedio',
+                                'label' => 'Peso promedio (kg)',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Sólo en las hojas de peso promedio: kg escritos a mano en el recuadro PESO PROMEDIO (KG) del encabezado. Vacío si la hoja no tiene ese recuadro o no se escribió.',
+                            ],
+                            [
+                                'name' => 'motivo_no_llegan',
+                                'label' => 'Motivo de las que no llegan',
+                                'type' => 'text',
+                                'required' => false,
+                                'ai_hint' => 'Texto escrito a mano en el recuadro MOTIVO DE LAS QUE NO LLEGAN, al pie de la grilla. Vacío si no se escribió.',
+                            ],
+                        ],
+                        'table_columns' => [
+                            [
+                                'name' => 'caravana',
+                                'label' => 'Caravana',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Caravana de ESTE renglón: impresa en los renglones del DTE, escrita a mano en los renglones libres del final. Copiar letras y números exactamente.',
+                            ],
+                            [
+                                'name' => 'sexo',
+                                'label' => 'Sexo',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'M o H de la columna SEXO del mismo renglón, impresa o escrita a mano.',
+                            ],
+                            [
+                                'name' => 'raza',
+                                'label' => 'Raza',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Raza de la columna RAZA del mismo renglón, tal como figura (ej: Angus, Brangus, Hereford): impresa en los renglones del DTE, escrita a mano en los renglones libres. Sólo la raza, sin el pelaje. Vacío si no hay nada.',
+                            ],
+                            [
+                                'name' => 'pelaje',
+                                'label' => 'Pelaje',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Pelaje de la columna PELAJE del mismo renglón, tal como figura (ej: Colorado, Negro, Pampa): impreso en los renglones del DTE, escrito a mano en los renglones libres. Vacío si no hay nada.',
+                            ],
+                            [
+                                'name' => 'llego',
+                                'label' => 'Llegó',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Columna LLEGÓ: UNA casilla por renglón. Devolver X si la casilla de ESTE renglón tiene una X o tilde de tinta encima, y vacío si no. No deducirlo de que haya un peso escrito.',
+                            ],
+                            [
+                                'name' => 'no_llega',
+                                'label' => 'No llega',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Columna NO LLEGA: UNA casilla por renglón. Devolver X si la casilla de ESTE renglón tiene una X o tilde de tinta encima, y vacío si no.',
+                            ],
+                            [
+                                'name' => 'ec',
+                                'label' => 'EC (1 a 5)',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Estado corporal escrito a mano en la columna EC del renglón: un número de 1 a 5, entero o con ,5 / .5 (ej: 3, 3,5, 2.5). Copiarlo tal como está escrito. Vacío si no se escribió.',
+                            ],
+                            [
+                                'name' => 'peso',
+                                'label' => 'Peso (kg)',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Peso en kg escrito a mano en la columna PESO del renglón. Vacío si no se escribió o si la hoja no tiene columna PESO (hoja de peso promedio).',
+                            ],
+                        ],
+                    ],
+                ]
+            );
         }
     }
 }

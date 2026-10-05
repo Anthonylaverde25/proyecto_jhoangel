@@ -122,6 +122,16 @@ class EntryOrder extends Model
         return $this->hasMany(EntryOrderAnimal::class);
     }
 
+    public function incidents(): HasMany
+    {
+        return $this->hasMany(EntryOrderIncident::class)->orderBy('id');
+    }
+
+    public function receiptSheets(): HasMany
+    {
+        return $this->hasMany(EntryOrderReceiptSheet::class)->orderBy('number');
+    }
+
     public function history(): HasMany
     {
         return $this->hasMany(EntryOrderHistory::class)->orderBy('id');

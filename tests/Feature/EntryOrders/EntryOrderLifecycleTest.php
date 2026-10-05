@@ -21,8 +21,8 @@ class EntryOrderLifecycleTest extends EntryOrderTestCase
         $this->assertSame('AWAITING_DTE', $order['status']);
         $this->assertSame('En espera de DTE', $order['status_label']);
         $this->assertMatchesRegularExpression('/^EN-' . now()->format('Ymd') . '-\d{4}$/', $order['code']);
-        $this->assertSame(0, $order['entered_count']);
-        $this->assertSame(40, $order['pending_count']);
+        $this->assertSame(0, $order['with_dte_count']);
+        $this->assertSame(40, $order['pending_dte_count']);
         $this->assertSame([], $order['dtes']);
 
         $batch = Batch::findOrFail($order['batch']['id']);
@@ -47,7 +47,7 @@ class EntryOrderLifecycleTest extends EntryOrderTestCase
         $this->assertSame($order['code'], $batch['entry_order']['code']);
         $this->assertSame('AWAITING_DTE', $batch['entry_order']['status']);
         $this->assertSame(40, $batch['entry_order']['head_count']);
-        $this->assertSame(0, $batch['entry_order']['entered_count']);
+        $this->assertSame(0, $batch['entry_order']['received_count']);
         $this->assertSame($this->provider->id, $batch['provider_id']);
     }
 
@@ -81,6 +81,47 @@ class EntryOrderLifecycleTest extends EntryOrderTestCase
         $this->assertNull($updated['male_count']);
         $this->assertSame('412-' . $draft['number'], $updated['batch_name']);
         $this->assertSame($draft['number'], $updated['number']);
+    }
+
+    public function test_a_draft_only_needs_its_origin_and_is_completed_before_confirming(): void
+    {
+        $draft = $this->apiAs('POST', '/entry-orders', [
+            'provider_id' => $this->provider->id,
+            'farm_id' => $this->farm->id,
+            'batch_name_mode' => 'AUTO',
+            'purchase_date' => now()->toDateString(),
+            'head_count' => null,
+            'breeds' => [],
+            'confirm' => false,
+        ])->assertCreated()->json('order');
+
+        $this->assertSame('DRAFT', $draft['status']);
+        $this->assertNull($draft['head_count']);
+        $this->assertNull($draft['batch_name']);
+        $this->assertSame([], $draft['breeds']);
+
+        // Confirming an incomplete troop says what is missing, on its field.
+        $this->apiAs('POST', "/entry-orders/{$draft['id']}/confirm")
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'TROOP_INCOMPLETE')
+            ->assertJsonPath('field', 'head_count');
+
+        $this->apiAs('PUT', "/entry-orders/{$draft['id']}", [...$this->troop(), 'confirm' => false])->assertOk();
+        $confirmed = $this->apiAs('POST', "/entry-orders/{$draft['id']}/confirm")->assertOk()->json('order');
+
+        $this->assertSame('AWAITING_DTE', $confirmed['status']);
+        $this->assertSame('338-' . $draft['number'], $confirmed['batch_name']);
+    }
+
+    public function test_confirming_at_once_still_needs_the_whole_troop(): void
+    {
+        $this->apiAs('POST', '/entry-orders', [
+            'provider_id' => $this->provider->id,
+            'farm_id' => $this->farm->id,
+            'batch_name_mode' => 'AUTO',
+            'purchase_date' => now()->toDateString(),
+            'confirm' => true,
+        ])->assertStatus(422)->assertJsonValidationErrors(['head_count', 'category_id', 'breeds']);
     }
 
     public function test_a_confirmed_order_is_no_longer_editable(): void

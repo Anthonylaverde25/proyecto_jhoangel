@@ -8,36 +8,35 @@ use App\Application\DTOs\EntryOrders\LoadDteDTO;
 use App\Core\Entities\EntryOrderAnimalEntity;
 use App\Core\Entities\EntryOrderDteEntity;
 use App\Core\Entities\EntryOrderEntity;
+use App\Core\Entities\EntryOrderIncidentEntity;
 use App\Core\Enums\AnimalSex;
-use App\Core\Enums\BatchWeightCause;
-use App\Core\Enums\SexComposition;
 use App\Core\Exceptions\EntryDteValidationException;
 use App\Core\Exceptions\EntryOrderDomainException;
 use App\Core\Interfaces\IEntryOrderRepository;
-use App\Core\Services\BatchWeightService;
 use App\Core\ValueObjects\CaravanProvenance;
 use App\Models\Caravan;
-use App\Models\CaravanMovement;
-use App\Models\CaravanWeight;
 use App\Models\Farm;
 
 /**
  * The only way caravans enter through an entry order: loading the official transit document (DTE)
  * that lists them. Used by "Cargar DTE" and by "Registrar ingreso".
  *
+ * The DTE is usually downloaded before the animals travel, so its caravans are created in the
+ * order's batch but in transit: no entry date, no weight, no PURCHASE movement. They come into
+ * possession when they are received (EntryOrderReceptionService). Their provenance is the order's.
+ *
  * Everything is checked before anything is written, and every problem is reported at once, by
  * row. What the order declared is inherited, never asked again: category always, sex unless the
- * troop is of both sexes, breed unless it has several.
+ * troop is of both sexes, breed unless it has several. Head in excess are not an error: the DTE
+ * is loaded and an incident is raised.
  *
- * Must run inside the transaction that saves the order: it creates caravans, weights and
- * movements, and leaves the DTE recorded on the order for the repository to store.
+ * Must run inside the transaction that saves the order: it creates caravans, and leaves the DTE
+ * recorded on the order for the repository to store.
  */
 final class EntryOrderDteService
 {
-    public function __construct(
-        private readonly IEntryOrderRepository $repository,
-        private readonly BatchWeightService $batchWeightService
-    ) {
+    public function __construct(private readonly IEntryOrderRepository $repository)
+    {
     }
 
     /**
@@ -58,24 +57,30 @@ final class EntryOrderDteService
         $warnings = $this->validate($order, $dto);
         $animals = $this->persist($order, $dto);
 
-        $order->recordDte(new EntryOrderDteEntity(
+        $incidents = $order->recordDte(new EntryOrderDteEntity(
             id: null,
             dteNumber: $dto->dteNumber,
             dteDate: $dto->dteDate,
-            enteredAt: $dto->enteredAt,
             animals: $animals,
             loadedByUserId: $userId,
             observations: $dto->observations
-        ));
+        ), $userId);
+
+        foreach ($incidents as $incident) {
+            $warnings[] = [
+                'code' => $incident->getType()->value,
+                'message' => $incident->getDetail() . ' Se registró una novedad para revisar con el proveedor.',
+            ];
+        }
 
         return [
             'warnings' => $warnings,
             'metadata' => [
                 'dte_number' => $dto->dteNumber,
-                'entered_at' => $dto->enteredAt,
                 'head_count' => count($animals),
-                'entered_total' => $order->enteredCount(),
-                'pending' => $order->pendingCount(),
+                'with_dte_total' => $order->withDteCount(),
+                'pending_dte' => $order->pendingDteCount(),
+                'incidents' => array_map(fn (EntryOrderIncidentEntity $i) => $i->getType()->value, $incidents),
             ],
         ];
     }
@@ -101,27 +106,12 @@ final class EntryOrderDteService
 
         if ($dto->dteDate > $today) {
             $header[] = $this->error('dte_date', 'DATE_IN_FUTURE', 'La fecha del DTE no puede ser futura.');
-        }
-
-        if ($dto->enteredAt > $today) {
-            $header[] = $this->error('entered_at', 'DATE_IN_FUTURE', 'La fecha de ingreso no puede ser futura.');
-        } elseif ($dto->enteredAt < $troop->purchaseDate) {
-            $header[] = $this->error('entered_at', 'ENTERED_BEFORE_PURCHASE', "La hacienda no pudo ingresar antes de la compra ({$troop->purchaseDate}).");
-        } elseif ($dto->enteredAt < $dto->dteDate) {
-            $header[] = $this->error('entered_at', 'ENTERED_BEFORE_DTE', 'La hacienda no pudo ingresar antes de que se emitiera su DTE.');
+        } elseif ($dto->dteDate < $troop->purchaseDate) {
+            $header[] = $this->error('dte_date', 'DTE_BEFORE_PURCHASE', "El DTE no pudo emitirse antes de la compra ({$troop->purchaseDate}).");
         }
 
         if ($dto->animals === []) {
             $header[] = $this->error('animals', 'DTE_EMPTY', 'El DTE no trae caravanas.');
-        }
-
-        $pending = $order->pendingCount();
-        if (count($dto->animals) > $pending) {
-            $header[] = $this->error(
-                'animals',
-                'HEAD_COUNT_EXCEEDED',
-                "La orden es por {$troop->headCount} cabezas y quedan {$pending} por ingresar; el DTE trae " . count($dto->animals) . '.'
-            );
         }
 
         $inherited = $troop->sexComposition->inheritedSex();
@@ -164,28 +154,6 @@ final class EntryOrderDteService
             } elseif ($row['breed_position'] === null && $troop->hasSeveralBreeds()) {
                 $warnings[] = ['row' => $i, 'code' => 'BREED_UNDECLARED', 'message' => "La caravana {$tag} queda sin raza declarada."];
             }
-
-            $weight = $row['weight'];
-            if ($weight !== null && $weight <= 0) {
-                $rows[] = $this->rowError($i, 'weight', 'WEIGHT_INVALID', 'El peso tiene que ser mayor que cero.');
-            } elseif ($weight !== null && (($troop->minWeight !== null && $weight < $troop->minWeight) || ($troop->maxWeight !== null && $weight > $troop->maxWeight))) {
-                $warnings[] = [
-                    'row' => $i,
-                    'code' => 'WEIGHT_OUT_OF_RANGE',
-                    'message' => "{$weight} kg está fuera del rango declarado en la compra ("
-                        . ($troop->minWeight ?? '—') . ' a ' . ($troop->maxWeight ?? '—') . ' kg). Revisá la lectura.',
-                ];
-            }
-        }
-
-        if ($troop->sexComposition === SexComposition::MIXED) {
-            foreach ([[AnimalSex::MALE, (int) $troop->maleCount, 'machos'], [AnimalSex::FEMALE, (int) $troop->femaleCount, 'hembras']] as [$sex, $declared, $word]) {
-                $after = $order->enteredCountBySex($sex->value) + count(array_filter($dto->animals, fn ($r) => $r['sex'] === $sex->value));
-
-                if ($after > $declared) {
-                    $header[] = $this->error('animals', 'SEX_COUNT_EXCEEDED', "La orden declara {$declared} {$word} y con este DTE serían {$after}.");
-                }
-            }
         }
 
         if ($header !== [] || $rows !== []) {
@@ -196,6 +164,9 @@ final class EntryOrderDteService
     }
 
     /**
+     * Creates the caravans in the order's batch, in transit: they get their entry date, weight and
+     * PURCHASE movement when they are received.
+     *
      * @return EntryOrderAnimalEntity[]
      */
     private function persist(EntryOrderEntity $order, LoadDteDTO $dto): array
@@ -233,32 +204,9 @@ final class EntryOrderDteService
                 'teeth' => 0,
                 'breed_id' => $breedLine?->getBreedId(),
                 'color_id' => $breedLine?->getColorId(),
-                'entry_weight' => $row['weight'],
-                'entry_date' => $dto->enteredAt,
+                'entry_weight' => null,
+                'entry_date' => null,
                 'provenance_metadata' => $provenance,
-            ]);
-
-            if ($row['weight'] !== null) {
-                CaravanWeight::create([
-                    'caravan_id' => $caravan->id,
-                    'weight' => $row['weight'],
-                    'current' => true,
-                    'weighing_date' => $dto->enteredAt,
-                    'notes' => "Pesaje de ingreso ({$order->getCode()}, DTE {$dto->dteNumber})",
-                ]);
-            }
-
-            $movement = CaravanMovement::create([
-                'caravan_id' => $caravan->id,
-                'company_id' => $order->getCompanyId(),
-                'to_batch_id' => $batchId,
-                'provider_id' => $troop->providerId,
-                'renspa' => $renspa,
-                'from_renspa' => $renspa,
-                'type' => 'PURCHASE',
-                'movement_date' => $dto->enteredAt,
-                'provenance_metadata' => $provenance,
-                'observations' => "Ingreso por DTE {$dto->dteNumber} de la orden {$order->getCode()}",
             ]);
 
             $animals[] = new EntryOrderAnimalEntity(
@@ -267,13 +215,9 @@ final class EntryOrderDteService
                 identification: $row['caravana'],
                 sex: $sex,
                 breedPosition: $breedLine?->getPosition(),
-                caravanMovementId: (int) $movement->id,
-                entryWeight: $row['weight']
+                caravanMovementId: null
             );
         }
-
-        // Once per DTE, not per caravan: a single point in the batch's series for the whole arrival.
-        $this->batchWeightService->recalculateBatchWeight($batchId, BatchWeightCause::MOVEMENT_IN, new \DateTimeImmutable($dto->enteredAt));
 
         return $animals;
     }

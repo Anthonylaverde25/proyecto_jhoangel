@@ -21,11 +21,11 @@ class EloquentActivityRepository implements IActivityRepository
             $query->with(['companies' => function ($q) use ($companyId) {
                 $q->where('company_id', $companyId);
             }, 'batches' => function ($q) use ($companyId) {
-                $q->where('company_id', $companyId)->with(['farm', 'batchType'])->withCount('caravans')->withExists('outgoingMovements');
+                $q->where('company_id', $companyId)->with(['farm', 'batchType'])->withCount(['caravans' => fn ($c) => $c->inPossession()])->withExists('outgoingMovements');
             }]);
         } else {
             $query->with(['batches' => function ($q) {
-                $q->with(['farm', 'batchType'])->withCount('caravans')->withExists('outgoingMovements');
+                $q->with(['farm', 'batchType'])->withCount(['caravans' => fn ($c) => $c->inPossession()])->withExists('outgoingMovements');
             }]);
         }
 
@@ -103,7 +103,7 @@ class EloquentActivityRepository implements IActivityRepository
         })->with(['companies' => function ($q) use ($companyId) {
             $q->where('company_id', $companyId);
         }, 'batches' => function ($query) use ($companyId) {
-            $query->where('company_id', $companyId)->with(['farm', 'batchType'])->withCount('caravans')->withExists('outgoingMovements');
+            $query->where('company_id', $companyId)->with(['farm', 'batchType'])->withCount(['caravans' => fn ($c) => $c->inPossession()])->withExists('outgoingMovements');
         }])->get()->map(function ($model) {
             $pivot = $model->companies->first()?->pivot;
             $isInitial = $pivot ? (bool) $pivot->is_initial : false;

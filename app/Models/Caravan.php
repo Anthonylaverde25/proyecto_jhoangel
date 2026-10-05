@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Models\Traits\BelongsToCompany;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use App\Core\Enums\AnimalSex;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -86,6 +87,22 @@ class Caravan extends Model
     public function currentWeight(): HasOne
     {
         return $this->hasOne(CaravanWeight::class)->where('current', true);
+    }
+
+    /**
+     * Body condition scores of the caravan (official scale 1 to 5), oldest first.
+     */
+    public function bodyConditions(): HasMany
+    {
+        return $this->hasMany(CaravanBodyCondition::class);
+    }
+
+    /**
+     * Get the current body condition record for the caravan.
+     */
+    public function currentBodyCondition(): HasOne
+    {
+        return $this->hasOne(CaravanBodyCondition::class)->where('current', true);
     }
 
     /**
@@ -194,5 +211,39 @@ class Caravan extends Model
     {
         return $this->hasMany(BullLabSample::class);
     }
-}
 
+    /**
+     * The line of the entry order whose DTE listed this caravan, if it came from one.
+     */
+    public function entryOrderAnimal(): HasOne
+    {
+        return $this->hasOne(EntryOrderAnimal::class);
+    }
+
+    /**
+     * Caravans that are in the field: born or imported here, or bought and already received.
+     * One listed in a DTE that has not arrived (or never will) is not stock.
+     */
+    public function scopeInPossession(Builder $query): Builder
+    {
+        return $query->whereNotExists(function ($sub): void {
+            $sub->selectRaw('1')
+                ->from('entry_order_animals')
+                ->whereColumn('entry_order_animals.caravan_id', 'caravans.id')
+                ->where('entry_order_animals.reception_status', '!=', 'RECEIVED');
+        });
+    }
+
+    /**
+     * Caravans listed in a loaded DTE that have not arrived yet.
+     */
+    public function scopeInTransit(Builder $query): Builder
+    {
+        return $query->whereExists(function ($sub): void {
+            $sub->selectRaw('1')
+                ->from('entry_order_animals')
+                ->whereColumn('entry_order_animals.caravan_id', 'caravans.id')
+                ->where('entry_order_animals.reception_status', 'PENDING');
+        });
+    }
+}

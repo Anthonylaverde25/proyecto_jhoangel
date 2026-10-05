@@ -106,10 +106,68 @@ abstract class EntryOrderTestCase extends VeterinaryTestCase
         return [
             'dte_number' => 'DTE-' . uniqid(),
             'dte_date' => now()->subDay()->toDateString(),
-            'entered_at' => now()->toDateString(),
             'animals' => $animals,
             ...$overrides,
         ];
+    }
+
+    /**
+     * A DTE for "Registrar ingreso": the animals arrive with it, so it carries their entry day.
+     *
+     * @param list<array<string, mixed>> $animals
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    protected function registerDte(array $animals, array $overrides = []): array
+    {
+        return $this->dte($animals, ['entered_at' => now()->toDateString(), ...$overrides]);
+    }
+
+    /**
+     * Loads a DTE on the order and returns the order as the response left it.
+     *
+     * @param list<array<string, mixed>> $animals
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    protected function loadDte(int $orderId, array $animals, array $overrides = []): array
+    {
+        return $this->apiAs('POST', "/entry-orders/{$orderId}/dtes", $this->dte($animals, $overrides))
+            ->assertCreated()
+            ->json('order');
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return \Illuminate\Testing\TestResponse
+     */
+    protected function receive(int $orderId, array $payload)
+    {
+        return $this->apiAs('POST', "/entry-orders/{$orderId}/receive", [
+            'received_at' => now()->toDateString(),
+            'received' => [],
+            ...$payload,
+        ]);
+    }
+
+    /**
+     * Ids of the caravans of a DTE of the order, in the order the DTE listed them.
+     *
+     * @param array<string, mixed> $order
+     * @return list<int>
+     */
+    protected function caravanIds(array $order, int $dteIndex = 0): array
+    {
+        return array_column($order['dtes'][$dteIndex]['animals'], 'caravan_id');
+    }
+
+    /**
+     * @param list<int> $ids
+     * @return list<array{caravan_id: int, weight: ?float}>
+     */
+    protected function lines(array $ids, ?float $weight = 180): array
+    {
+        return array_map(fn (int $id) => ['caravan_id' => $id, 'weight' => $weight], $ids);
     }
 
     /**

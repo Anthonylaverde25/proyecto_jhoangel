@@ -9,7 +9,8 @@ use App\Core\Entities\EntryOrderEntity;
 interface IEntryOrderRepository
 {
     /**
-     * Persists the order, its breeds and the DTEs not stored yet with their caravans. A history line
+     * Persists the order, its breeds, the DTEs not stored yet with their caravans, the receptions of
+     * stored caravans, and the incidents raised or resolved. A history line
      * is written when the order is new, when its status changes, or when `$metadata` is given.
      *
      * @param array<string, mixed>|null $metadata
@@ -21,9 +22,9 @@ interface IEntryOrderRepository
     public function findByCode(string $code, int $companyId): ?EntryOrderEntity;
 
     /**
-     * @return EntryOrderEntity[] newest first, with their DTEs but without caravans or history
+     * @return EntryOrderEntity[] newest first, with their DTEs (counted, without caravans) and incidents, without history
      */
-    public function list(int $companyId, ?string $status = null, ?int $providerId = null): array;
+    public function list(int $companyId, ?string $status = null, ?int $providerId = null, bool $withOpenIncidents = false): array;
 
     /**
      * The highest code already issued with this prefix (e.g. "EN-20261001-"), or null.
@@ -44,7 +45,7 @@ interface IEntryOrderRepository
      * A short summary of the order each batch was born from.
      *
      * @param int[] $batchIds
-     * @return array<int, array{id: int, code: string, status: string, status_label: string, head_count: int, entered_count: int}>
+     * @return array<int, array{id: int, code: string, status: string, status_label: string, head_count: int, with_dte_count: int, received_count: int, in_transit_count: int, open_incidents_count: int}>
      */
     public function summariesByBatch(array $batchIds, int $companyId): array;
 }

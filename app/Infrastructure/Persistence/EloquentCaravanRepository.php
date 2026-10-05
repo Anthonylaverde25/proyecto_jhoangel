@@ -8,6 +8,7 @@ use App\Core\Entities\CaravanEntity;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\ValueObjects\CaravanNumber;
 use App\Models\Caravan;
+use Illuminate\Support\Facades\DB;
 use App\Application\Mappers\CaravanMapper;
 
 class EloquentCaravanRepository implements ICaravanRepository
@@ -63,7 +64,7 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function findByIdentification(CaravanNumber $identification): ?CaravanEntity
     {
-        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])
+        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father', 'entryOrderAnimal'])
             ->where('identification', $identification->getValue())
             ->first();
         
@@ -81,7 +82,7 @@ class EloquentCaravanRepository implements ICaravanRepository
             return [];
         }
 
-        $models = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])
+        $models = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father', 'entryOrderAnimal'])
             ->whereIn('identification', $values)
             ->get();
 
@@ -105,8 +106,14 @@ class EloquentCaravanRepository implements ICaravanRepository
             return [];
         }
 
+        $inTransit = DB::table('entry_order_animals')
+            ->join('entry_orders', 'entry_orders.id', '=', 'entry_order_animals.entry_order_id')
+            ->where('entry_order_animals.reception_status', 'PENDING')
+            ->select('entry_order_animals.caravan_id', 'entry_orders.code');
+
         $rows = Caravan::withoutGlobalScopes()
             ->leftJoin('batches', 'batches.id', '=', 'caravans.batch_id')
+            ->leftJoinSub($inTransit, 'in_transit', 'in_transit.caravan_id', '=', 'caravans.id')
             ->whereIn('caravans.identification', $values)
             ->get([
                 'caravans.id',
@@ -114,6 +121,7 @@ class EloquentCaravanRepository implements ICaravanRepository
                 'caravans.company_id',
                 'caravans.batch_id',
                 'batches.name as batch_name',
+                'in_transit.code as in_transit_order_code',
             ]);
 
         $resolved = [];
@@ -126,6 +134,7 @@ class EloquentCaravanRepository implements ICaravanRepository
                 (int) $row->company_id,
                 $row->batch_id !== null ? (int) $row->batch_id : null,
                 $row->batch_name !== null ? (string) $row->batch_name : null,
+                $row->in_transit_order_code !== null ? (string) $row->in_transit_order_code : null,
             );
         }
 
@@ -157,7 +166,7 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function findById(int $id): ?CaravanEntity
     {
-        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father'])->find($id);
+        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'lineage.mother', 'lineage.father', 'entryOrderAnimal'])->find($id);
         
         return $model ? CaravanMapper::toEntity($model) : null;
     }
@@ -175,7 +184,8 @@ class EloquentCaravanRepository implements ICaravanRepository
             'gestations.sires',
             'lineage.mother',
             'lineage.father',
-            'provider'
+            'provider',
+            'entryOrderAnimal',
         ]);
 
         if ($scope === 'own') {
@@ -196,7 +206,12 @@ class EloquentCaravanRepository implements ICaravanRepository
                   ->orWhereHas('batch.farm', function ($farmQb) {
                       $farmQb->whereNotNull('provider_id');
                   });
-            });
+            })
+                // A caravan declared "No llegará" never reaches the field: it stays in its order's DTE
+                // and incident, not in the external batch waiting to be assigned.
+                ->whereDoesntHave('entryOrderAnimal', function ($q) {
+                    $q->where('reception_status', 'MISSING');
+                });
         }
 
         return $query->get()->map(fn($model) => CaravanMapper::toEntity($model))->toArray();
@@ -210,12 +225,12 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function countByBatch(int $batchId): int
     {
-        return Caravan::where('batch_id', $batchId)->count();
+        return Caravan::inPossession()->where('caravans.batch_id', $batchId)->count();
     }
 
     public function countWeighedByBatch(int $batchId): int
     {
-        return Caravan::where('batch_id', $batchId)
+        return Caravan::inPossession()->where('caravans.batch_id', $batchId)
             ->join('caravan_weights', 'caravans.id', '=', 'caravan_weights.caravan_id')
             ->where('caravan_weights.current', true)
             ->count();
@@ -223,7 +238,7 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function getTotalWeightByBatch(int $batchId): ?float
     {
-        $sum = Caravan::where('batch_id', $batchId)
+        $sum = Caravan::inPossession()->where('caravans.batch_id', $batchId)
             ->join('caravan_weights', 'caravans.id', '=', 'caravan_weights.caravan_id')
             ->where('caravan_weights.current', true)
             ->sum('caravan_weights.weight');
@@ -236,7 +251,7 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function getLatestWeighingDateByBatch(int $batchId): ?\DateTimeInterface
     {
-        $date = Caravan::where('batch_id', $batchId)
+        $date = Caravan::inPossession()->where('caravans.batch_id', $batchId)
             ->join('caravan_weights', 'caravans.id', '=', 'caravan_weights.caravan_id')
             ->where('caravan_weights.current', true)
             ->max('caravan_weights.weighing_date');
@@ -290,7 +305,7 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function getMinWeightByBatch(int $batchId): ?float
     {
-        $min = Caravan::where('batch_id', $batchId)
+        $min = Caravan::inPossession()->where('caravans.batch_id', $batchId)
             ->join('caravan_weights', 'caravans.id', '=', 'caravan_weights.caravan_id')
             ->where('caravan_weights.current', true)
             ->min('caravan_weights.weight');
@@ -300,7 +315,7 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function getMaxWeightByBatch(int $batchId): ?float
     {
-        $max = Caravan::where('batch_id', $batchId)
+        $max = Caravan::inPossession()->where('caravans.batch_id', $batchId)
             ->join('caravan_weights', 'caravans.id', '=', 'caravan_weights.caravan_id')
             ->where('caravan_weights.current', true)
             ->max('caravan_weights.weight');

@@ -72,13 +72,18 @@ final class EntryOrderFactory
      *
      * @throws EntryOrderDomainException
      */
-    public function nameFor(StoreEntryOrderDTO $dto, EntryTroop $troop, int $number): string
+    public function nameFor(StoreEntryOrderDTO $dto, EntryTroop $troop, int $number): ?string
     {
         if ($dto->batchNameMode !== BatchNameMode::AUTO) {
-            return (string) $dto->batchName;
+            return $dto->batchName;
         }
 
         if ($troop->auctionNumber === null) {
+            // A draft can wait for the auction; confirming demands the name.
+            if (!$dto->confirm) {
+                return null;
+            }
+
             throw EntryOrderDomainException::invalid(
                 'El nombre automático se arma con la terminación de subasta: cargala o escribí un nombre.',
                 'BATCH_NAME_NEEDS_AUCTION',
@@ -99,7 +104,8 @@ final class EntryOrderFactory
      */
     public function confirm(EntryOrderEntity $order): array
     {
-        $warnings = $this->namer->check($order->getBatchName(), $order->getTroop()->farmId);
+        $order->assertReadyToConfirm();
+        $warnings = $this->namer->check((string) $order->getBatchName(), $order->getTroop()->farmId);
         $order->confirm($this->batchFactory->create($order));
 
         return $warnings;
@@ -113,6 +119,10 @@ final class EntryOrderFactory
      */
     public function draftNameWarnings(EntryOrderEntity $order): array
     {
+        if ($order->getBatchName() === null) {
+            return [];
+        }
+
         try {
             return $this->namer->check($order->getBatchName(), $order->getTroop()->farmId);
         } catch (EntryOrderDomainException $e) {

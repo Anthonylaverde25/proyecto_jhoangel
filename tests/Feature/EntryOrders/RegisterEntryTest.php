@@ -9,7 +9,8 @@ use App\Models\Caravan;
 use App\Models\EntryOrder;
 
 /**
- * "Registrar ingreso": the DTE is already in hand, so the order is created with it, all or nothing.
+ * "Registrar ingreso": the DTE and the animals are already in hand, so the order is created with
+ * its DTE and every caravan received on the entry day, all or nothing.
  */
 class RegisterEntryTest extends EntryOrderTestCase
 {
@@ -17,16 +18,21 @@ class RegisterEntryTest extends EntryOrderTestCase
     {
         $response = $this->apiAs('POST', '/entry-orders/register', [
             ...$this->troop(['head_count' => 3, 'male_count' => 2, 'female_count' => 1]),
-            'dte' => $this->dte([
-                ...$this->animals('R', 2, 'M', 1),
-                ...$this->animals('Q', 1, 'H', 2),
+            'dte' => $this->registerDte([
+                ...$this->animals('R', 2, 'M', 1, 185),
+                ...$this->animals('Q', 1, 'H', 2, null),
             ]),
         ])->assertCreated();
 
         $order = $response->json('order');
         $this->assertSame('COMPLETED', $order['status']);
         $this->assertSame('REGISTERED', $order['kind']);
+        $this->assertSame(3, $order['received_count']);
         $this->assertSame(3, Caravan::where('batch_id', $order['batch']['id'])->count());
+        $this->assertSame(3, (int) Batch::findOrFail($order['batch']['id'])->caravans_count);
+        $this->assertSame(['MANUAL'], array_values(array_unique(array_column($order['dtes'][0]['animals'], 'reception_method'))));
+        $this->assertEquals(185.0, (float) Caravan::where('identification', 'EO-R-1')->value('entry_weight'));
+        $this->assertSame(now()->toDateString(), Caravan::where('identification', 'EO-Q-1')->firstOrFail()->entry_date->toDateString());
         $this->assertCount(1, $order['history']);
     }
 
@@ -34,12 +40,15 @@ class RegisterEntryTest extends EntryOrderTestCase
     {
         $order = $this->apiAs('POST', '/entry-orders/register', [
             ...$this->troop(['head_count' => 3, 'male_count' => 2, 'female_count' => 1]),
-            'dte' => $this->dte($this->animals('W', 2, 'M', 1)),
+            'dte' => $this->registerDte($this->animals('W', 2, 'M', 1)),
             'close_incomplete_reason' => 'Faltó una hembra',
         ])->assertCreated()->json('order');
 
         $this->assertSame('CLOSED_INCOMPLETE', $order['status']);
         $this->assertSame('Faltó una hembra', $order['closing_reason']);
+        $this->assertSame(2, $order['received_count']);
+        $this->assertSame(0, $order['missing_count']);
+        $this->assertSame(['MISSING_DTE'], array_column($order['incidents'], 'type'));
     }
 
     public function test_a_failing_row_leaves_nothing_behind(): void
@@ -49,7 +58,7 @@ class RegisterEntryTest extends EntryOrderTestCase
 
         $this->apiAs('POST', '/entry-orders/register', [
             ...$this->troop(['head_count' => 2, 'male_count' => 1, 'female_count' => 1]),
-            'dte' => $this->dte([
+            'dte' => $this->registerDte([
                 ['caravana' => 'EO-OK', 'sex' => 'M', 'breed_position' => 1, 'weight' => 180],
                 ['caravana' => 'EO-BAD', 'sex' => 'X', 'breed_position' => 1, 'weight' => 180],
             ]),

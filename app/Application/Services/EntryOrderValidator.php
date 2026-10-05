@@ -49,13 +49,17 @@ final class EntryOrderValidator
 
     private function assertCategory(EntryTroop $troop): void
     {
+        if ($troop->categoryId === null) {
+            return;
+        }
+
         $category = AnimalCategory::find($troop->categoryId);
 
         if ($category === null) {
             throw EntryOrderDomainException::invalid('La categoría no existe.', 'CATEGORY_INVALID', 'category_id');
         }
 
-        if (!$troop->sexComposition->allowsCategorySex((string) $category->sex)) {
+        if ($troop->sexComposition !== null && !$troop->sexComposition->allowsCategorySex((string) $category->sex)) {
             throw EntryOrderDomainException::invalid(
                 "La categoría {$category->name} no admite una tropa de {$troop->sexComposition->label()}.",
                 'SEX_NOT_ALLOWED_BY_CATEGORY',

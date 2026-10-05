@@ -44,6 +44,8 @@ class CaravanResource extends JsonResource
             'provider_name'  => $this->resource->getProviderName(),
             'provenance'     => $this->resource->getProvenance()?->toArray(),
             'is_operational' => $this->resource->getBatchId() !== null && $this->resource->getProviderId() === null,
+            'in_transit'     => $this->resource->isInTransit(),
+            'in_possession'  => $this->resource->isInPossession(),
             'batch'          => [
                 'id'   => $this->resource->getBatchId(),
                 'name' => $this->resource->getBatchName(),

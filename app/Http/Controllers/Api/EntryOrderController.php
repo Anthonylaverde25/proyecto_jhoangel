@@ -5,16 +5,20 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Application\DTOs\EntryOrders\LoadDteDTO;
+use App\Application\DTOs\EntryOrders\ReceiveDTO;
 use App\Application\DTOs\EntryOrders\StoreEntryOrderDTO;
 use App\Application\UseCases\EntryOrders\EntryOrderUseCases;
 use App\Core\Entities\EntryOrderEntity;
 use App\Core\Enums\EntryOrderStatus;
+use App\Core\Enums\WeighingMode;
 use App\Core\Exceptions\EntryDteValidationException;
 use App\Core\Exceptions\EntryOrderDomainException;
 use App\Core\Interfaces\ICompanyContext;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\EntryOrders\LoadEntryOrderDteRequest;
+use App\Http\Requests\EntryOrders\ReceiveEntryOrderRequest;
 use App\Http\Requests\EntryOrders\RegisterEntryRequest;
+use App\Http\Requests\EntryOrders\ResolveEntryOrderIncidentRequest;
 use App\Http\Requests\EntryOrders\StoreEntryOrderRequest;
 use App\Http\Requests\TransferOrders\CancelTransferOrderRequest;
 use App\Http\Requests\TransferOrders\TransferOrderReasonRequest;
@@ -24,7 +28,8 @@ use Illuminate\Http\Request;
 
 /**
  * Entry orders of external livestock, in both directions: a purchase confirmed before its DTE
- * arrives (it waits, then each DTE is loaded), or registered together with its DTE.
+ * arrives (it waits, each DTE is loaded with its caravans in transit, then they are received), or
+ * registered together with its DTE and its animals.
  */
 final class EntryOrderController extends Controller
 {
@@ -41,7 +46,9 @@ final class EntryOrderController extends Controller
         $providerId = $request->query('provider_id');
         $providerId = is_numeric($providerId) ? (int) $providerId : null;
 
-        $orders = ($this->useCases->list)($this->companyId(), $status, $providerId);
+        $withOpenIncidents = $request->query('incidents') === 'open';
+
+        $orders = ($this->useCases->list)($this->companyId(), $status, $providerId, $withOpenIncidents);
 
         return response()->json(array_map(
             fn (EntryOrderEntity $order) => (new EntryOrderResource($order))->summary()->resolve($request),
@@ -74,9 +81,17 @@ final class EntryOrderController extends Controller
         try {
             $validated = $request->validated();
             $dto = StoreEntryOrderDTO::fromArray($validated, $this->companyId(), $request->user()?->id);
+            $weights = [];
+            foreach ($validated['dte']['animals'] ?? [] as $row) {
+                $tag = mb_strtoupper(trim((string) ($row['caravana'] ?? '')));
+                $weights[$tag] = isset($row['weight']) && $row['weight'] !== '' ? (float) $row['weight'] : null;
+            }
+
             $result = ($this->useCases->register)(
                 $dto,
                 LoadDteDTO::fromArray($validated['dte']),
+                (string) $validated['dte']['entered_at'],
+                $weights,
                 $validated['close_incomplete_reason'] ?? null
             );
         } catch (EntryDteValidationException $e) {
@@ -129,6 +144,44 @@ final class EntryOrderController extends Controller
         return $this->withWarnings($request, $result, 201);
     }
 
+    /**
+     * "Recibir": caravans of the order arrived, by hand on one DTE or read at the chute.
+     */
+    public function receive(ReceiveEntryOrderRequest $request, int $id): JsonResponse
+    {
+        try {
+            $result = ($this->useCases->receive)(
+                $id,
+                $this->companyId(),
+                $request->user()?->id,
+                ReceiveDTO::fromArray($request->validated())
+            );
+        } catch (EntryDteValidationException $e) {
+            return $this->dteError($e);
+        } catch (EntryOrderDomainException $e) {
+            return $this->domainError($e);
+        }
+
+        return $this->withWarnings($request, $result);
+    }
+
+    public function resolveIncident(ResolveEntryOrderIncidentRequest $request, int $id, int $incidentId): JsonResponse
+    {
+        try {
+            $order = ($this->useCases->resolveIncident)(
+                $id,
+                $incidentId,
+                $this->companyId(),
+                $request->user()?->id,
+                (string) $request->validated('resolution')
+            );
+        } catch (EntryOrderDomainException $e) {
+            return $this->domainError($e);
+        }
+
+        return response()->json(new EntryOrderResource($order));
+    }
+
     public function show(int $id): JsonResponse
     {
         $order = ($this->useCases->get)($id, $this->companyId());
@@ -155,6 +208,71 @@ final class EntryOrderController extends Controller
     {
         try {
             $order = ($this->useCases->markPrinted)($id, $this->companyId(), $request->user()?->id);
+        } catch (EntryOrderDomainException $e) {
+            return $this->domainError($e);
+        }
+
+        return response()->json(new EntryOrderResource($order));
+    }
+
+    /**
+     * The ING-03 sheet of a DTE, to print, weighed per animal or with one average (without saying,
+     * like the last sheet). Answers the order with the sheet in it.
+     */
+    public function issueReceiptSheet(Request $request, int $id): JsonResponse
+    {
+        $request->validate(
+            ['dte_id' => 'required|integer', 'weighing_mode' => 'nullable|string|in:INDIVIDUAL,AVERAGE'],
+            ['weighing_mode.in' => 'El peso de la hoja es individual (INDIVIDUAL) o promedio (AVERAGE).']
+        );
+
+        try {
+            $result = ($this->useCases->issueReceiptSheet)(
+                $id,
+                $this->companyId(),
+                $request->user()?->id,
+                (int) $request->input('dte_id'),
+                WeighingMode::tryFrom((string) $request->input('weighing_mode'))
+            );
+        } catch (EntryOrderDomainException $e) {
+            return $this->domainError($e);
+        }
+
+        return response()->json([
+            'order' => (new EntryOrderResource($result['order']))->resolve($request),
+            'sheet_number' => $result['sheet_number'],
+        ], 201);
+    }
+
+    public function receiptSheetPrinted(Request $request, int $id, int $sheetId): JsonResponse
+    {
+        try {
+            $order = ($this->useCases->markReceiptSheetPrinted)($id, $this->companyId(), $request->user()?->id, $sheetId);
+        } catch (EntryOrderDomainException $e) {
+            return $this->domainError($e);
+        }
+
+        return response()->json(new EntryOrderResource($order));
+    }
+
+    /**
+     * Changes how an ING-03 sheet not yet printed is weighed.
+     */
+    public function changeReceiptSheetWeighing(Request $request, int $id, int $sheetId): JsonResponse
+    {
+        $request->validate(
+            ['weighing_mode' => 'required|string|in:INDIVIDUAL,AVERAGE'],
+            ['weighing_mode.in' => 'El peso de la hoja es individual (INDIVIDUAL) o promedio (AVERAGE).']
+        );
+
+        try {
+            $order = ($this->useCases->changeReceiptSheetWeighing)(
+                $id,
+                $this->companyId(),
+                $request->user()?->id,
+                $sheetId,
+                WeighingMode::from((string) $request->input('weighing_mode'))
+            );
         } catch (EntryOrderDomainException $e) {
             return $this->domainError($e);
         }

@@ -54,7 +54,9 @@ final class ProcessTor01Controller extends Controller
                     $caravanTag = trim((string) $row['caravana']);
                     if ($caravanTag === '') continue;
 
-                    $caravan = Caravan::where('company_id', $companyId)
+                    // A caravan in transit is not at the chute: skipped like an unknown one.
+                    $caravan = Caravan::inPossession()
+                        ->where('company_id', $companyId)
                         ->where('identification', $caravanTag)
                         ->first();
 

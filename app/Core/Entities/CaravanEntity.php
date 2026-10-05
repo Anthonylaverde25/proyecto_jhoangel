@@ -47,7 +47,8 @@ final class CaravanEntity
         private ?string $subcategoryCode = null,
         private ?string $subcategoryName = null,
         private bool $isInService = false,
-        private ?string $farmName = null
+        private ?string $farmName = null,
+        private ?string $entryReceptionStatus = null
     ) {
         $this->validateTeeth($teeth);
     }
@@ -85,6 +86,22 @@ final class CaravanEntity
     public function getFarmName(): ?string
     {
         return $this->farmName;
+    }
+
+    /**
+     * Listed in a DTE of an entry order that has not arrived yet: ours, but not in the field.
+     */
+    public function isInTransit(): bool
+    {
+        return $this->entryReceptionStatus === 'PENDING';
+    }
+
+    /**
+     * Not stock: in transit, or declared as never arriving.
+     */
+    public function isInPossession(): bool
+    {
+        return $this->entryReceptionStatus === null || $this->entryReceptionStatus === 'RECEIVED';
     }
 
     public function setFarmName(?string $farmName): void

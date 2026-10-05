@@ -9,6 +9,7 @@ namespace App\Core\ValueObjects;
  *
  * A deliberately thin read model: answering "is this tag already registered, and by whom?"
  * for a whole chute session must not hydrate full entities with gestations and lineage.
+ * A caravan listed in a DTE that has not arrived is ours, but in transit: it carries its order.
  */
 final readonly class CaravanOwnership
 {
@@ -18,6 +19,7 @@ final readonly class CaravanOwnership
         public int $companyId,
         public ?int $batchId,
         public ?string $batchName,
+        public ?string $inTransitOrderCode = null,
     ) {
     }
 }

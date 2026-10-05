@@ -9,8 +9,9 @@ use App\Core\Exceptions\EntryOrderDomainException;
 use App\Core\Interfaces\IEntryOrderRepository;
 
 /**
- * No more DTEs will arrive: fewer head entered than were bought (a death on the road, a rejected
- * animal). The reason is mandatory.
+ * No more will come: the seller will not send the remaining DTEs, or the caravans still in transit
+ * will not arrive (a death on the road, a rejected animal). Those become missing, with an incident.
+ * The reason is mandatory.
  */
 final class CloseIncompleteEntryOrderUseCase
 {
@@ -25,7 +26,7 @@ final class CloseIncompleteEntryOrderUseCase
     {
         $order = $this->repository->findById($id, $companyId) ?? throw EntryOrderDomainException::notFound();
 
-        $order->closeIncomplete($reason);
+        $order->closeIncomplete($reason, $userId);
 
         return $this->repository->save($order, $userId, $order->getClosingReason());
     }

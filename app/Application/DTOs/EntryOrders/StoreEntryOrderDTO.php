@@ -12,8 +12,8 @@ use App\Core\Exceptions\EntryOrderDomainException;
 use App\Core\ValueObjects\EntryTroop;
 
 /**
- * What the "Alta de Lote Externo" form sends: the troop, the name of its batch and whether the
- * purchase is confirmed now or kept as a draft.
+ * What the "Nueva orden de ingreso" form sends: the troop, the name of its batch and whether the
+ * purchase is confirmed now or kept as a draft. A draft may leave everything but its origin out.
  */
 final readonly class StoreEntryOrderDTO
 {
@@ -39,7 +39,7 @@ final readonly class StoreEntryOrderDTO
             companyId: $companyId,
             userId: $userId,
             troop: $data,
-            batchName: isset($data['batch_name']) ? trim((string) $data['batch_name']) : null,
+            batchName: isset($data['batch_name']) && trim((string) $data['batch_name']) !== '' ? trim((string) $data['batch_name']) : null,
             batchNameMode: BatchNameMode::tryFrom((string) ($data['batch_name_mode'] ?? '')) ?? BatchNameMode::CUSTOM,
             confirm: (bool) ($data['confirm'] ?? false)
         );
@@ -51,7 +51,7 @@ final readonly class StoreEntryOrderDTO
     public function toTroop(): EntryTroop
     {
         $t = $this->troop;
-        $sex = SexComposition::from((string) $t['sex_composition']);
+        $sex = SexComposition::tryFrom((string) ($t['sex_composition'] ?? ''));
         $breeds = [];
 
         foreach (array_values($t['breeds'] ?? []) as $index => $line) {
@@ -69,18 +69,18 @@ final readonly class StoreEntryOrderDTO
             providerId: (int) $t['provider_id'],
             farmId: (int) $t['farm_id'],
             auctionNumber: $auction !== '' ? $auction : null,
-            headCount: (int) $t['head_count'],
-            categoryId: (int) $t['category_id'],
+            headCount: isset($t['head_count']) ? (int) $t['head_count'] : null,
+            categoryId: isset($t['category_id']) ? (int) $t['category_id'] : null,
             sexComposition: $sex,
             maleCount: $sex === SexComposition::MIXED && isset($t['male_count']) ? (int) $t['male_count'] : null,
             femaleCount: $sex === SexComposition::MIXED && isset($t['female_count']) ? (int) $t['female_count'] : null,
-            condition: TroopCondition::from((string) $t['condition']),
+            condition: TroopCondition::tryFrom((string) ($t['condition'] ?? '')),
             ageMinMonths: isset($t['age_min_months']) ? (int) $t['age_min_months'] : null,
             ageMaxMonths: isset($t['age_max_months']) ? (int) $t['age_max_months'] : null,
-            knowsToEat: (bool) $t['knows_to_eat'],
-            tickVaccinated: (bool) $t['tick_vaccinated'],
+            knowsToEat: isset($t['knows_to_eat']) ? (bool) $t['knows_to_eat'] : null,
+            tickVaccinated: isset($t['tick_vaccinated']) ? (bool) $t['tick_vaccinated'] : null,
             shrinkPercent: isset($t['shrink_percent']) ? (float) $t['shrink_percent'] : null,
-            estimatedWeight: (float) $t['estimated_weight'],
+            estimatedWeight: isset($t['estimated_weight']) ? (float) $t['estimated_weight'] : null,
             minWeight: isset($t['min_weight']) ? (float) $t['min_weight'] : null,
             maxWeight: isset($t['max_weight']) ? (float) $t['max_weight'] : null,
             purchaseDate: (string) $t['purchase_date'],

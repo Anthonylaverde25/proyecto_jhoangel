@@ -164,6 +164,11 @@ final class ProcessPar01SubmissionUseCase
                 continue;
             }
 
+            if (!$mother->isInPossession()) {
+                $errorsByRow[$index][] = $this->error('CARAVAN_IN_TRANSIT', "La caravana '{$tag}' está en tránsito: figura en un DTE pero todavía no se recibió.", 'caravana_madre');
+                continue;
+            }
+
             if ($mother->getSex() !== AnimalSex::FEMALE) {
                 $errorsByRow[$index][] = $this->error('NOT_A_FEMALE', "La caravana '{$tag}' no es de una hembra.", 'caravana_madre');
                 continue;

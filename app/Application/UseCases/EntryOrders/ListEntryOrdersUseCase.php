@@ -16,8 +16,8 @@ final class ListEntryOrdersUseCase
     /**
      * @return EntryOrderEntity[]
      */
-    public function __invoke(int $companyId, ?string $status = null, ?int $providerId = null): array
+    public function __invoke(int $companyId, ?string $status = null, ?int $providerId = null, bool $withOpenIncidents = false): array
     {
-        return $this->repository->list($companyId, $status, $providerId);
+        return $this->repository->list($companyId, $status, $providerId, $withOpenIncidents);
     }
 }
