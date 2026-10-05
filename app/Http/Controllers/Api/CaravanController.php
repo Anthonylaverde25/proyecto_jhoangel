@@ -237,7 +237,8 @@ class CaravanController extends Controller
             caravanId: $id,
             lossReasonId: (int) $validated['loss_reason_id'],
             lossNotes: $validated['loss_notes'] ?? null,
-            lossDate: $validated['loss_date']
+            lossDate: $validated['loss_date'],
+            actionUserId: $request->user()?->id
         );
 
         return response()->json(

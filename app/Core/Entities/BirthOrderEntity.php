@@ -21,9 +21,10 @@ use DateTimeInterface;
  * fulfilled over many rounds — the calving season lasts weeks — so PARTIAL is its normal state, and
  * a calving found at a round that the order did not list is added to the roll as unplanned.
  *
- * The status is never set by hand. It is recalculated against the roll: an order with no PENDING
- * line left is EXECUTED, one with some is PARTIAL. What registers the calvings is the PAR-01
- * processing; the status is its consequence, never its cause.
+ * The status is never set by hand. It is recalculated against the roll: an order with no open line
+ * left (PENDING or OVERDUE) is EXECUTED, one with some is PARTIAL. An overdue female keeps the order
+ * open: she is an alert, not an outcome. What registers the calvings is the PAR-01 processing, or a
+ * loss registered outside it; the status is their consequence, never their cause.
  */
 final class BirthOrderEntity
 {
@@ -192,33 +193,34 @@ final class BirthOrderEntity
 
     /**
      * Registers one execution — a round — from the screen, from a registration or from a scanned
-     * sheet.
+     * sheet: the calvings it resolved and the females it found past their due date.
      *
-     * @param array<int, array{outcome: BirthOutcome, event_date: string, calf_caravan_id: ?int, calf_batch_id: ?int, observations: ?string}> $resultByMotherId
+     * @param array<int, array{outcome: BirthOutcome, event_date: string, calf_caravan_id: ?int, calf_batch_id: ?int, observations: ?string, calf_sex?: ?string}> $resultByMotherId
+     * @param array<int, array{reported_at: string, notes: ?string}> $overdueByMotherId
      *
      * @throws BirthOrderDomainException
      */
-    public function recordExecution(array $resultByMotherId, DateTimeInterface $at): void
+    public function recordExecution(array $resultByMotherId, DateTimeInterface $at, array $overdueByMotherId = []): void
     {
-        if (!$this->status->isOpen()) {
-            throw BirthOrderDomainException::domainError(
-                "La orden {$this->code} está {$this->status->label()} y no admite más partos.",
-                'BIRTH_ORDER_NOT_EXECUTABLE'
-            );
-        }
+        $this->assertExecutable();
 
         foreach ($this->animals as $animal) {
-            $result = $resultByMotherId[$animal->getMotherCaravanId()] ?? null;
+            $motherId = $animal->getMotherCaravanId();
+            $result = $resultByMotherId[$motherId] ?? null;
+            $overdue = $overdueByMotherId[$motherId] ?? null;
 
-            if ($result !== null && $animal->isPending()) {
+            if ($result !== null && $animal->isOpen()) {
                 $animal->resolve(
                     $result['outcome'],
                     $result['event_date'],
                     $result['calf_caravan_id'],
                     $result['calf_batch_id'],
                     $at,
-                    $result['observations']
+                    $result['observations'],
+                    $result['calf_sex'] ?? null
                 );
+            } elseif ($overdue !== null) {
+                $animal->markOverdue($overdue['reported_at'], $overdue['notes'], $at);
             }
         }
 
@@ -226,11 +228,30 @@ final class BirthOrderEntity
             $this->firstExecutedAt = DateTimeImmutable::createFromInterface($at);
         }
 
-        $this->status = $this->pendingCount() === 0 ? TransferOrderStatus::EXECUTED : TransferOrderStatus::PARTIAL;
+        $this->refreshStatus();
+    }
 
-        if ($this->status === TransferOrderStatus::EXECUTED) {
-            $this->closedAt = new DateTimeImmutable();
+    /**
+     * A loss registered outside the sheet (Monitoreo Gestacional) for a female still open in the
+     * order: her line closes with the real reason and the order is recalculated, so an abortion does
+     * not leave it waiting for a calving that will never happen.
+     *
+     * @throws BirthOrderDomainException
+     */
+    public function resolveByExternalLoss(int $motherCaravanId, string $reasonCode, string $lossDate, DateTimeInterface $at): ?BirthOrderAnimalEntity
+    {
+        $this->assertExecutable();
+
+        $line = $this->animalByMotherId($motherCaravanId);
+
+        if ($line === null || !$line->isOpen()) {
+            return null;
         }
+
+        $line->closeByExternalLoss($reasonCode, $lossDate, $at);
+        $this->refreshStatus();
+
+        return $line;
     }
 
     /**
@@ -248,6 +269,7 @@ final class BirthOrderEntity
 
         $this->requireReason($reason, 'cerrar incompleta');
 
+        // Overdue females are skipped too, but their alert lives in the gestation and stays open.
         foreach ($this->animals as $animal) {
             $animal->markSkipped();
         }
@@ -301,19 +323,49 @@ final class BirthOrderEntity
         return $this->countByStatus(BirthOrderAnimalStatus::BORN);
     }
 
+    /**
+     * Calved a live calf that died at foot.
+     */
+    public function bornDiedCount(): int
+    {
+        return $this->countByStatus(BirthOrderAnimalStatus::BORN_DIED);
+    }
+
     public function lostCount(): int
     {
         return $this->countByStatus(BirthOrderAnimalStatus::LOST);
     }
 
-    public function resolvedCount(): int
+    /**
+     * Lines closed by a loss registered outside the sheet.
+     */
+    public function externalLossCount(): int
     {
-        return $this->bornCount() + $this->lostCount();
+        return count(array_filter(
+            $this->animals,
+            fn (BirthOrderAnimalEntity $a) => $a->getStatus() === BirthOrderAnimalStatus::LOST && $a->getLossReasonCode() !== null
+        ));
     }
 
+    public function resolvedCount(): int
+    {
+        return $this->bornCount() + $this->bornDiedCount() + $this->lostCount();
+    }
+
+    /**
+     * Still waiting for the calving: PENDING and OVERDUE.
+     */
     public function pendingCount(): int
     {
-        return $this->countByStatus(BirthOrderAnimalStatus::PENDING);
+        return count($this->openAnimals());
+    }
+
+    /**
+     * Past their due date without calving: the order's open alerts.
+     */
+    public function overdueCount(): int
+    {
+        return $this->countByStatus(BirthOrderAnimalStatus::OVERDUE);
     }
 
     public function skippedCount(): int
@@ -332,11 +384,14 @@ final class BirthOrderEntity
     }
 
     /**
+     * The females still waiting for their calving, with or without an overdue alert: what a sheet
+     * reprinted for the next round lists.
+     *
      * @return BirthOrderAnimalEntity[]
      */
-    public function pendingAnimals(): array
+    public function openAnimals(): array
     {
-        return array_values(array_filter($this->animals, fn (BirthOrderAnimalEntity $a) => $a->isPending()));
+        return array_values(array_filter($this->animals, fn (BirthOrderAnimalEntity $a) => $a->isOpen()));
     }
 
     /**
@@ -385,6 +440,31 @@ final class BirthOrderEntity
     {
         if ($periodStart !== null && $periodEnd !== null && $periodEnd < $periodStart) {
             throw BirthOrderDomainException::domainError('El período de parición termina antes de empezar.', 'INVALID_PERIOD');
+        }
+    }
+
+    /**
+     * @throws BirthOrderDomainException
+     */
+    private function assertExecutable(): void
+    {
+        if (!$this->status->isOpen()) {
+            throw BirthOrderDomainException::domainError(
+                "La orden {$this->code} está {$this->status->label()} y no admite más partos.",
+                'BIRTH_ORDER_NOT_EXECUTABLE'
+            );
+        }
+    }
+
+    /**
+     * EXECUTED once no line is open, PARTIAL while one is.
+     */
+    private function refreshStatus(): void
+    {
+        $this->status = $this->pendingCount() === 0 ? TransferOrderStatus::EXECUTED : TransferOrderStatus::PARTIAL;
+
+        if ($this->status === TransferOrderStatus::EXECUTED) {
+            $this->closedAt = new DateTimeImmutable();
         }
     }
 

@@ -28,6 +28,7 @@ class CaravanGestation extends Model
         'end_date',
         'notes',
         'service_order_id',
+        'calving_overdue_reported_at',
     ];
 
     /**
@@ -44,6 +45,7 @@ class CaravanGestation extends Model
         'gestation_stage' => GestationStage::class,
         'gestation_months' => 'float',
         'service_order_id' => 'integer',
+        'calving_overdue_reported_at' => 'date',
     ];
 
     /**

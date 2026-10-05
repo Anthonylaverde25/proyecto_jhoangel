@@ -12,6 +12,7 @@ use App\Core\Enums\BirthOutcome;
 use App\Core\Enums\TransferOrderKind;
 use App\Core\Exceptions\BirthOrderDomainException;
 use App\Core\Interfaces\IBirthOrderRepository;
+use App\Core\ValueObjects\BirthSheetMark;
 
 /**
  * What a birth order adds to a PAR-01 execution, kept out of the use case that already carries the
@@ -25,6 +26,10 @@ use App\Core\Interfaces\IBirthOrderRepository;
 final class BirthOrderExecutionService
 {
     private const FIELD = 'orden_paricion';
+
+    public const ROW_ALREADY = 'already';
+    public const ROW_DIFFERS = 'differs';
+    public const ROW_OVERDUE_KEPT = 'overdue_kept';
 
     public function __construct(
         private readonly IBirthOrderRepository $repository,
@@ -125,34 +130,73 @@ final class BirthOrderExecutionService
     }
 
     /**
-     * Why a female of the order cannot be resolved again: she already was, with it. Null when the
-     * order has nothing to say.
+     * R1 — a sheet is reloaded as it fills up: what the order already knows about a female is
+     * compared with what the paper says before anything else, and never blocks the sheet.
      *
-     * @return array{code: string, message: string}|null
+     * Null when the row is news: a pending female, or an overdue one the paper now says calved.
+     * Otherwise what to do with it:
+     * - `already`: the paper says what is registered (or nothing, or only the N of an earlier round);
+     * - `differs`: the paper says something else — kept as registered, reported as a warning;
+     * - `overdue_kept`: an overdue female still marked only with N — the alert stays open.
+     *
+     * @return array{kind: string, message: string}|null
      */
-    public function alreadyResolvedByOrder(?BirthOrderEntity $order, int $motherId, string $tag): ?array
+    public function reconcile(?BirthOrderAnimalEntity $line, BirthSheetMark $mark, ?string $calfTag): ?array
     {
-        $line = $order?->animalByMotherId($motherId);
-
-        if ($line === null || $line->isPending()) {
+        if ($line === null) {
             return null;
         }
 
-        $what = $line->getOutcome()?->label() ?? strtolower($line->getStatus()->name);
+        if ($line->isOverdue()) {
+            if (!$mark->isEmpty() && !$mark->isOverdueOnly()) {
+                return null;
+            }
+
+            return [
+                'kind' => self::ROW_OVERDUE_KEPT,
+                'message' => 'No parió en fecha · avisado el ' . $this->display($line->getOverdueReportedAt()) . '.',
+            ];
+        }
+
+        if (!$line->isResolved()) {
+            return null;
+        }
+
+        $registered = $line->resolvedLabel() . ($line->getCalfIdentification() !== null ? " (cría {$line->getCalfIdentification()})" : '');
+        $on = $line->getEventDate() !== null ? ' el ' . $this->display($line->getEventDate()) : '';
+        $outcome = $mark->outcome();
+
+        if ($outcome !== null && $line->getOutcome() !== null && $line->matches($outcome, $calfTag)) {
+            return ['kind' => self::ROW_ALREADY, 'message' => "Ya registrada{$on}: {$registered}."];
+        }
+
+        if ($outcome === null && !$mark->isAbortion() && !$mark->isAmbiguous()) {
+            // Blank, or only the N of an earlier round: resolved from the screen or by a loss.
+            $how = $line->getLossReasonCode() !== null ? $line->resolvedLabel() : "Registrada{$on}: {$registered}";
+
+            return ['kind' => self::ROW_ALREADY, 'message' => "{$how}."];
+        }
+
+        $paper = match (true) {
+            $outcome === null => $mark->isAbortion() ? 'Aborto' : "«{$mark->describe()}»",
+            $outcome === BirthOutcome::LIVE && $calfTag !== null => "{$outcome->label()} (cría {$calfTag})",
+            default => $outcome->label(),
+        };
 
         return [
-            'code' => 'ALREADY_RESOLVED',
-            'message' => "La hembra '{$tag}' ya se registró con la orden {$order->getCode()} ({$what}"
-                . ($line->getEventDate() !== null ? ', ' . date('d/m/Y', (int) strtotime($line->getEventDate())) : '') . ').',
+            'kind' => self::ROW_DIFFERS,
+            'message' => "La planilla dice {$paper}; ya se registró {$registered}{$on}. Se conserva lo registrado.",
         ];
     }
 
     /**
-     * Marks the roll with what this round resolved, adds the unplanned calvings and recalculates the
-     * status.
+     * Marks the roll with what this round resolved and the females it found overdue, adds the
+     * unplanned calvings and recalculates the status.
      *
-     * @param array<int, array{outcome: BirthOutcome, event_date: string, calf_caravan_id: ?int, calf_batch_id: ?int, observations: ?string}> $resultByMotherId
+     * @param array<int, array{outcome: BirthOutcome, event_date: string, calf_caravan_id: ?int, calf_batch_id: ?int, observations: ?string, calf_sex: ?string}> $resultByMotherId
+     * @param array<int, array{reported_at: string, notes: ?string}> $overdueByMotherId
      * @param list<array{mother_id: int, gestation_id: ?int, batch_id: ?int}> $unplanned
+     * @param array<string, int> $reconciled how many rows were already registered, differed or were overdue resolved
      * @return array<string, mixed>
      *
      * @throws BirthOrderDomainException
@@ -161,15 +205,17 @@ final class BirthOrderExecutionService
         BirthOrderEntity $order,
         Par01SubmissionDTO $dto,
         array $resultByMotherId,
+        array $overdueByMotherId,
         array $unplanned,
-        \DateTimeInterface $at
+        \DateTimeInterface $at,
+        array $reconciled = []
     ): array {
         foreach ($unplanned as $female) {
             $order->addUnplanned($female['mother_id'], $female['gestation_id'], $female['batch_id']);
         }
 
         $resolvedBefore = $order->resolvedCount();
-        $order->recordExecution($resultByMotherId, $at);
+        $order->recordExecution($resultByMotherId, $at, $overdueByMotherId);
         $resolvedNow = $order->resolvedCount() - $resolvedBefore;
 
         $saved = $this->repository->save(
@@ -180,18 +226,22 @@ final class BirthOrderExecutionService
                 'origin' => $dto->origin,
                 'resolved_now' => $resolvedNow,
                 'born_now' => count(array_filter($resultByMotherId, fn (array $r) => $r['outcome'] === BirthOutcome::LIVE)),
-                'lost_now' => count(array_filter($resultByMotherId, fn (array $r) => $r['outcome'] !== BirthOutcome::LIVE)),
+                'stillborn_now' => count(array_filter($resultByMotherId, fn (array $r) => $r['outcome'] === BirthOutcome::STILLBORN)),
+                'born_died_now' => count(array_filter($resultByMotherId, fn (array $r) => $r['outcome'] === BirthOutcome::PERINATAL_DEATH)),
                 'unplanned_now' => count($unplanned),
+                'overdue_now' => count($overdueByMotherId),
+                'overdue_resolved' => $reconciled['overdue_resolved'] ?? 0,
+                'already_registered' => $reconciled['already_registered'] ?? 0,
+                'differs' => $reconciled['differs'] ?? 0,
                 'resolved_total' => $order->resolvedCount(),
                 'pending' => $order->pendingCount(),
+                'overdue' => $order->overdueCount(),
                 'round_date' => $dto->roundDate(),
             ]
         );
 
-        $pending = array_map(
-            fn (BirthOrderAnimalEntity $line) => $line->getMotherIdentification() ?? (string) $line->getMotherCaravanId(),
-            $saved->pendingAnimals()
-        );
+        $identification = fn (BirthOrderAnimalEntity $line) => $line->getMotherIdentification() ?? (string) $line->getMotherCaravanId();
+        $open = $saved->openAnimals();
 
         return [
             'id' => $saved->getId(),
@@ -204,10 +254,22 @@ final class BirthOrderExecutionService
             'resolved_now' => $resolvedNow,
             'resolved_head_count' => $saved->resolvedCount(),
             'born_head_count' => $saved->bornCount(),
+            'born_died_head_count' => $saved->bornDiedCount(),
             'lost_head_count' => $saved->lostCount(),
-            'pending_head_count' => count($pending),
-            'pending_identifications' => $pending,
+            'pending_head_count' => count($open),
+            'overdue_head_count' => $saved->overdueCount(),
+            'pending_identifications' => array_map($identification, $open),
+            'overdue_animals' => array_map(fn (BirthOrderAnimalEntity $line) => [
+                'identification' => $identification($line),
+                'overdue_reported_at' => $line->getOverdueReportedAt(),
+                'estimated_due_date' => $line->getEstimatedDueDate(),
+            ], array_values(array_filter($open, fn (BirthOrderAnimalEntity $line) => $line->isOverdue()))),
         ];
+    }
+
+    private function display(?string $date): string
+    {
+        return $date !== null ? date('d/m/Y', (int) strtotime(substr($date, 0, 10))) : '';
     }
 
     /**

@@ -236,6 +236,20 @@ final class CaravanEntity
         return null;
     }
 
+    /**
+     * Gestations closed by a calf born dead: the mother's record. A calf that died at foot is not
+     * counted — that gestation closed successful.
+     *
+     * @return GestationEntity[] newest first
+     */
+    public function getStillbirths(): array
+    {
+        $stillbirths = array_values(array_filter($this->gestations, fn (GestationEntity $g) => $g->isStillbirth()));
+        usort($stillbirths, fn (GestationEntity $a, GestationEntity $b) => strcmp((string) $b->getEndDate(), (string) $a->getEndDate()));
+
+        return $stillbirths;
+    }
+
     public function getLineage(): ?LineageEntity
     {
         return $this->lineage;

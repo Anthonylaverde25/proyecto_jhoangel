@@ -21,14 +21,16 @@ class RegisterBirthsTest extends BirthOrderTestCase
         $response = $this->apiAs('POST', '/birth-orders/register', [
             'animals' => [
                 ['caravan_id' => $a->id, 'outcome' => 'LIVE', 'calf_identification' => 'BO-MC1', 'calf_sex' => 'H', 'calf_weight' => 30, 'birth_date' => now()->toDateString()],
-                ['caravan_id' => $b->id, 'outcome' => 'ABORTION', 'birth_date' => now()->toDateString()],
+                ['caravan_id' => $b->id, 'outcome' => 'PERINATAL_DEATH', 'calf_sex' => 'M', 'birth_date' => now()->toDateString()],
             ],
         ])->assertStatus(201);
 
         $this->assertSame('EXECUTED', $response->json('order.status'));
         $this->assertSame('REGISTERED', $response->json('order.kind'));
         $this->assertSame(1, $response->json('data.live_count'));
-        $this->assertSame(1, $response->json('data.abortion_count'));
+        $this->assertSame(1, $response->json('data.perinatal_death_count'));
+        $this->assertSame('BORN_DIED', collect($response->json('order.animals'))->firstWhere('caravan_id', $b->id)['status']);
+        $this->assertSame('M', collect($response->json('order.animals'))->firstWhere('caravan_id', $b->id)['calf_sex']);
         $this->assertSame($this->breedingA->id, (int) Caravan::where('identification', 'BO-MC1')->value('batch_id'));
     }
 

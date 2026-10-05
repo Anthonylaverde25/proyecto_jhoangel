@@ -8,6 +8,7 @@ use App\Models\Batch;
 use App\Models\BirthOrderAnimal;
 use App\Models\Caravan;
 use App\Models\CaravanLineage;
+use App\Models\Color;
 
 /**
  * What the PAR-01 processing checks on each row, and what it decides the system knows better than
@@ -105,7 +106,7 @@ class Par01SheetTest extends BirthOrderTestCase
         $this->assertSame($this->breedingB->id, (int) Caravan::where('identification', 'BO-IC1')->value('batch_id'));
     }
 
-    public function test_a_row_already_resolved_is_refused(): void
+    public function test_a_row_already_resolved_with_something_else_is_a_warning(): void
     {
         $a = $this->pregnantFemale('BO-J1');
         $b = $this->pregnantFemale('BO-J2');
@@ -113,9 +114,13 @@ class Par01SheetTest extends BirthOrderTestCase
 
         $this->scan($orderId, [$this->liveRow($a, 'BO-JC1')])->assertStatus(201);
 
-        $this->scan($orderId, [$this->liveRow($a, 'BO-JC2')])
-            ->assertStatus(422)
-            ->assertJsonPath('row_errors.0.errors.0.code', 'ALREADY_RESOLVED');
+        // Another calf tag for her: what is registered is kept, and the rest of the sheet goes on.
+        $response = $this->scan($orderId, [$this->liveRow($a, 'BO-JC2'), $this->liveRow($b, 'BO-JC3')])->assertStatus(201);
+
+        $this->assertContains('ALREADY_RESOLVED_DIFFERS', array_column($response->json('data.warnings'), 'code'));
+        $this->assertSame(1, $response->json('data.differs_count'));
+        $this->assertSame(0, Caravan::where('identification', 'BO-JC2')->count());
+        $this->assertSame(1, Caravan::where('identification', 'BO-JC3')->count());
     }
 
     public function test_the_sire_is_resolved_by_the_gestation_when_left_empty(): void
@@ -142,7 +147,33 @@ class Par01SheetTest extends BirthOrderTestCase
         $this->assertNull(CaravanLineage::where('caravan_id', Caravan::where('identification', 'BO-KC2')->value('id'))->value('father_id'));
     }
 
-    public function test_a_declared_sire_must_be_a_male(): void
+    public function test_the_coat_is_one_of_the_catalog_and_of_the_breed(): void
+    {
+        $a = $this->pregnantFemale('BO-P1');
+        $b = $this->pregnantFemale('BO-P2');
+        $c = $this->pregnantFemale('BO-P3');
+        $orderId = (int) $this->emit([$a, $b, $c])->json('id');
+
+        $response = $this->scan($orderId, [
+            [...$this->liveRow($a, 'BO-PC1'), 'raza' => 'Angus', 'pelaje' => 'Pampa'],
+            [...$this->liveRow($b, 'BO-PC2'), 'raza' => 'Angus', 'pelaje' => 'Verde'],
+        ])->assertStatus(422);
+        $this->assertSame(['COLOR_NOT_OF_BREED', 'COLOR_UNKNOWN'], array_map(fn ($r) => $r['errors'][0]['code'], $response->json('row_errors')));
+        $this->assertSame('pelaje', $response->json('row_errors.0.errors.0.field'));
+
+        // Read as written (accents and case aside), or chosen by id; without a breed, any coat.
+        $this->scan($orderId, [
+            [...$this->liveRow($a, 'BO-PC1'), 'raza' => 'angus', 'pelaje' => 'NEGRO'],
+            [...$this->liveRow($b, 'BO-PC2'), 'pelaje' => 'Overo Colorado'],
+            [...$this->liveRow($c, 'BO-PC3'), 'raza' => 'Hereford', 'color_id' => Color::where('name', 'Pampa')->value('id')],
+        ])->assertStatus(201);
+
+        $this->assertSame('Negro', Color::whereKey(Caravan::where('identification', 'BO-PC1')->value('color_id'))->value('name'));
+        $this->assertSame('Overo Colorado', Color::whereKey(Caravan::where('identification', 'BO-PC2')->value('color_id'))->value('name'));
+        $this->assertSame('Pampa', Color::whereKey(Caravan::where('identification', 'BO-PC3')->value('color_id'))->value('name'));
+    }
+
+        public function test_a_declared_sire_must_be_a_male(): void
     {
         $a = $this->pregnantFemale('BO-L1');
         $cow = $this->pregnantFemale('BO-L2');

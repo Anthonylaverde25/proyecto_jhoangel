@@ -44,7 +44,9 @@ final class BirthOrderController extends Controller
         $kind = $request->query('kind');
         $kind = is_string($kind) ? TransferOrderKind::tryFrom(strtoupper($kind))?->value : null;
 
-        $orders = ($this->useCases->list)($this->companyId(), $status, $kind);
+        $overdueOnly = $request->boolean('overdue');
+
+        $orders = ($this->useCases->list)($this->companyId(), $status, $kind, $overdueOnly);
 
         return response()->json(array_map(
             fn ($order) => (new BirthOrderResource($order))->summary()->resolve($request),

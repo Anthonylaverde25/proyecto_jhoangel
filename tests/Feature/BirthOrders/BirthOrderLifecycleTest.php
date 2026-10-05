@@ -34,16 +34,16 @@ class BirthOrderLifecycleTest extends BirthOrderTestCase
             ['caravana_madre' => $c->identification],
         ])->assertStatus(201)->assertJsonPath('data.birth_order.status', 'PARTIAL');
 
-        // Round 2: a stillbirth and an abortion close the order.
+        // Round 2: a calf born dead and one that died at foot close the order.
         $this->scan($orderId, [
-            ['caravana_madre' => $b->identification, 'resultado' => 'M', 'fecha_nacimiento' => now()->toDateString()],
-            ['caravana_madre' => $c->identification, 'resultado' => 'A', 'fecha_nacimiento' => now()->toDateString()],
+            ['caravana_madre' => $b->identification, 'resultado' => 'NM', 'fecha_nacimiento' => now()->toDateString()],
+            ['caravana_madre' => $c->identification, 'resultado' => 'M', 'fecha_nacimiento' => now()->toDateString()],
         ])->assertStatus(201)->assertJsonPath('data.birth_order.status', 'EXECUTED');
 
         $saved = $this->apiAs('GET', "/birth-orders/{$orderId}")->assertOk();
         $this->assertSame(1, $saved->json('born_head_count'));
         $this->assertSame(1, $saved->json('stillborn_head_count'));
-        $this->assertSame(1, $saved->json('abortion_head_count'));
+        $this->assertSame(1, $saved->json('born_died_head_count'));
 
         // The calf was born in its mother's batch, weighed, with lineage.
         $calf = Caravan::where('identification', 'BO-C1')->firstOrFail();
@@ -52,15 +52,17 @@ class BirthOrderLifecycleTest extends BirthOrderTestCase
         $this->assertEquals(34.5, (float) CaravanWeight::where('caravan_id', $calf->id)->where('current', true)->value('weight'));
         $this->assertSame($a->id, (int) CaravanLineage::where('caravan_id', $calf->id)->value('mother_id'));
 
-        // Every gestation is closed, with its loss reason when lost.
+        // Every gestation is closed: the stillbirth as a loss of the mother, the death at foot as a
+        // successful calving.
         $this->assertNull($this->currentGestation($a));
         $lostB = CaravanGestation::where('caravan_id', $b->id)->latest('id')->firstOrFail();
         $this->assertFalse((bool) $lostB->success);
+        $this->assertTrue((bool) CaravanGestation::where('caravan_id', $c->id)->latest('id')->value('success'));
 
-        // A full-term stillbirth makes the heifer a cow; an abortion does not.
+        // The three are full-term calvings: the heifers become cows.
         $this->assertSame($this->categoryId('VACA'), (int) $a->fresh()->category_id);
         $this->assertSame($this->categoryId('VACA'), (int) $b->fresh()->category_id);
-        $this->assertSame($this->categoryId('VAQUILLONA'), (int) $c->fresh()->category_id);
+        $this->assertSame($this->categoryId('VACA'), (int) $c->fresh()->category_id);
     }
 
     public function test_a_female_cannot_be_in_two_open_birth_orders(): void

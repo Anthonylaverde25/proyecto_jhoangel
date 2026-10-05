@@ -125,7 +125,7 @@ final class RegisterBirthUseCase
                 exitWeight: null,
                 breedId: $dto->calfBreedId,
                 breedName: null,
-                colorId: null,
+                colorId: $dto->calfColorId,
                 colorName: null,
                 sex: $calfSex,
                 entryDate: new \DateTime($dto->birthDate),

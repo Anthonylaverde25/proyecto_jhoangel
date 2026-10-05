@@ -17,7 +17,9 @@ final readonly class RegisterBirthDTO
         public int $batchId,
         public int $motherId,
         public ?int $fatherId = null,
-        public ?int $gestationId = null
+        public ?int $gestationId = null,
+        /** The coat (pelaje): a colour of the catalog. */
+        public ?int $calfColorId = null
     ) {
     }
 
@@ -38,7 +40,8 @@ final readonly class RegisterBirthDTO
             (int) ($data['batch_id'] ?? 0),
             (int) ($data['mother_id'] ?? 0),
             isset($data['father_id']) ? (int) $data['father_id'] : null,
-            isset($data['gestation_id']) ? (int) $data['gestation_id'] : null
+            isset($data['gestation_id']) ? (int) $data['gestation_id'] : null,
+            isset($data['calf_color_id']) ? (int) $data['calf_color_id'] : null
         );
     }
 }

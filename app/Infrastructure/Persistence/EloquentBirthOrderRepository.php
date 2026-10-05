@@ -22,6 +22,7 @@ class EloquentBirthOrderRepository implements IBirthOrderRepository
         'animals.mother.categoryRelation',
         'animals.mother.subcategoryRelation',
         'animals.gestation.sires',
+        'animals.gestation.lossReason',
         'animals.calf',
         'animals.calfBatch',
         'history.actionUser',
@@ -99,7 +100,7 @@ class EloquentBirthOrderRepository implements IBirthOrderRepository
         return $model !== null ? BirthOrderMapper::toEntity($model) : null;
     }
 
-    public function list(int $companyId, ?string $status = null, ?string $kind = null): array
+    public function list(int $companyId, ?string $status = null, ?string $kind = null, bool $overdueOnly = false): array
     {
         // The roll is loaded with its source batch but without the females: the list needs how many
         // calved and from where, not who.
@@ -107,6 +108,10 @@ class EloquentBirthOrderRepository implements IBirthOrderRepository
             ->where('company_id', $companyId)
             ->when($status !== null, fn (Builder $query) => $query->where('status', $status))
             ->when($kind !== null, fn (Builder $query) => $query->where('kind', $kind))
+            ->when($overdueOnly, fn (Builder $query) => $query->whereHas(
+                'animals',
+                fn (Builder $line) => $line->where('status', BirthOrderAnimalStatus::OVERDUE->value)
+            ))
             ->orderByDesc('id')
             ->get()
             ->map(fn (BirthOrder $model) => BirthOrderMapper::toEntity($model))
@@ -134,7 +139,7 @@ class EloquentBirthOrderRepository implements IBirthOrderRepository
             ->join('birth_orders', 'birth_order_animals.birth_order_id', '=', 'birth_orders.id')
             ->where('birth_orders.company_id', $companyId)
             ->whereIn('birth_orders.status', [TransferOrderStatus::ISSUED->value, TransferOrderStatus::PARTIAL->value])
-            ->where('birth_order_animals.status', BirthOrderAnimalStatus::PENDING->value)
+            ->whereIn('birth_order_animals.status', BirthOrderAnimalStatus::openValues())
             ->whereIn('birth_order_animals.mother_caravan_id', $motherIds)
             ->when($exceptOrderId !== null, fn ($query) => $query->where('birth_orders.id', '!=', $exceptOrderId))
             ->pluck('birth_orders.code', 'birth_order_animals.mother_caravan_id')
@@ -148,10 +153,27 @@ class EloquentBirthOrderRepository implements IBirthOrderRepository
             ->join('birth_orders', 'birth_order_animals.birth_order_id', '=', 'birth_orders.id')
             ->where('birth_orders.company_id', $companyId)
             ->whereIn('birth_orders.status', [TransferOrderStatus::ISSUED->value, TransferOrderStatus::PARTIAL->value])
-            ->where('birth_order_animals.status', BirthOrderAnimalStatus::PENDING->value)
+            ->whereIn('birth_order_animals.status', BirthOrderAnimalStatus::openValues())
             ->pluck('birth_orders.code', 'birth_order_animals.mother_caravan_id')
             ->mapWithKeys(fn ($code, $motherId) => [(int) $motherId => (string) $code])
             ->all();
+    }
+
+    public function findOpenLineForGestation(int $motherId, int $gestationId, int $companyId): ?BirthOrderEntity
+    {
+        $orderId = DB::table('birth_order_animals')
+            ->join('birth_orders', 'birth_order_animals.birth_order_id', '=', 'birth_orders.id')
+            ->where('birth_orders.company_id', $companyId)
+            ->whereIn('birth_orders.status', [TransferOrderStatus::ISSUED->value, TransferOrderStatus::PARTIAL->value])
+            ->whereIn('birth_order_animals.status', BirthOrderAnimalStatus::openValues())
+            ->where('birth_order_animals.mother_caravan_id', $motherId)
+            ->where(fn ($query) => $query
+                ->where('birth_order_animals.gestation_id', $gestationId)
+                ->orWhereNull('birth_order_animals.gestation_id'))
+            ->orderByDesc('birth_orders.id')
+            ->value('birth_orders.id');
+
+        return $orderId !== null ? $this->findById((int) $orderId, $companyId) : null;
     }
 
     public function motherFacts(array $motherIds, int $companyId): array
@@ -199,6 +221,16 @@ class EloquentBirthOrderRepository implements IBirthOrderRepository
         return $id !== null ? (int) $id : null;
     }
 
+    public function lossReasonCodeById(int $id, int $companyId): ?string
+    {
+        $code = DB::table('gestation_loss_reasons')
+            ->where('company_id', $companyId)
+            ->where('id', $id)
+            ->value('code');
+
+        return $code !== null ? (string) $code : null;
+    }
+
     /**
      * New orders and rewritten drafts insert their roll whole. Afterwards a line only changes its
      * outcome, and a round may add unplanned lines.
@@ -217,6 +249,11 @@ class EloquentBirthOrderRepository implements IBirthOrderRepository
                 'event_date' => $animal->getEventDate(),
                 'calf_caravan_id' => $animal->getCalfCaravanId(),
                 'calf_batch_id' => $animal->getCalfBatchId(),
+                // Only a calf that died keeps its sex on the line; a live one has its caravan.
+                'calf_sex' => $animal->getCalfCaravanId() === null ? $animal->getCalfSex() : null,
+                'loss_reason_code' => $animal->getLossReasonCode(),
+                'overdue_reported_at' => $animal->getOverdueReportedAt(),
+                'overdue_notes' => $animal->getOverdueNotes(),
                 'executed_at' => $animal->getExecutedAt(),
                 'observations' => $animal->getObservations(),
             ];

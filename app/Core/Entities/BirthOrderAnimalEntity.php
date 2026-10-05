@@ -11,7 +11,8 @@ use DateTimeInterface;
 
 /**
  * One pregnant female of a birth order: the gestation it is expected to close and, once resolved,
- * what happened — the calf she had, or the loss.
+ * what happened — the calf she had, a calf that died, or the loss. Before that, it may carry an
+ * overdue alert: she passed her due date without calving.
  *
  * There is no destination on the line: the calf is born in the batch its mother is in on the day it
  * is born. `calfBatchId` records where that turned out to be.
@@ -45,8 +46,12 @@ final class BirthOrderAnimalEntity
         private readonly ?string $gestationStage = null,
         private readonly array $sires = [],
         private readonly ?string $calfIdentification = null,
-        private readonly ?string $calfSex = null,
-        private readonly ?string $calfBatchName = null
+        private ?string $calfSex = null,
+        private readonly ?string $calfBatchName = null,
+        private ?string $lossReasonCode = null,
+        private ?string $overdueReportedAt = null,
+        private ?string $overdueNotes = null,
+        private readonly ?string $lossReasonLabel = null
     ) {
     }
 
@@ -173,14 +178,59 @@ final class BirthOrderAnimalEntity
         return $this->calfBatchName;
     }
 
+    /**
+     * The code of the loss reason of a line closed by a loss registered outside the sheet.
+     */
+    public function getLossReasonCode(): ?string
+    {
+        return $this->lossReasonCode;
+    }
+
+    public function getLossReasonLabel(): ?string
+    {
+        return $this->lossReasonLabel;
+    }
+
+    /**
+     * The day an N was observed: she passed her due date without calving. Kept after she calves,
+     * to measure the delay.
+     */
+    public function getOverdueReportedAt(): ?string
+    {
+        return $this->overdueReportedAt;
+    }
+
+    public function getOverdueNotes(): ?string
+    {
+        return $this->overdueNotes;
+    }
+
     public function isPending(): bool
     {
         return $this->status === BirthOrderAnimalStatus::PENDING;
     }
 
+    public function isOverdue(): bool
+    {
+        return $this->status === BirthOrderAnimalStatus::OVERDUE;
+    }
+
     /**
-     * Records what happened to this female. A live calving names the calf it created and the batch
-     * it was born in; a loss names neither.
+     * Still waiting for the calving, with or without an overdue alert.
+     */
+    public function isOpen(): bool
+    {
+        return $this->status->isOpen();
+    }
+
+    public function isResolved(): bool
+    {
+        return $this->status->isResolved();
+    }
+
+    /**
+     * Records what happened to this female, from PENDING or from OVERDUE. A live calving names the
+     * calf it created and the batch it was born in; a calf that died names at most its sex.
      */
     public function resolve(
         BirthOutcome $outcome,
@@ -188,20 +238,95 @@ final class BirthOrderAnimalEntity
         ?int $calfCaravanId,
         ?int $calfBatchId,
         DateTimeInterface $at,
-        ?string $observations = null
+        ?string $observations = null,
+        ?string $calfSex = null
     ): void {
+        if (!$this->isOpen()) {
+            return;
+        }
+
+        $live = $outcome === BirthOutcome::LIVE;
+
         $this->status = BirthOrderAnimalStatus::forOutcome($outcome);
         $this->outcome = $outcome;
         $this->eventDate = substr($eventDate, 0, 10);
-        $this->calfCaravanId = $outcome === BirthOutcome::LIVE ? $calfCaravanId : null;
-        $this->calfBatchId = $outcome === BirthOutcome::LIVE ? $calfBatchId : null;
+        $this->calfCaravanId = $live ? $calfCaravanId : null;
+        $this->calfBatchId = $live ? $calfBatchId : null;
+        $this->calfSex = $calfSex;
         $this->executedAt = DateTimeImmutable::createFromInterface($at);
         $this->observations = $observations;
     }
 
+    /**
+     * N: she passed her due date without calving. The line stays open, with the alert.
+     */
+    public function markOverdue(string $reportedAt, ?string $notes, DateTimeInterface $at): void
+    {
+        if (!$this->isPending()) {
+            return;
+        }
+
+        $this->status = BirthOrderAnimalStatus::OVERDUE;
+        $this->overdueReportedAt = substr($reportedAt, 0, 10);
+        $this->overdueNotes = $notes;
+        $this->executedAt = DateTimeImmutable::createFromInterface($at);
+    }
+
+    /**
+     * Her pregnancy was lost and registered outside the sheet (Monitoreo Gestacional): the line is
+     * closed with the real reason and no outcome.
+     */
+    public function closeByExternalLoss(string $reasonCode, string $lossDate, DateTimeInterface $at): void
+    {
+        if (!$this->isOpen()) {
+            return;
+        }
+
+        $this->status = BirthOrderAnimalStatus::LOST;
+        $this->outcome = null;
+        $this->lossReasonCode = $reasonCode;
+        $this->eventDate = substr($lossDate, 0, 10);
+        $this->executedAt = DateTimeImmutable::createFromInterface($at);
+    }
+
+    /**
+     * Whether a reloaded sheet says what is already registered: the same outcome and, for a live
+     * calf, the same calf tag (case-insensitive).
+     */
+    public function matches(BirthOutcome $outcome, ?string $calfTag): bool
+    {
+        if ($this->outcome !== $outcome) {
+            return false;
+        }
+
+        if ($outcome !== BirthOutcome::LIVE) {
+            return true;
+        }
+
+        return $calfTag !== null
+            && $this->calfIdentification !== null
+            && mb_strtoupper(trim($calfTag)) === mb_strtoupper(trim($this->calfIdentification));
+    }
+
+    /**
+     * What is registered, for a person: "Nació muerto", "Pérdida registrada aparte: Aborto".
+     */
+    public function resolvedLabel(): string
+    {
+        if ($this->outcome !== null) {
+            return $this->outcome->label();
+        }
+
+        if ($this->lossReasonCode !== null) {
+            return 'Pérdida registrada aparte: ' . ($this->lossReasonLabel ?? $this->lossReasonCode);
+        }
+
+        return strtolower($this->status->name);
+    }
+
     public function markSkipped(): void
     {
-        if ($this->isPending()) {
+        if ($this->isOpen()) {
             $this->status = BirthOrderAnimalStatus::SKIPPED;
         }
     }

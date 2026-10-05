@@ -25,7 +25,11 @@ class GestationEntity
         private GestationStage $gestationStage,
         private float $gestationMonths,
         private array $sires = [],
-        private ?int $serviceOrderId = null
+        private ?int $serviceOrderId = null,
+        /** The day an N reported she passed her due date without calving. The alert is open while the gestation is current. */
+        private ?string $calvingOverdueReportedAt = null,
+        /** The code of the loss reason it was closed with (STILLBORN, ABORTION…), when known. Read-only. */
+        private readonly ?string $lossReasonCode = null
     ) {
     }
 
@@ -76,6 +80,43 @@ class GestationEntity
     public function getLossReasonId(): ?int
     {
         return $this->lossReasonId;
+    }
+
+    public function getLossReasonCode(): ?string
+    {
+        return $this->lossReasonCode;
+    }
+
+    /**
+     * Closed by a calf born dead: a loss charged to the mother's reproductive record.
+     */
+    public function isStillbirth(): bool
+    {
+        return $this->success === false && $this->lossReasonCode === 'STILLBORN';
+    }
+
+    public function getCalvingOverdueReportedAt(): ?string
+    {
+        return $this->calvingOverdueReportedAt;
+    }
+
+    /**
+     * She passed her due date without calving and has not calved or lost the pregnancy since.
+     */
+    public function isCalvingOverdue(): bool
+    {
+        return $this->isCurrent && $this->calvingOverdueReportedAt !== null;
+    }
+
+    /**
+     * N: the round found her past her due date without calving. Only on a current gestation, and
+     * the first report is the one kept: it is when the risk started.
+     */
+    public function reportCalvingOverdue(string $reportedAt): void
+    {
+        if ($this->isCurrent && $this->calvingOverdueReportedAt === null) {
+            $this->calvingOverdueReportedAt = substr($reportedAt, 0, 10);
+        }
     }
 
     public function getLossNotes(): ?string

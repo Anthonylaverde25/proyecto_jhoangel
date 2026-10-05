@@ -63,8 +63,17 @@ class BirthOrderMapper
                         ])->values()->all()
                         : [],
                     calfIdentification: $calf?->identification,
-                    calfSex: $calf?->sex instanceof \BackedEnum ? (string) $calf->sex->value : $calf?->sex,
-                    calfBatchName: $line->relationLoaded('calfBatch') ? $line->calfBatch?->name : null
+                    // A live calf's sex is its caravan's; a calf that died has only the written one.
+                    calfSex: $calf !== null
+                        ? ($calf->sex instanceof \BackedEnum ? (string) $calf->sex->value : $calf->sex)
+                        : $line->calf_sex,
+                    calfBatchName: $line->relationLoaded('calfBatch') ? $line->calfBatch?->name : null,
+                    lossReasonCode: $line->loss_reason_code,
+                    overdueReportedAt: self::date($line->overdue_reported_at),
+                    overdueNotes: $line->overdue_notes,
+                    lossReasonLabel: $line->loss_reason_code !== null && $gestation !== null && $gestation->relationLoaded('lossReason')
+                        ? $gestation->lossReason?->name
+                        : null
                 );
             }
         }

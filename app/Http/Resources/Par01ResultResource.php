@@ -24,11 +24,19 @@ class Par01ResultResource extends JsonResource
             'resolved_count' => $this->resource['resolved_count'],
             'live_count' => $this->resource['live_count'],
             'stillborn_count' => $this->resource['stillborn_count'],
-            'abortion_count' => $this->resource['abortion_count'],
+            'perinatal_death_count' => $this->resource['perinatal_death_count'],
+            'overdue_new_count' => $this->resource['overdue_new_count'],
+            'overdue_resolved_count' => $this->resource['overdue_resolved_count'],
+            'overdue_open_count' => $this->resource['overdue_open_count'],
+            'already_registered_count' => $this->resource['already_registered_count'],
+            'differs_count' => $this->resource['differs_count'],
             'males_count' => $this->resource['males_count'],
             'females_count' => $this->resource['females_count'],
             'unplanned_count' => $this->resource['unplanned_count'],
             'calves' => $this->resource['calves'],
+            'overdue_new' => $this->resource['overdue_new'],
+            'overdue_resolved' => $this->resource['overdue_resolved'],
+            'already_registered' => $this->resource['already_registered'],
             'warnings' => $this->resource['warnings'],
             'birth_order' => $this->resource['birth_order'],
         ];
@@ -47,8 +55,16 @@ class Par01ResultResource extends JsonResource
             $parts[] = "{$result['stillborn_count']} nacido(s) muerto(s)";
         }
 
-        if ($result['abortion_count'] > 0) {
-            $parts[] = "{$result['abortion_count']} aborto(s)";
+        if ($result['perinatal_death_count'] > 0) {
+            $parts[] = "{$result['perinatal_death_count']} muerto(s) al pie";
+        }
+
+        if ($result['overdue_new_count'] > 0) {
+            $parts[] = "{$result['overdue_new_count']} parto(s) vencido(s) avisado(s)";
+        }
+
+        if ($result['already_registered_count'] > 0) {
+            $parts[] = "{$result['already_registered_count']} ya registrada(s)";
         }
 
         $sentence = 'Parición registrada: ' . implode(', ', $parts) . '.';

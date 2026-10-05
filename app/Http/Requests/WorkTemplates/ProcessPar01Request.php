@@ -38,6 +38,8 @@ class ProcessPar01Request extends FormRequest
             'rows.*.peso' => 'nullable|numeric',
             'rows.*.raza' => 'nullable|string|max:120',
             'rows.*.breed_id' => 'nullable|integer',
+            'rows.*.pelaje' => 'nullable|string|max:60',
+            'rows.*.color_id' => 'nullable|integer',
             // Not on the paper: chosen in the review, or 0 / empty by default.
             'rows.*.dientes' => 'nullable|integer',
             'rows.*.father_id' => 'nullable|integer',

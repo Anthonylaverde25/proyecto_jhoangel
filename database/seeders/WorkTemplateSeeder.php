@@ -879,13 +879,14 @@ class WorkTemplateSeeder extends Seeder
             // Seed PAR-01: planilla de parición. Cumple una orden de parición (su código va en el
             // encabezado) en una o varias recorridas, o, impresa en blanco, genera la orden al
             // confirmarse. Sin lote destino: la cría nace en el lote de su madre. No lleva padre
-            // ni dientes: el padre se confirma aparte y la cría nace con 0 dientes.
+            // ni dientes: el padre se confirma aparte y la cría nace con 0 dientes. Resultado en
+            // cuatro casillas: Parió · Nació muerto · Murió (al pie) · No parió (alerta).
             WorkTemplate::updateOrCreate(
                 ['company_id' => $company->id, 'code' => 'PAR-01'],
                 [
                     'category' => 'BIRTH',
                     'title' => 'Planilla de Parición',
-                    'description' => 'Recorrida de parición. Una fila por vientre preñado, con el resultado marcado (parió, nacido muerto, aborto) y, si parió, la caravana, el sexo, el peso, la raza y la fecha de nacimiento de la cría. Un parto que la orden no listaba se escribe en una fila libre con la casilla «Fuera de orden». Cumple la orden de parición del encabezado; la cría queda en el lote de su madre.',
+                    'description' => 'Recorrida de parición. Una fila por vientre preñado, con el resultado marcado (parió, nació muerto, murió al pie) y, si parió, la caravana, el sexo, el peso, la raza, el pelaje y la fecha de la cría. «No parió» avisa de una hembra que pasó su fecha sin parir: queda como alerta de parto vencido. La misma hoja se puede escanear varias veces mientras se completa: lo ya registrado se saltea. El aborto no va en esta planilla: se registra en Monitoreo Gestacional. Un parto que la orden no listaba se escribe en una fila libre con la casilla «Fuera de orden». Cumple la orden de parición del encabezado; la cría queda en el lote de su madre.',
                     'status' => 'active',
                     'schema_definition' => [
                         'header_fields' => [
@@ -949,10 +950,10 @@ class WorkTemplateSeeder extends Seeder
                             ],
                             [
                                 'name' => 'resultado',
-                                'label' => 'Resultado (V/M/A)',
+                                'label' => 'Resultado (V/NM/M/N)',
                                 'type' => 'string',
                                 'required' => false,
-                                'ai_hint' => 'Grupo RESULTADO de ESTA fila: tres subcolumnas con UNA casilla cada una, con encabezado PARIÓ, MUERTO y ABORTO (de izquierda a derecha). Una casilla cuenta sólo si tiene una X o tilde de tinta encima. Devolver V si está marcada la casilla bajo PARIÓ, M si está marcada la de MUERTO, A si está marcada la de ABORTO. Si hay dos o más marcadas devolver todas separadas por coma (ej: V, M). Si ninguna de las tres está marcada devolver vacío, aunque la fila tenga caravana de cría, sexo o fecha: NUNCA deducir el resultado de los otros datos.',
+                                'ai_hint' => 'Grupo RESULTADO de ESTA fila: cuatro subcolumnas con UNA casilla cada una, con encabezado PARIÓ, NACIÓ MUERTO, MURIÓ y NO PARIÓ (de izquierda a derecha). Una casilla cuenta sólo si tiene una X o tilde de tinta encima. Devolver V si está marcada la casilla bajo PARIÓ, NM si está marcada la de NACIÓ MUERTO, M si está marcada la de MURIÓ, N si está marcada la de NO PARIÓ. Si hay dos o más marcadas devolverlas todas separadas por coma (ej: N, V). Si ninguna de las cuatro está marcada devolver vacío, aunque la fila tenga caravana de cría, sexo o fecha: NUNCA deducir el resultado de los otros datos. En las filas reimpresas puede haber un texto gris impreso "N dd/mm" junto a la casilla NO PARIÓ: está impreso, no es una marca; ignorarlo.',
                             ],
                             [
                                 'name' => 'caravana_cria',
@@ -966,7 +967,7 @@ class WorkTemplateSeeder extends Seeder
                                 'label' => 'Sexo (M/H)',
                                 'type' => 'string',
                                 'required' => false,
-                                'ai_hint' => 'Celda angosta SEXO (M/H) de ESTA fila, a la derecha de CARAVANA CRÍA: UNA letra manuscrita, M = macho, H = hembra. Devolver la letra tal como está escrita. Si la celda está vacía, devolver vacío: no deducirlo de la caravana ni de otras filas. Si hay otra cosa escrita o no se entiende, devolver el texto tal cual.',
+                                'ai_hint' => 'Celda angosta SEXO (M/H) de ESTA fila, a la derecha de CARAVANA CRÍA: UNA letra manuscrita, M = macho, H = hembra. Puede estar escrita también en filas con NACIÓ MUERTO o MURIÓ, sin caravana de cría. Devolver la letra tal como está escrita. Si la celda está vacía, devolver vacío: no deducirlo de la caravana ni de otras filas. Si hay otra cosa escrita o no se entiende, devolver el texto tal cual.',
                             ],
                             [
                                 'name' => 'peso',
@@ -983,11 +984,18 @@ class WorkTemplateSeeder extends Seeder
                                 'ai_hint' => 'Raza de la cría, escrita a mano (Ej: Angus, Hereford, Brangus). Puede estar vacía.',
                             ],
                             [
+                                'name' => 'pelaje',
+                                'label' => 'Pelaje',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Columna PELAJE de ESTA fila, a la derecha de RAZA: el pelaje de la cría escrito a mano (Ej: Negro, Colorado, Pampa, Overo Negro). Sólo el pelaje, sin la raza. Puede estar vacío.',
+                            ],
+                            [
                                 'name' => 'fecha_nacimiento',
-                                'label' => 'Fecha de Nacimiento',
+                                'label' => 'Fecha',
                                 'type' => 'date',
                                 'required' => false,
-                                'ai_hint' => 'Fecha del parto de ESTA fila (DD/MM/AAAA), escrita a mano. Si está vacía, devolver vacío: NO completar con la fecha de recorrida del encabezado.',
+                                'ai_hint' => 'Columna FECHA de ESTA fila (DD/MM/AAAA), escrita a mano: es la fecha del parto o, si sólo está marcada NO PARIÓ, el día en que se constató que no parió. Si está vacía, devolver vacío: NO completar con la fecha de recorrida del encabezado.',
                             ],
                             [
                                 'name' => 'fuera_de_orden',

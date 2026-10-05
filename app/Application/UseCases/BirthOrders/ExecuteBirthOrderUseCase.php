@@ -18,7 +18,7 @@ use App\Core\Interfaces\IBirthOrderRepository;
  *
  * The submission is built from the ORDER and goes through the PAR-01 processing like a scanned
  * sheet would — the one place that registers calvings — marked as coming from the screen. Females
- * sent without an outcome stay pending.
+ * sent without an outcome stay pending; one sent only with "no parió en fecha" becomes overdue.
  */
 final class ExecuteBirthOrderUseCase
 {
@@ -49,10 +49,10 @@ final class ExecuteBirthOrderUseCase
             );
         }
 
-        $resolved = array_filter($fieldDataByMotherId, fn (BirthFieldData $data) => $data->hasOutcome());
+        $resolved = array_filter($fieldDataByMotherId, fn (BirthFieldData $data) => $data->declaresSomething());
 
         if ($resolved === []) {
-            throw BirthOrderDomainException::domainError('Indicá el resultado de al menos un vientre.', 'NOTHING_RESOLVED');
+            throw BirthOrderDomainException::domainError('Indicá el resultado de al menos un vientre, o marcá que no parió en fecha.', 'NOTHING_RESOLVED');
         }
 
         return ($this->processPar01)(

@@ -7,7 +7,7 @@ namespace App\Application\DTOs\Par01;
 /**
  * PAR-01: calving sheet. The header names the order it fulfils, the lots and the day of the round;
  * each row is a pregnant female and what the round found — a live calf with its tag, sex, weight,
- * breed and birth date, a stillbirth or an abortion. The rows of every scanned page arrive merged
+ * breed, coat (pelaje) and birth date, a stillbirth or an abortion. The rows of every scanned page arrive merged
  * in a single submission.
  *
  * There is no destination: each calf is born in the batch its mother is in, read by the server.
@@ -28,7 +28,7 @@ final readonly class Par01SubmissionDTO
     public const ORIGIN_REGISTRATION = 'REGISTRATION';
 
     /**
-     * @param array<int, array{caravana_madre: string, resultado: ?string, caravana_cria: ?string, sexo: ?string, peso: ?float, raza: ?string, breed_id: ?int, dientes: int, father_id: ?int, fecha_nacimiento: ?string, observations: ?string, fuera_de_orden: bool}> $rows
+     * @param array<int, array{caravana_madre: string, resultado: ?string, caravana_cria: ?string, sexo: ?string, peso: ?float, raza: ?string, breed_id: ?int, pelaje: ?string, color_id: ?int, dientes: int, father_id: ?int, fecha_nacimiento: ?string, observations: ?string, fuera_de_orden: bool}> $rows
      */
     public function __construct(
         public int $companyId,
@@ -77,7 +77,7 @@ final readonly class Par01SubmissionDTO
 
     /**
      * @param array<string, mixed> $row
-     * @return array{caravana_madre: string, resultado: ?string, caravana_cria: ?string, sexo: ?string, peso: ?float, raza: ?string, breed_id: ?int, dientes: int, father_id: ?int, fecha_nacimiento: ?string, observations: ?string, fuera_de_orden: bool}
+     * @return array{caravana_madre: string, resultado: ?string, caravana_cria: ?string, sexo: ?string, peso: ?float, raza: ?string, breed_id: ?int, pelaje: ?string, color_id: ?int, dientes: int, father_id: ?int, fecha_nacimiento: ?string, observations: ?string, fuera_de_orden: bool}
      */
     public static function row(array $row): array
     {
@@ -92,6 +92,8 @@ final readonly class Par01SubmissionDTO
             'peso' => $weight === null || $weight === '' ? null : (float) $weight,
             'raza' => self::nullableString($row['raza'] ?? null),
             'breed_id' => isset($row['breed_id']) && $row['breed_id'] !== '' ? (int) $row['breed_id'] : null,
+            'pelaje' => self::nullableString($row['pelaje'] ?? null),
+            'color_id' => isset($row['color_id']) && $row['color_id'] !== '' ? (int) $row['color_id'] : null,
             'dientes' => $teeth === null || $teeth === '' ? 0 : (int) $teeth,
             'father_id' => isset($row['father_id']) && $row['father_id'] !== '' ? (int) $row['father_id'] : null,
             'fecha_nacimiento' => self::nullableString($row['fecha_nacimiento'] ?? null),

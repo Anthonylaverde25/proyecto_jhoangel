@@ -65,10 +65,15 @@ class BirthOrderResource extends JsonResource
             'head_count' => count($order->getAnimals()),
             'resolved_head_count' => $order->resolvedCount(),
             'born_head_count' => $order->bornCount(),
+            'born_died_head_count' => $order->bornDiedCount(),
             'lost_head_count' => $order->lostCount(),
             'stillborn_head_count' => $order->outcomeCount(BirthOutcome::STILLBORN),
+            'external_loss_head_count' => $order->externalLossCount(),
+            // Legacy: abortions marked on the sheet before they left it.
             'abortion_head_count' => $order->outcomeCount(BirthOutcome::ABORTION),
+            // Open lines: PENDING and OVERDUE. The overdue ones are also counted on their own.
             'pending_head_count' => $order->pendingCount(),
+            'overdue_head_count' => $order->overdueCount(),
             'skipped_head_count' => $order->skippedCount(),
             'unplanned_head_count' => $order->unplannedCount(),
             'requested_by' => $order->getRequestedByUserId() !== null
@@ -107,7 +112,14 @@ class BirthOrderResource extends JsonResource
             'status' => $a->getStatus()->value,
             'outcome' => $a->getOutcome()?->value,
             'outcome_label' => $a->getOutcome()?->label(),
+            'loss_reason_code' => $a->getLossReasonCode(),
+            'loss_reason_label' => $a->getLossReasonCode() !== null ? ($a->getLossReasonLabel() ?? $a->getLossReasonCode()) : null,
             'event_date' => $a->getEventDate(),
+            'overdue_reported_at' => $a->getOverdueReportedAt(),
+            'overdue_days' => $a->isOverdue() && $a->getOverdueReportedAt() !== null
+                ? self::daysSince($a->getOverdueReportedAt())
+                : null,
+            'overdue_notes' => $a->getOverdueNotes(),
             'calf_caravan_id' => $a->getCalfCaravanId(),
             'calf_identification' => $a->getCalfIdentification(),
             'calf_sex' => $a->getCalfSex(),
@@ -130,6 +142,14 @@ class BirthOrderResource extends JsonResource
         ], $order->getHistory());
 
         return $data;
+    }
+
+    /**
+     * Whole days from a date until today.
+     */
+    public static function daysSince(string $date): int
+    {
+        return (int) floor(((int) strtotime('today') - (int) strtotime(substr($date, 0, 10))) / 86400);
     }
 
     /**

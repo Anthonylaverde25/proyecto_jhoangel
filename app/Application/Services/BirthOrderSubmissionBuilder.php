@@ -13,8 +13,8 @@ use App\Core\Entities\BirthOrderEntity;
  * would have produced, so executing from the screen and registering go through the one path that
  * registers calvings.
  *
- * Only the females the screen resolved become rows: a pending female left without an outcome is
- * simply not part of this round.
+ * Only the open females the screen declared something for become rows: one left without an
+ * outcome or the overdue box is simply not part of this round.
  */
 final class BirthOrderSubmissionBuilder
 {
@@ -33,18 +33,20 @@ final class BirthOrderSubmissionBuilder
         foreach ($order->getAnimals() as $line) {
             $data = $fieldDataByMotherId[$line->getMotherCaravanId()] ?? null;
 
-            if ($data === null || !$line->isPending()) {
+            if ($data === null || !$line->isOpen()) {
                 continue;
             }
 
             $rows[] = [
                 'caravana_madre' => (string) $line->getMotherIdentification(),
-                'resultado' => $data->outcome,
+                'resultado' => $data->sheetMark(),
                 'caravana_cria' => $data->calfIdentification,
                 'sexo' => $data->calfSex,
                 'peso' => $data->calfWeight,
                 'raza' => null,
                 'breed_id' => $data->calfBreedId,
+                'pelaje' => null,
+                'color_id' => $data->calfColorId,
                 'dientes' => $data->calfTeeth,
                 'father_id' => $data->fatherId,
                 'fecha_nacimiento' => $data->birthDate,

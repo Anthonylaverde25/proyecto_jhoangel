@@ -28,7 +28,7 @@ final class RegisterBirthsRequest extends FormRequest
         return [
             ...$rules,
             ...BirthFieldRules::rules(),
-            'animals.*.outcome' => 'required|string|in:LIVE,STILLBORN,ABORTION',
+            'animals.*.outcome' => 'required|string|in:LIVE,STILLBORN,PERINATAL_DEATH',
         ];
     }
 
@@ -40,7 +40,7 @@ final class RegisterBirthsRequest extends FormRequest
         return [
             ...(new EmitBirthOrderRequest())->messages(),
             ...BirthFieldRules::messages(),
-            'animals.*.outcome.required' => 'Cada vientre del registro tiene que decir qué pasó: Parió, Nacido muerto o Aborto.',
+            'animals.*.outcome.required' => 'Cada vientre del registro tiene que decir qué pasó: Parió, Nació muerto o Murió al pie.',
         ];
     }
 }

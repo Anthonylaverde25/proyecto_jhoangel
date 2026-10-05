@@ -65,12 +65,20 @@ class CaravanResource extends JsonResource
                 'is_current' => $this->resource->getActiveGestation()->isCurrent(),
                 'success' => $this->resource->getActiveGestation()->getSuccess(),
                 'notes' => $this->resource->getActiveGestation()->getNotes(),
+                // An N reported she passed her due date without calving: open while the gestation is.
+                'calving_overdue_reported_at' => $this->resource->getActiveGestation()->getCalvingOverdueReportedAt(),
+                'calving_overdue_days' => $this->resource->getActiveGestation()->isCalvingOverdue()
+                    ? BirthOrderResource::daysSince((string) $this->resource->getActiveGestation()->getCalvingOverdueReportedAt())
+                    : null,
                 'sires' => array_map(fn($sire) => [
                     'id' => $sire->getSireId(),
                     'identification' => $sire->getSireIdentification(),
                     'is_confirmed' => $sire->isConfirmed(),
                 ], $this->resource->getActiveGestation()->getSires()),
             ] : null,
+            // Calves born dead are charged to the mother; those that died at foot are not.
+            'stillborn_count' => count($this->resource->getStillbirths()),
+            'last_stillborn_date' => ($this->resource->getStillbirths()[0] ?? null)?->getEndDate(),
             'lineage' => $this->resource->getLineage() ? [
                 'mother_id' => $this->resource->getLineage()->getMotherId(),
                 'mother_identification' => $this->resource->getLineage()->getMotherIdentification(),

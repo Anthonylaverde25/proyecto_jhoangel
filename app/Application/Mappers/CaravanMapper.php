@@ -67,7 +67,9 @@ class CaravanMapper
                     $g->gestation_stage ?? GestationStage::HEAD,
                     (float) ($g->gestation_months ?? 3.0),
                     $sires,
-                    $g->service_order_id ? (int) $g->service_order_id : null
+                    $g->service_order_id ? (int) $g->service_order_id : null,
+                    $g->calving_overdue_reported_at ? (is_string($g->calving_overdue_reported_at) ? substr($g->calving_overdue_reported_at, 0, 10) : $g->calving_overdue_reported_at->format('Y-m-d')) : null,
+                    $g->relationLoaded('lossReason') ? $g->lossReason?->code : null
                 );
             })->toArray() : [],
             $model->relationLoaded('lineage') && $model->lineage ? LineageMapper::toEntity($model->lineage) : null,

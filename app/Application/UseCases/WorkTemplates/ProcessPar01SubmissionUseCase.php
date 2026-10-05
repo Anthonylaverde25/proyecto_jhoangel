@@ -7,8 +7,11 @@ namespace App\Application\UseCases\WorkTemplates;
 use App\Application\DTOs\Par01\Par01SubmissionDTO;
 use App\Application\DTOs\RegisterBirthDTO;
 use App\Application\Services\BirthOrderExecutionService;
+use App\Application\Services\BreedCoatCatalog;
 use App\Application\UseCases\Caravans\RegisterBirthUseCase;
 use App\Application\UseCases\Caravans\RegisterGestationLossUseCase;
+use App\Application\UseCases\Caravans\RegisterPerinatalDeathUseCase;
+use App\Core\Entities\BirthOrderAnimalEntity;
 use App\Core\Entities\BirthOrderEntity;
 use App\Core\Entities\CaravanEntity;
 use App\Core\Entities\GestationEntity;
@@ -22,6 +25,7 @@ use App\Core\Interfaces\IBirthOrderRepository;
 use App\Core\Interfaces\IBreedRepository;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Services\BatchWeightService;
+use App\Core\ValueObjects\BirthSheetMark;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -29,18 +33,29 @@ use Illuminate\Support\Facades\DB;
  * executed from the screen and calvings registered afterwards all arrive here as the same
  * submission, so the same checks hold for all of them.
  *
- * Each row is a pregnant female and what the round found: a live calf — created in the batch its
- * mother is in, never in one the sheet names —, a stillbirth or an abortion. A row without an
- * outcome is a female that did not calve yet and stays pending.
+ * Each row is a pregnant female and what the round found: a live calf (V) — created in the batch
+ * its mother is in, never in one the sheet names —, a calf born dead (NM, charged to the mother), a
+ * calf born alive that died at foot (M, charged to the calf), or that she passed her due date
+ * without calving (N, an alert that keeps her open). A row without a mark is a female that did not
+ * calve yet and stays pending. The abortion is not on this sheet: it is registered in Monitoreo
+ * Gestacional.
  *
- * All or nothing: every problem on the sheet is collected and reported together, and nothing is
- * persisted until the sheet is clean. Every calving ends up in a birth order: the one the sheet
- * names, or one created on confirming a sheet printed blank.
+ * The same sheet is scanned again as the rounds fill it (R1): a female the order already resolved is
+ * compared with the paper first and skipped — a difference is a warning, never a blocker.
+ *
+ * All or nothing for what is new: every problem on the sheet is collected and reported together,
+ * and nothing is persisted until the sheet is clean. Every calving ends up in a birth order: the one
+ * the sheet names, or one created on confirming a sheet printed blank.
  */
 final class ProcessPar01SubmissionUseCase
 {
     /** How far from the due date a calving is still unremarkable. */
     private const DUE_DATE_TOLERANCE_DAYS = 30;
+
+    /** A row that registers a calving (V, NM or M). */
+    private const ITEM_RESOLVE = 'resolve';
+    /** A row that reports a female past her due date without calving (only N). */
+    private const ITEM_OVERDUE = 'overdue';
 
     public function __construct(
         private readonly ICaravanRepository $caravanRepository,
@@ -49,6 +64,7 @@ final class ProcessPar01SubmissionUseCase
         private readonly IBirthOrderRepository $orderRepository,
         private readonly RegisterBirthUseCase $registerBirth,
         private readonly RegisterGestationLossUseCase $registerLoss,
+        private readonly RegisterPerinatalDeathUseCase $registerPerinatalDeath,
         private readonly BatchWeightService $batchWeightService,
         private readonly BirthOrderExecutionService $orderExecution
     ) {
@@ -107,7 +123,7 @@ final class ProcessPar01SubmissionUseCase
         $existingCalves = $this->caravanRepository->findByIdentifications($calfTags);
         $motherIds = array_values(array_map(fn (CaravanEntity $c) => (int) $c->getId(), $mothersByTag));
         $committed = $this->orderRepository->findCommittedMothers($motherIds, $dto->companyId, $order?->getId());
-        $breeds = $this->breedsByName();
+        $breeds = BreedCoatCatalog::fromBreeds($this->breedRepository->getAll());
         $fathers = [];
         $lossReasonIds = [];
 
@@ -117,6 +133,8 @@ final class ProcessPar01SubmissionUseCase
         $seenMothers = [];
         $seenCalves = [];
         $rowsWithMother = 0;
+        $alreadyRegistered = [];
+        $differs = 0;
 
         foreach ($dto->rows as $index => $row) {
             $tag = $row['caravana_madre'];
@@ -133,6 +151,7 @@ final class ProcessPar01SubmissionUseCase
 
             $rowsWithMother++;
             $upper = mb_strtoupper($tag);
+            $rowErrors = [];
 
             if (isset($seenMothers[$upper])) {
                 $errorsByRow[$index][] = $this->error('DUPLICATED_IN_SHEET', "La hembra '{$tag}' ya figura en la fila " . ($seenMothers[$upper] + 1) . '.', 'caravana_madre');
@@ -140,20 +159,10 @@ final class ProcessPar01SubmissionUseCase
             }
             $seenMothers[$upper] = $index;
 
-            // 3. The outcome is declared. A row without one is a female that did not calve yet —
-            //    unless something of a calf is written on it, and then it has to be declared.
-            $outcome = BirthOutcome::fromText($row['resultado']);
+            // 3. Nothing written: a female that did not calve yet, or one already registered.
+            $mark = BirthSheetMark::parse($row['resultado']);
 
-            if ($row['resultado'] !== null && $outcome === null) {
-                $errorsByRow[$index][] = $this->error('OUTCOME_UNKNOWN', "El resultado marcado para '{$tag}' ('{$row['resultado']}') no es uno solo de V (parió), M (nacido muerto) o A (aborto).", 'resultado');
-                continue;
-            }
-
-            if ($outcome === null) {
-                if ($this->hasCalfData($row)) {
-                    $errorsByRow[$index][] = $this->error('OUTCOME_MISSING', "La fila de '{$tag}' tiene datos de cría pero no tiene marcado el resultado: V, M o A.", 'resultado');
-                }
-
+            if ($mark->isEmpty() && !$this->hasCalfData($row)) {
                 continue;
             }
 
@@ -175,16 +184,59 @@ final class ProcessPar01SubmissionUseCase
             }
 
             $motherId = (int) $mother->getId();
-            $rowErrors = [];
             $line = $order?->animalByMotherId($motherId);
 
-            // 4. Its place in the order.
-            if ($line !== null && !$line->isPending()) {
-                $errorsByRow[$index][] = $this->orderExecution->alreadyResolvedByOrder($order, $motherId, $tag)
-                    + ['field' => 'caravana_madre'];
+            // 4. R1: what the order already knows goes before any other check — the calf tag in use
+            //    included, since the previous load created it.
+            $known = $this->orderExecution->reconcile($line, $mark, $row['caravana_cria']);
+
+            if ($known !== null) {
+                if ($known['kind'] === BirthOrderExecutionService::ROW_OVERDUE_KEPT && $this->hasCalfData($row, withDate: false)) {
+                    $errorsByRow[$index][] = $this->overdueWithCalfData($tag);
+                    continue;
+                }
+
+                if ($known['kind'] === BirthOrderExecutionService::ROW_DIFFERS) {
+                    $differs++;
+                    $warnings[] = $this->warning($index, 'ALREADY_RESOLVED_DIFFERS', "'{$tag}': {$known['message']}", 'resultado');
+                    continue;
+                }
+
+                $alreadyRegistered[] = ['row_index' => $index, 'caravana_madre' => $tag, 'kind' => $known['kind'], 'message' => $known['message']];
                 continue;
             }
 
+            // 5. The mark: one of V / NM / M, with or without N, or only N.
+            if ($mark->isAbortion()) {
+                $errorsByRow[$index][] = $this->error('OUTCOME_NOT_ON_SHEET', "'{$tag}': el aborto no se marca en la planilla de parición. Registralo en Monitoreo Gestacional.", 'resultado');
+                continue;
+            }
+
+            if ($mark->isAmbiguous()) {
+                $errorsByRow[$index][] = $this->error('OUTCOME_UNKNOWN', "El resultado marcado para '{$tag}' ('{$row['resultado']}') no es uno solo de V (parió), NM (nació muerto) o M (murió al pie), con o sin N (no parió).", 'resultado');
+                continue;
+            }
+
+            $outcome = $mark->outcome();
+
+            if ($outcome === null && !$mark->isOverdue()) {
+                $errorsByRow[$index][] = $this->error('OUTCOME_MISSING', "La fila de '{$tag}' tiene datos de cría pero no tiene marcado el resultado: V, NM o M.", 'resultado');
+                continue;
+            }
+
+            if ($outcome === null) {
+                $item = $this->overdueItem($row, $index, $tag, $mother, $line, $order, $today, $warnings, $rowErrors);
+
+                if ($rowErrors !== []) {
+                    $errorsByRow[$index] = array_merge($errorsByRow[$index] ?? [], $rowErrors);
+                    continue;
+                }
+
+                $items[] = $item;
+                continue;
+            }
+
+            // 6. Its place in the order.
             $holder = $committed[$motherId] ?? null;
             if ($line === null && $holder !== null) {
                 $rowErrors[] = $this->error('ANIMAL_IN_OPEN_ORDER', "La hembra '{$tag}' está en la orden de parición {$holder}. Registrala con esa orden.", 'caravana_madre');
@@ -208,45 +260,57 @@ final class ProcessPar01SubmissionUseCase
                 $warnings[] = $this->warning($index, 'OUTSIDE_ORDER_MARK_IGNORED', "'{$tag}' está en la orden {$order?->getCode()}: la marca «Fuera de orden» no aplica.", 'fuera_de_orden');
             }
 
-            // 5. The gestation it closes.
+            // 7. The gestation it closes.
             $active = $mother->getActiveGestation();
 
             if ($line !== null && $line->getGestationId() !== null && $active?->getId() !== $line->getGestationId()) {
                 $rowErrors[] = $this->error('GESTATION_CLOSED', "La preñez de '{$tag}' que listaba la orden ya se cerró por otro camino. Cerrá la orden incompleta si no queda nada por registrar.", 'resultado');
             }
 
-            if ($outcome !== BirthOutcome::LIVE && $active === null) {
+            $lossCode = $outcome->lossReasonCode();
+
+            if ($lossCode !== null && $active === null) {
                 $rowErrors[] = $this->error('NO_ACTIVE_GESTATION', "'{$tag}' no tiene una preñez en curso: no hay pérdida que registrar.", 'resultado');
             }
 
-            if ($outcome !== BirthOutcome::LIVE && !isset($lossReasonIds[$outcome->value])) {
-                $lossReasonIds[$outcome->value] = $this->orderRepository->lossReasonIdByCode((string) $outcome->lossReasonCode(), $dto->companyId);
+            if ($lossCode !== null && !array_key_exists($outcome->value, $lossReasonIds)) {
+                $lossReasonIds[$outcome->value] = $this->orderRepository->lossReasonIdByCode($lossCode, $dto->companyId);
 
                 if ($lossReasonIds[$outcome->value] === null) {
                     $headerErrors[] = $this->headerError('rows', 'LOSS_REASON_MISSING', "La empresa no tiene configurado el motivo de pérdida '{$outcome->label()}'.");
                 }
             }
 
-            // 6. The date, per row: never taken from the header.
+            // 8. The date, per row: never taken from the header.
             $date = $this->eventDate($row['fecha_nacimiento'], $active, $tag, $index, $today, $rowErrors, $warnings);
 
-            // 7. Where the calf is born: the batch the mother is in now.
+            // 9. Where the calf is born: the batch the mother is in now.
             $calfBatchId = $mother->getBatchId() ?? $line?->getSourceBatchId();
-
-            if ($line?->getSourceBatchId() !== null && $mother->getBatchId() !== null && $mother->getBatchId() !== $line->getSourceBatchId()) {
-                $batchName = $this->batchRepository->findById((int) $mother->getBatchId())?->getName() ?? 'otro lote';
-                $warnings[] = $this->warning($index, 'MOTHER_MOVED', "'{$tag}' ahora está en {$batchName}: la cría queda ahí, con su madre.");
-            }
-
             $calf = null;
+            $calfSex = null;
+
             if ($outcome === BirthOutcome::LIVE) {
+                if ($line?->getSourceBatchId() !== null && $mother->getBatchId() !== null && $mother->getBatchId() !== $line->getSourceBatchId()) {
+                    $batchName = $this->batchRepository->findById((int) $mother->getBatchId())?->getName() ?? 'otro lote';
+                    $warnings[] = $this->warning($index, 'MOTHER_MOVED', "'{$tag}' ahora está en {$batchName}: la cría queda ahí, con su madre.");
+                }
+
                 if ($calfBatchId === null) {
                     $rowErrors[] = $this->error('MOTHER_WITHOUT_BATCH', "'{$tag}' no está en ningún lote: la cría no tiene dónde nacer.", 'caravana_madre');
                 }
 
                 $calf = $this->calf($row, $tag, $index, $active, $existingCalves, $seenCalves, $breeds, $fathers, $rowErrors, $warnings);
-            } elseif ($this->hasCalfData($row, withDate: false)) {
-                $warnings[] = $this->warning($index, 'CALF_DATA_IGNORED', "'{$tag}': con {$outcome->label()} no se da de alta ninguna cría; los datos de cría escritos se ignoran.");
+            } else {
+                // A calf that died: no caravan is created. Its sex is optional and kept on the line.
+                $calfSex = $this->sex($row['sexo']);
+
+                if ($row['sexo'] !== null && $calfSex === null) {
+                    $rowErrors[] = $this->error('CALF_SEX_UNKNOWN', "El sexo '{$row['sexo']}' de la cría de '{$tag}' no es M (macho) ni H (hembra).", 'sexo');
+                }
+
+                if ($row['caravana_cria'] !== null || $row['peso'] !== null || $row['raza'] !== null || $row['pelaje'] !== null) {
+                    $warnings[] = $this->warning($index, 'CALF_DATA_IGNORED', "'{$tag}': con {$outcome->label()} no se da de alta ninguna cría; la caravana, el peso, la raza y el pelaje escritos se ignoran.");
+                }
             }
 
             if ($rowErrors !== []) {
@@ -255,6 +319,7 @@ final class ProcessPar01SubmissionUseCase
             }
 
             $items[] = [
+                'kind' => self::ITEM_RESOLVE,
                 'index' => $index,
                 'mother' => $mother,
                 'outcome' => $outcome,
@@ -263,14 +328,19 @@ final class ProcessPar01SubmissionUseCase
                 'gestation_id' => $active?->getId(),
                 'batch_id' => $calfBatchId,
                 'calf' => $calf,
+                'calf_sex' => $calfSex,
                 'observations' => $row['observations'],
+                'overdue_since' => $line?->isOverdue() ? $line->getOverdueReportedAt() : null,
+                'due_date' => $active?->getEstimatedDueDate(),
             ];
         }
 
         if ($rowsWithMother === 0) {
             $headerErrors[] = $this->headerError('rows', 'NO_ROWS', 'La planilla no tiene vientres cargados.');
         } elseif ($items === [] && $errorsByRow === []) {
-            $headerErrors[] = $this->headerError('rows', 'NOTHING_RESOLVED', 'Ningún vientre tiene resultado marcado: no hay partos que registrar.');
+            $headerErrors[] = $alreadyRegistered !== [] || $differs > 0
+                ? $this->headerError('rows', 'NOTHING_RESOLVED', 'Todo lo marcado en la planilla ya estaba registrado: no hay novedades que guardar.')
+                : $this->headerError('rows', 'NOTHING_RESOLVED', 'Ningún vientre tiene resultado marcado: no hay partos que registrar.');
         }
 
         $rowErrors = [];
@@ -293,13 +363,15 @@ final class ProcessPar01SubmissionUseCase
             'items' => $items,
             'loss_reason_ids' => $lossReasonIds,
             'warnings' => $warnings,
+            'already_registered' => $alreadyRegistered,
+            'differs' => $differs,
         ];
     }
 
     /**
      * Registers the checked sheet in one transaction: order first (a blank sheet gets one), each
-     * calving or loss, one weight recalculation per batch that received weighed calves, and the
-     * order's record of it.
+     * calving, each overdue alert, one weight recalculation per batch that received weighed calves,
+     * and the order's record of it.
      *
      * @param array<string, mixed> $checked
      * @return array<string, mixed>
@@ -310,15 +382,16 @@ final class ProcessPar01SubmissionUseCase
         $dto = $checked['dto'];
         /** @var ?BirthOrderEntity $order */
         $order = $checked['order'];
-        $items = $checked['items'];
         $warnings = $checked['warnings'];
+        $calvings = array_values(array_filter($checked['items'], fn (array $i) => $i['kind'] === self::ITEM_RESOLVE));
+        $overdueItems = array_values(array_filter($checked['items'], fn (array $i) => $i['kind'] === self::ITEM_OVERDUE));
 
-        return DB::transaction(function () use ($dto, $order, $items, $warnings, $checked): array {
+        return DB::transaction(function () use ($dto, $order, $calvings, $overdueItems, $warnings, $checked): array {
             $females = array_map(fn (array $item) => [
                 'mother_id' => (int) $item['mother']->getId(),
                 'gestation_id' => $item['gestation_id'],
                 'batch_id' => $item['mother']->getBatchId(),
-            ], $items);
+            ], $calvings);
 
             // STEP 0. A sheet printed blank gets its order now, with every female it resolved.
             $createdFromSheet = $this->orderExecution->needsOrderFromSheet($order, $dto);
@@ -332,19 +405,20 @@ final class ProcessPar01SubmissionUseCase
             }
 
             $unplanned = [];
-            foreach ($items as $position => $item) {
+            foreach ($calvings as $position => $item) {
                 if (!$item['in_order'] && !$createdFromSheet) {
                     $unplanned[] = $females[$position];
                 }
             }
 
-            // STEP 1. Each calving or loss.
+            // STEP 1. Each calving.
             $results = [];
             $calves = [];
             $weighedBatches = [];
             $counts = ['males' => 0, 'females' => 0];
+            $overdueResolved = [];
 
-            foreach ($items as $item) {
+            foreach ($calvings as $item) {
                 /** @var CaravanEntity $mother */
                 $mother = $item['mother'];
                 $motherId = (int) $mother->getId();
@@ -361,6 +435,7 @@ final class ProcessPar01SubmissionUseCase
                         calfTeeth: $calfData['teeth'],
                         calfWeight: $calfData['weight'],
                         calfBreedId: $calfData['breed_id'],
+                        calfColorId: $calfData['color_id'],
                         birthDate: $item['date'],
                         batchId: (int) $item['batch_id'],
                         motherId: $motherId,
@@ -382,13 +457,18 @@ final class ProcessPar01SubmissionUseCase
                         'batch_id' => $created->getBatchId(),
                         'father_id' => $created->getLineage()?->getFatherId(),
                     ];
+                } elseif ($outcome === BirthOutcome::PERINATAL_DEATH) {
+                    // Charged to the calf: the mother's gestation closes successful.
+                    ($this->registerPerinatalDeath)($motherId, $item['date']);
                 } else {
+                    // Charged to the mother: her gestation closes as a stillbirth.
                     ($this->registerLoss)(
                         $motherId,
                         (int) $checked['loss_reason_ids'][$outcome->value],
                         $item['observations'],
                         $item['date'],
-                        promoteToCow: $outcome->isCalving()
+                        promoteToCow: $outcome->isCalving(),
+                        fromBirthOrder: true
                     );
                 }
 
@@ -397,25 +477,69 @@ final class ProcessPar01SubmissionUseCase
                     'event_date' => $item['date'],
                     'calf_caravan_id' => $calfId,
                     'calf_batch_id' => $outcome === BirthOutcome::LIVE ? (int) $item['batch_id'] : null,
+                    'calf_sex' => $item['calf_sex'],
                     'observations' => $item['observations'],
+                ];
+
+                if ($item['overdue_since'] !== null) {
+                    $overdueResolved[] = [
+                        'mother' => $mother->getIdentification()->getValue(),
+                        'overdue_reported_at' => $item['overdue_since'],
+                        'event_date' => $item['date'],
+                        'days_after_report' => $this->daysBetween($item['overdue_since'], $item['date']),
+                        'days_after_due' => $item['due_date'] !== null ? $this->daysBetween($item['due_date'], $item['date']) : null,
+                    ];
+                }
+            }
+
+            // STEP 2. Each overdue alert: on the line and on the female's gestation, where it stays
+            // visible even after the order is closed.
+            $overdue = [];
+            $overdueNew = [];
+
+            foreach ($overdueItems as $item) {
+                /** @var CaravanEntity $mother */
+                $mother = $item['mother'];
+                $mother->getActiveGestation()?->reportCalvingOverdue($item['date']);
+                $this->caravanRepository->save($mother);
+
+                $overdue[(int) $mother->getId()] = ['reported_at' => $item['date'], 'notes' => $item['observations']];
+                $overdueNew[] = [
+                    'mother' => $mother->getIdentification()->getValue(),
+                    'overdue_reported_at' => $item['date'],
+                    'estimated_due_date' => $item['due_date'],
                 ];
             }
 
-            // STEP 2. The compositional effect, once per batch that received weighed calves.
+            // STEP 3. The compositional effect, once per batch that received weighed calves.
             foreach (array_keys($weighedBatches) as $batchId) {
                 $this->batchWeightService->recalculateBatchWeight($batchId, BatchWeightCause::MOVEMENT_IN);
             }
 
-            // STEP 3. The order, in this same transaction: if it cannot record what happened,
+            // STEP 4. The order, in this same transaction: if it cannot record what happened,
             // nothing happened.
-            $orderSummary = $this->orderExecution->recordExecution($order, $dto, $results, $unplanned, new \DateTimeImmutable());
+            $orderSummary = $this->orderExecution->recordExecution(
+                $order,
+                $dto,
+                $results,
+                $overdue,
+                $unplanned,
+                new \DateTimeImmutable(),
+                [
+                    'already_registered' => count($checked['already_registered']),
+                    'differs' => $checked['differs'],
+                    'overdue_resolved' => count($overdueResolved),
+                ]
+            );
             $orderSummary['created_from_sheet'] = $createdFromSheet;
 
             if ($orderSummary['pending_head_count'] > 0) {
+                $overdueOpen = $orderSummary['overdue_head_count'];
                 $warnings[] = $this->warning(
                     null,
                     'BIRTH_ORDER_PARTIAL',
-                    "La orden {$orderSummary['code']} queda parcial: faltan {$orderSummary['pending_head_count']} vientre(s) por parir."
+                    "La orden {$orderSummary['code']} queda parcial: faltan {$orderSummary['pending_head_count']} vientre(s) por parir"
+                        . ($overdueOpen > 0 ? ", {$overdueOpen} con parto vencido." : '.')
                 );
             }
 
@@ -426,15 +550,25 @@ final class ProcessPar01SubmissionUseCase
                 $calves[$position]['batch_name'] = $batchNames[$batchId];
             }
 
+            $byOutcome = fn (BirthOutcome $outcome) => count(array_filter($calvings, fn (array $i) => $i['outcome'] === $outcome));
+
             return [
-                'resolved_count' => count($items),
-                'live_count' => count(array_filter($items, fn (array $i) => $i['outcome'] === BirthOutcome::LIVE)),
-                'stillborn_count' => count(array_filter($items, fn (array $i) => $i['outcome'] === BirthOutcome::STILLBORN)),
-                'abortion_count' => count(array_filter($items, fn (array $i) => $i['outcome'] === BirthOutcome::ABORTION)),
+                'resolved_count' => count($calvings),
+                'live_count' => $byOutcome(BirthOutcome::LIVE),
+                'stillborn_count' => $byOutcome(BirthOutcome::STILLBORN),
+                'perinatal_death_count' => $byOutcome(BirthOutcome::PERINATAL_DEATH),
+                'overdue_new_count' => count($overdueNew),
+                'overdue_resolved_count' => count($overdueResolved),
+                'overdue_open_count' => $orderSummary['overdue_head_count'],
+                'already_registered_count' => count($checked['already_registered']),
+                'differs_count' => $checked['differs'],
                 'males_count' => $counts['males'],
                 'females_count' => $counts['females'],
                 'unplanned_count' => count($unplanned),
                 'calves' => $calves,
+                'overdue_new' => $overdueNew,
+                'overdue_resolved' => $overdueResolved,
+                'already_registered' => $checked['already_registered'],
                 'warnings' => array_values($warnings),
                 'birth_order' => $orderSummary,
             ];
@@ -442,16 +576,103 @@ final class ProcessPar01SubmissionUseCase
     }
 
     /**
+     * R3 — only N: the round found her past her due date without calving. It needs an open order
+     * where the alert can stay, a female of that order and her current gestation.
+     *
+     * @param array<string, mixed> $row
+     * @param list<array<string, mixed>> $warnings
+     * @param list<array{code: string, message: string, field?: string}> $rowErrors
+     * @return array<string, mixed>|null
+     */
+    private function overdueItem(
+        array $row,
+        int $index,
+        string $tag,
+        CaravanEntity $mother,
+        ?BirthOrderAnimalEntity $line,
+        ?BirthOrderEntity $order,
+        string $today,
+        array &$warnings,
+        array &$rowErrors
+    ): ?array {
+        if ($this->hasCalfData($row, withDate: false)) {
+            $rowErrors[] = $this->overdueWithCalfData($tag);
+
+            return null;
+        }
+
+        if ($order === null) {
+            $rowErrors[] = $this->error('OVERDUE_NEEDS_ORDER', "'{$tag}': la N (no parió) necesita una orden de parición abierta donde quedar como alerta. Una planilla en blanco sirve para una sola carga: emití la orden para recorridas de varios días.", 'resultado');
+
+            return null;
+        }
+
+        if ($line === null) {
+            $rowErrors[] = $this->error('OVERDUE_NOT_IN_ORDER', "'{$tag}' no está en la orden {$order->getCode()}: la N avisa de una hembra de la orden que no parió.", 'resultado');
+
+            return null;
+        }
+
+        $active = $mother->getActiveGestation();
+
+        if ($active === null) {
+            $rowErrors[] = $this->error('NO_ACTIVE_GESTATION', "'{$tag}' no tiene una preñez en curso: no hay parto vencido que avisar.", 'resultado');
+
+            return null;
+        }
+
+        if ($line->getGestationId() !== null && $active->getId() !== $line->getGestationId()) {
+            $rowErrors[] = $this->error('GESTATION_CLOSED', "La preñez de '{$tag}' que listaba la orden ya se cerró por otro camino.", 'resultado');
+
+            return null;
+        }
+
+        $date = $this->eventDate($row['fecha_nacimiento'], $active, $tag, $index, $today, $rowErrors, $warnings, overdue: true);
+
+        return [
+            'kind' => self::ITEM_OVERDUE,
+            'index' => $index,
+            'mother' => $mother,
+            'date' => (string) $date,
+            'gestation_id' => $active->getId(),
+            'due_date' => $active->getEstimatedDueDate(),
+            'observations' => $row['observations'],
+        ];
+    }
+
+    /**
+     * @return array{code: string, message: string, field: string}
+     */
+    private function overdueWithCalfData(string $tag): array
+    {
+        return $this->error(
+            'OUTCOME_MISSING_WITH_OVERDUE',
+            "La fila de '{$tag}' tiene datos de cría y sólo la N marcada: si parió, marcá también Parió, Nació muerto o Murió.",
+            'resultado'
+        );
+    }
+
+    private function daysBetween(string $from, string $to): int
+    {
+        return (int) round(((int) strtotime(substr($to, 0, 10)) - (int) strtotime(substr($from, 0, 10))) / 86400);
+    }
+
+    /**
      * The date of a row: required, a real date, not in the future and not before the gestation
      * began. Far from the due date is only a warning — the due date is an estimate.
+     *
+     * With `$overdue` it is the day she was found not calved: before her due date it is only a
+     * warning — she may just not have calved at this round.
      *
      * @param list<array{code: string, message: string, field?: string}> $rowErrors
      * @param list<array<string, mixed>> $warnings
      */
-    private function eventDate(?string $raw, ?GestationEntity $active, string $tag, int $index, string $today, array &$rowErrors, array &$warnings): ?string
+    private function eventDate(?string $raw, ?GestationEntity $active, string $tag, int $index, string $today, array &$rowErrors, array &$warnings, bool $overdue = false): ?string
     {
         if ($raw === null) {
-            $rowErrors[] = $this->error('DATE_MISSING', "Falta la fecha del parto de '{$tag}'.", 'fecha_nacimiento');
+            $rowErrors[] = $overdue
+                ? $this->error('DATE_MISSING', "Falta la fecha en que se constató que '{$tag}' no parió.", 'fecha_nacimiento')
+                : $this->error('DATE_MISSING', "Falta la fecha del parto de '{$tag}'.", 'fecha_nacimiento');
 
             return null;
         }
@@ -480,6 +701,21 @@ final class ProcessPar01SubmissionUseCase
 
         $due = $active?->getEstimatedDueDate();
 
+        if ($overdue) {
+            $early = $due !== null ? $this->daysBetween($date, $due) : 0;
+
+            if ($early > 0) {
+                $warnings[] = $this->warning(
+                    $index,
+                    'OVERDUE_BEFORE_DUE',
+                    "Todavía faltan {$early} días para la FPP de '{$tag}' (" . $this->display((string) $due) . '). Si sólo no parió en esta recorrida, dejá la casilla vacía.',
+                    'resultado'
+                );
+            }
+
+            return $date;
+        }
+
         if ($due !== null) {
             $days = (int) round(((int) strtotime($date) - (int) strtotime(substr($due, 0, 10))) / 86400);
 
@@ -497,16 +733,16 @@ final class ProcessPar01SubmissionUseCase
     }
 
     /**
-     * The calf of a live calving: tag, sex, weight, breed, teeth and, optionally, sire.
+     * The calf of a live calving: tag, sex, weight, breed, coat (pelaje), teeth and, optionally, sire.
      *
      * @param array<string, mixed> $row
      * @param array<string, CaravanEntity> $existingCalves
      * @param array<string, int> $seenCalves
-     * @param array<string, int> $breeds normalised name => id
+     * @param BreedCoatCatalog $breeds the breeds and the coats each admits
      * @param array<int, ?CaravanEntity> $fathers cache
      * @param list<array{code: string, message: string, field?: string}> $rowErrors
      * @param list<array<string, mixed>> $warnings
-     * @return array{identification: string, sex: string, weight: ?float, breed_id: ?int, teeth: int, father_id: ?int}|null
+     * @return array{identification: string, sex: string, weight: ?float, breed_id: ?int, color_id: ?int, teeth: int, father_id: ?int}|null
      */
     private function calf(
         array $row,
@@ -515,7 +751,7 @@ final class ProcessPar01SubmissionUseCase
         ?GestationEntity $active,
         array $existingCalves,
         array &$seenCalves,
-        array $breeds,
+        BreedCoatCatalog $breeds,
         array &$fathers,
         array &$rowErrors,
         array &$warnings
@@ -554,17 +790,37 @@ final class ProcessPar01SubmissionUseCase
 
         $breedId = null;
         if ($row['breed_id'] !== null) {
-            $breedId = in_array($row['breed_id'], $breeds, true) ? $row['breed_id'] : null;
+            $breedId = $breeds->hasBreed($row['breed_id']) ? $row['breed_id'] : null;
 
             if ($breedId === null) {
                 $rowErrors[] = $this->error('BREED_UNKNOWN', "La raza elegida para la cría de '{$tag}' no existe.", 'raza');
             }
         } elseif ($row['raza'] !== null) {
-            $breedId = $breeds[$this->normalize($row['raza'])] ?? null;
+            $breedId = $breeds->breedIdByName($row['raza']);
 
             if ($breedId === null) {
                 $rowErrors[] = $this->error('BREED_UNKNOWN', "La raza '{$row['raza']}' de la cría de '{$tag}' no está en el catálogo. Elegila de la lista o dejala vacía.", 'raza');
             }
+        }
+
+        // The coat (pelaje), like an entry order's: from the catalog and, with a breed, one it admits.
+        $colorId = null;
+        if ($row['color_id'] !== null) {
+            $colorId = $breeds->hasColor($row['color_id']) ? $row['color_id'] : null;
+
+            if ($colorId === null) {
+                $rowErrors[] = $this->error('COLOR_UNKNOWN', "El pelaje elegido para la cría de '{$tag}' no existe.", 'pelaje');
+            }
+        } elseif ($row['pelaje'] !== null) {
+            $colorId = $breeds->colorIdByText($row['pelaje']);
+
+            if ($colorId === null) {
+                $rowErrors[] = $this->error('COLOR_UNKNOWN', "El pelaje '{$row['pelaje']}' de la cría de '{$tag}' no está en el catálogo. Elegilo de la lista o dejalo vacío.", 'pelaje');
+            }
+        }
+
+        if ($colorId !== null && $breedId !== null && !$breeds->admits($breedId, $colorId)) {
+            $rowErrors[] = $this->error('COLOR_NOT_OF_BREED', "El pelaje {$breeds->colorName($colorId)} de la cría de '{$tag}' no corresponde a su raza.", 'pelaje');
         }
 
         // The sire is optional: left empty, the gestation's single or confirmed sire is used, or
@@ -596,6 +852,7 @@ final class ProcessPar01SubmissionUseCase
             'sex' => $sex,
             'weight' => $row['peso'],
             'breed_id' => $breedId,
+            'color_id' => $colorId,
             'teeth' => max(0, (int) $row['dientes']),
             'father_id' => $fatherId,
         ];
@@ -608,27 +865,6 @@ final class ProcessPar01SubmissionUseCase
             'H', 'HEMBRA', 'F' => AnimalSex::FEMALE->value,
             default => null,
         };
-    }
-
-    /**
-     * @return array<string, int> normalised name => id
-     */
-    private function breedsByName(): array
-    {
-        $breeds = [];
-
-        foreach ($this->breedRepository->getAll() as $breed) {
-            $breeds[$this->normalize($breed->getName())] = (int) $breed->getId();
-        }
-
-        return $breeds;
-    }
-
-    private function normalize(string $text): string
-    {
-        $text = strtr(mb_strtolower(trim($text)), ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ñ' => 'n']);
-
-        return (string) preg_replace('/[^a-z0-9]+/', '', $text);
     }
 
     private function parseDate(string $raw): ?string
