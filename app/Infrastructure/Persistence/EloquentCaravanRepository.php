@@ -159,9 +159,35 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function findById(int $id): ?CaravanEntity
     {
-        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father'])->find($id);
+        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'batch.farm.provider', 'provider', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father'])->find($id);
         
         return $model ? CaravanMapper::toEntity($model) : null;
+    }
+
+    public function countOwn(): int
+    {
+        $query = Caravan::query();
+        $this->applyOwnScope($query);
+
+        return $query->count();
+    }
+
+    /**
+     * Own animals: no batch, or a batch that is not in a provider's farm.
+     */
+    private function applyOwnScope(\Illuminate\Database\Eloquent\Builder $query): void
+    {
+        $query->where(function ($q) {
+            $q->whereNull('batch_id')
+              ->orWhereHas('batch', function ($qb) {
+                  $qb->where(function ($subQb) {
+                      $subQb->whereNull('farm_id')
+                            ->orWhereHas('farm', function ($farmQb) {
+                                $farmQb->whereNull('provider_id');
+                            });
+                  });
+              });
+        });
     }
 
     public function findAll(?string $scope = 'own'): array
@@ -181,17 +207,7 @@ class EloquentCaravanRepository implements ICaravanRepository
         ]);
 
         if ($scope === 'own') {
-            $query->where(function ($q) {
-                $q->whereNull('batch_id')
-                  ->orWhereHas('batch', function ($qb) {
-                      $qb->where(function ($subQb) {
-                          $subQb->whereNull('farm_id')
-                                ->orWhereHas('farm', function ($farmQb) {
-                                    $farmQb->whereNull('provider_id');
-                                });
-                      });
-                  });
-            });
+            $this->applyOwnScope($query);
         } elseif ($scope === 'external') {
             $query->where(function ($q) {
                 $q->whereNotNull('provider_id')

@@ -52,6 +52,20 @@ class CaravanController extends Controller
     }
 
     /**
+     * One animal's record by id. 404 when it does not exist or belongs to another company.
+     */
+    public function show(int $id): JsonResponse
+    {
+        $entity = ($this->caravan->show)($id);
+
+        if ($entity === null) {
+            return response()->json(['message' => 'Caravana no encontrada.'], 404);
+        }
+
+        return response()->json(['data' => new CaravanResource($entity)]);
+    }
+
+    /**
      * Lista todas las caravanas registradas según su alcance (own | external | all).
      */
     public function index(\Illuminate\Http\Request $request): JsonResponse

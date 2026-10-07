@@ -65,6 +65,12 @@ interface ICaravanRepository
      */
     public function findAll(?string $scope = 'own'): array;
 
+    /**
+     * Head count of the active company's own herd, with the same meaning of "own" as findAll:
+     * animals in third-party farms (still the provider's) are left out.
+     */
+    public function countOwn(): int;
+
 
     /**
      * @param int $batchId

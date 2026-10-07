@@ -8,6 +8,7 @@ final class CaravanUseCases
 {
     public function __construct(
         public readonly ListCaravansUseCase $list,
+        public readonly GetCaravanUseCase $show,
         public readonly UpsertCaravanUseCase $upsert,
         public readonly ImportCaravansUseCase $import,
         public readonly ListCaravanMovementsUseCase $movements,

@@ -117,8 +117,10 @@ Route::middleware([
     // Lector electrónico en manga: alta estricta de animales nuevos
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/caravans/lookup', LookupCaravansController::class);
+        Route::get('/caravans/{id}', [CaravanController::class, 'show'])->whereNumber('id');
         Route::post('/caravans/register-new', RegisterNewCaravansController::class);
         Route::get('/dashboard/operational-kpis', [OperationalKpiController::class, 'index']);
+        Route::get('/dashboard/herd-summary', \App\Http\Controllers\Api\HerdSummaryController::class);
     });
 
     // Órdenes de Transferencia (CACT-01)
