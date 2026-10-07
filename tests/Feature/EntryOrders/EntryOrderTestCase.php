@@ -51,19 +51,25 @@ abstract class EntryOrderTestCase extends VeterinaryTestCase
     /**
      * A valid troop: 40 calves of both sexes (25/15), two breeds, from an auction.
      *
+     * Most tests buy a single category: `head_count` and `category_id` in the overrides become its
+     * only line (null leaves it out). `categories` declares the lines as they are sent.
+     *
      * @param array<string, mixed> $overrides
      * @return array<string, mixed>
      */
     protected function troop(array $overrides = []): array
     {
+        $head = array_key_exists('head_count', $overrides) ? $overrides['head_count'] : 40;
+        $category = array_key_exists('category_id', $overrides) ? $overrides['category_id'] : $this->categoryId('TERNERO');
+        unset($overrides['head_count'], $overrides['category_id']);
+
         return [
             'provider_id' => $this->provider->id,
             'farm_id' => $this->farm->id,
             'auction_number' => '338',
             'batch_name_mode' => 'AUTO',
             'batch_name' => null,
-            'head_count' => 40,
-            'category_id' => $this->categoryId('TERNERO'),
+            'categories' => $category !== null ? [['category_id' => $category, 'head_count' => $head]] : [],
             'sex_composition' => 'MIXED',
             'male_count' => 25,
             'female_count' => 15,
@@ -97,22 +103,24 @@ abstract class EntryOrderTestCase extends VeterinaryTestCase
     }
 
     /**
-     * @param list<array<string, mixed>> $animals
+     * A DTE: the head it declares.
+     *
      * @param array<string, mixed> $overrides
      * @return array<string, mixed>
      */
-    protected function dte(array $animals, array $overrides = []): array
+    protected function dte(int $headCount, array $overrides = []): array
     {
         return [
             'dte_number' => 'DTE-' . uniqid(),
             'dte_date' => now()->subDay()->toDateString(),
-            'animals' => $animals,
+            'head_count' => $headCount,
             ...$overrides,
         ];
     }
 
     /**
-     * A DTE for "Registrar ingreso": the animals arrive with it, so it carries their entry day.
+     * A DTE for "Registrar ingreso": the animals arrive with it, so it carries their entry day and
+     * the caravans received. By default it declares as many head as animals.
      *
      * @param list<array<string, mixed>> $animals
      * @param array<string, mixed> $overrides
@@ -120,19 +128,18 @@ abstract class EntryOrderTestCase extends VeterinaryTestCase
      */
     protected function registerDte(array $animals, array $overrides = []): array
     {
-        return $this->dte($animals, ['entered_at' => now()->toDateString(), ...$overrides]);
+        return $this->dte(count($animals), ['entered_at' => now()->toDateString(), 'animals' => $animals, ...$overrides]);
     }
 
     /**
      * Loads a DTE on the order and returns the order as the response left it.
      *
-     * @param list<array<string, mixed>> $animals
      * @param array<string, mixed> $overrides
      * @return array<string, mixed>
      */
-    protected function loadDte(int $orderId, array $animals, array $overrides = []): array
+    protected function loadDte(int $orderId, int $headCount, array $overrides = []): array
     {
-        return $this->apiAs('POST', "/entry-orders/{$orderId}/dtes", $this->dte($animals, $overrides))
+        return $this->apiAs('POST', "/entry-orders/{$orderId}/dtes", $this->dte($headCount, $overrides))
             ->assertCreated()
             ->json('order');
     }
@@ -144,30 +151,26 @@ abstract class EntryOrderTestCase extends VeterinaryTestCase
     protected function receive(int $orderId, array $payload)
     {
         return $this->apiAs('POST', "/entry-orders/{$orderId}/receive", [
+            'method' => 'MANUAL',
             'received_at' => now()->toDateString(),
-            'received' => [],
+            'animals' => [],
             ...$payload,
         ]);
     }
 
     /**
-     * Ids of the caravans of a DTE of the order, in the order the DTE listed them.
+     * Receives animals on a DTE of the order (by its position in the order) and returns the order.
      *
      * @param array<string, mixed> $order
-     * @return list<int>
+     * @param list<array<string, mixed>> $animals
+     * @param array<string, mixed> $extra
+     * @return array<string, mixed>
      */
-    protected function caravanIds(array $order, int $dteIndex = 0): array
+    protected function receiveOn(array $order, array $animals, int $dteIndex = 0, array $extra = []): array
     {
-        return array_column($order['dtes'][$dteIndex]['animals'], 'caravan_id');
-    }
-
-    /**
-     * @param list<int> $ids
-     * @return list<array{caravan_id: int, weight: ?float}>
-     */
-    protected function lines(array $ids, ?float $weight = 180): array
-    {
-        return array_map(fn (int $id) => ['caravan_id' => $id, 'weight' => $weight], $ids);
+        return $this->receive($order['id'], ['dte_id' => $order['dtes'][$dteIndex]['id'], 'animals' => $animals, ...$extra])
+            ->assertOk()
+            ->json('order');
     }
 
     /**

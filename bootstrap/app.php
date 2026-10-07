@@ -27,6 +27,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
             // A management session reading somebody's portal writes nothing in their name.
             'veterinary.portal.readonly' => \App\Http\Middleware\DenyReadOnlyPortalWrites::class,
+
+            // "What would happen?": runs the request and rolls it back (X-Dry-Run: 1).
+            'dry.run' => \App\Http\Middleware\DryRunTransaction::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

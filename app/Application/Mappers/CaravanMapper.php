@@ -84,8 +84,7 @@ class CaravanMapper
             $model->relationLoaded('subcategoryRelation') && $model->subcategoryRelation ? $model->subcategoryRelation->code : null,
             $model->relationLoaded('subcategoryRelation') && $model->subcategoryRelation ? $model->subcategoryRelation->name : null,
             false,
-            $model->relationLoaded('batch') && $model->batch && $model->batch->relationLoaded('farm') && $model->batch->farm ? $model->batch->farm->name : null,
-            $model->relationLoaded('entryOrderAnimal') ? $model->entryOrderAnimal?->reception_status : null
+            $model->relationLoaded('batch') && $model->batch && $model->batch->relationLoaded('farm') && $model->batch->farm ? $model->batch->farm->name : null
         );
     }
 

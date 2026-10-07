@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace App\Infrastructure\Persistence;
 
 use App\Application\Mappers\EntryOrderMapper;
+use App\Core\Entities\EntryOrderDteEntity;
+use App\Core\Entities\EntryOrderAnimalEntity;
 use App\Core\Entities\EntryOrderEntity;
 use App\Core\Enums\EntryOrderIncidentStatus;
 use App\Core\Enums\EntryOrderStatus;
-use App\Core\Enums\ReceptionStatus;
 use App\Core\Interfaces\IEntryOrderRepository;
 use App\Models\EntryOrder;
-use App\Models\EntryOrderAnimal;
 use App\Models\EntryOrderDte;
 use App\Models\EntryOrderIncident;
 use App\Models\EntryOrderReceiptSheet;
@@ -24,7 +24,7 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
         'provider',
         'farm',
         'batch',
-        'category',
+        'categories.category',
         'requestedByUser',
         'breeds.breed',
         'breeds.color',
@@ -38,6 +38,8 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
         'dtes.loadedByUser',
         'dtes.animals.caravan',
         'dtes.animals.breedLine',
+        'dtes.animals.categoryLine',
+        'dtes.animals.arrivalFindings',
         'incidents.raisedBy',
         'incidents.resolvedBy',
         'receiptSheets.issuedBy',
@@ -67,7 +69,6 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
                 'batch_name' => $order->getBatchName(),
                 'batch_name_mode' => $order->getBatchNameMode()->value,
                 'head_count' => $troop->headCount,
-                'category_id' => $troop->categoryId,
                 'sex_composition' => $troop->sexComposition?->value,
                 'male_count' => $troop->maleCount,
                 'female_count' => $troop->femaleCount,
@@ -92,10 +93,21 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
             ]);
             $model->save();
 
-            // A draft that was rewritten gets its breeds replaced whole: no caravan points at them yet.
+            // A draft that was rewritten gets its categories and breeds replaced whole: no caravan
+            // points at them yet.
             if ($isNew || $order->isTroopReplaced()) {
                 if (!$isNew) {
+                    $model->categories()->delete();
                     $model->breeds()->delete();
+                }
+
+                foreach ($troop->categories as $line) {
+                    $model->categories()->create([
+                        'company_id' => $model->company_id,
+                        'category_id' => $line->getCategoryId(),
+                        'head_count' => $line->getHeadCount(),
+                        'position' => $line->getPosition(),
+                    ]);
                 }
 
                 foreach ($troop->breeds as $breed) {
@@ -109,7 +121,7 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
             }
 
             $this->insertNewDtes($model, $order);
-            $this->updateReceptions($order);
+            $this->saveDteChanges($model, $order);
             $this->insertNewIncidents($model, $order);
             $this->updateResolvedIncidents($order);
             $this->saveReceiptSheets($model, $order);
@@ -156,11 +168,7 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
         return EntryOrder::with([
             ...self::SUMMARY_RELATIONS,
             // The list shows how far each DTE got without loading its caravans.
-            'dtes' => fn ($query) => $query->withCount([
-                'animals as pending_count' => fn ($q) => $q->where('reception_status', ReceptionStatus::PENDING->value),
-                'animals as received_count' => fn ($q) => $q->where('reception_status', ReceptionStatus::RECEIVED->value),
-                'animals as missing_count' => fn ($q) => $q->where('reception_status', ReceptionStatus::MISSING->value),
-            ]),
+            'dtes' => fn ($query) => $query->withCount('animals as received_count'),
         ])
             ->where('company_id', $companyId)
             ->when($status !== null, fn (Builder $query) => $query->where('status', $status))
@@ -210,15 +218,25 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
             return [];
         }
 
-        $animals = DB::table('entry_order_animals')
-            ->select(
-                'entry_order_id',
-                DB::raw('COUNT(*) as with_dte'),
-                DB::raw("SUM(CASE WHEN reception_status = 'RECEIVED' THEN 1 ELSE 0 END) as received"),
-                DB::raw("SUM(CASE WHEN reception_status = 'PENDING' THEN 1 ELSE 0 END) as in_transit")
-            )
+        $receivedByDte = DB::table('entry_order_animals')
+            ->select('entry_order_dte_id', DB::raw('COUNT(*) as received'))
             ->where('company_id', $companyId)
-            ->groupBy('entry_order_id');
+            ->groupBy('entry_order_dte_id');
+
+        // Received is the caravans plus the head counted without caravan. In transit is counted per
+        // DTE: declared minus received minus declared missing, never below zero.
+        $pending = 'd.head_count - COALESCE(r.received, 0) - d.uncaravaned_head_count - d.missing_head_count';
+        $animals = DB::table('entry_order_dtes as d')
+            ->leftJoinSub($receivedByDte, 'r', 'r.entry_order_dte_id', '=', 'd.id')
+            ->select(
+                'd.entry_order_id',
+                DB::raw('SUM(d.head_count) as with_dte'),
+                DB::raw('SUM(COALESCE(r.received, 0) + d.uncaravaned_head_count) as received'),
+                DB::raw('SUM(d.uncaravaned_head_count) as uncaravaned'),
+                DB::raw("SUM(CASE WHEN {$pending} > 0 THEN {$pending} ELSE 0 END) as in_transit")
+            )
+            ->where('d.company_id', $companyId)
+            ->groupBy('d.entry_order_id');
 
         $incidents = DB::table('entry_order_incidents')
             ->select('entry_order_id', DB::raw('COUNT(*) as open_incidents'))
@@ -236,7 +254,7 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
             ->where('entry_orders.status', '!=', EntryOrderStatus::CANCELLED->value)
             ->get([
                 'entry_orders.id', 'entry_orders.code', 'entry_orders.status', 'entry_orders.batch_id', 'entry_orders.head_count',
-                'animals.with_dte', 'animals.received', 'animals.in_transit', 'incidents.open_incidents',
+                'animals.with_dte', 'animals.received', 'animals.uncaravaned', 'animals.in_transit', 'incidents.open_incidents',
             ])
             ->each(function ($row) use (&$summaries): void {
                 $status = EntryOrderStatus::from($row->status);
@@ -249,6 +267,7 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
                     'head_count' => (int) $row->head_count,
                     'with_dte_count' => (int) ($row->with_dte ?? 0),
                     'received_count' => (int) ($row->received ?? 0),
+                    'uncaravaned_count' => (int) ($row->uncaravaned ?? 0),
                     'in_transit_count' => (int) ($row->in_transit ?? 0),
                     'open_incidents_count' => (int) ($row->open_incidents ?? 0),
                 ];
@@ -258,71 +277,133 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
     }
 
     /**
-     * A DTE is written once, with its caravans, and never rewritten: the caravans it created exist.
+     * A DTE is written once; later only its declared and missing head change (saveDteChanges).
      */
     private function insertNewDtes(EntryOrder $model, EntryOrderEntity $order): void
     {
-        $unsaved = $order->unsavedDtes();
-
-        if ($unsaved === []) {
-            return;
-        }
-
-        $breedIdByPosition = $model->breeds()->pluck('id', 'position')->all();
-
-        foreach ($unsaved as $dte) {
+        foreach ($order->unsavedDtes() as $dte) {
             $row = EntryOrderDte::create([
                 'company_id' => $model->company_id,
                 'entry_order_id' => $model->id,
                 'dte_number' => $dte->getDteNumber(),
                 'dte_date' => $dte->getDteDate(),
                 'head_count' => $dte->getHeadCount(),
+                'missing_head_count' => $dte->getMissingHeadCount(),
+                'uncaravaned_head_count' => $dte->getUncaravanedHeadCount(),
                 'loaded_by_user_id' => $dte->getLoadedByUserId(),
                 'observations' => $dte->getObservations(),
             ]);
 
-            $now = now();
-            $lines = [];
+            // "Registrar ingreso" receives the DTE in the same operation.
+            $this->insertAnimals($model, (int) $row->id, $dte);
+        }
+    }
 
-            foreach ($dte->getAnimals() as $animal) {
-                $lines[] = [
-                    'company_id' => $model->company_id,
-                    'entry_order_id' => $model->id,
-                    'entry_order_dte_id' => $row->id,
-                    'caravan_id' => $animal->getCaravanId(),
-                    // "Registrar ingreso" receives the DTE in the same operation, so it may not be PENDING.
-                    'reception_status' => $animal->getReceptionStatus()->value,
-                    'received_at' => $animal->getReceivedAt(),
-                    'reception_method' => $animal->getReceptionMethod()?->value,
-                    'received_by_user_id' => $animal->getReceivedByUserId(),
-                    'entry_order_breed_id' => $animal->getBreedPosition() !== null
-                        ? ($breedIdByPosition[$animal->getBreedPosition()] ?? null)
-                        : null,
-                    'caravan_movement_id' => $animal->getCaravanMovementId(),
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ];
-            }
+    /**
+     * Stored DTEs: a correction of their head, head declared missing or counted without caravan, and the caravans received
+     * on them in this operation.
+     */
+    private function saveDteChanges(EntryOrder $model, EntryOrderEntity $order): void
+    {
+        foreach ($order->changedDtes() as $dte) {
+            EntryOrderDte::withoutGlobalScopes()->whereKey($dte->getId())->update([
+                'head_count' => $dte->getHeadCount(),
+                'missing_head_count' => $dte->getMissingHeadCount(),
+                'uncaravaned_head_count' => $dte->getUncaravanedHeadCount(),
+            ]);
+        }
 
-            foreach (array_chunk($lines, 500) as $chunk) {
-                DB::table('entry_order_animals')->insert($chunk);
+        foreach ($order->getDtes() as $dte) {
+            if ($dte->getId() !== null) {
+                $this->insertAnimals($model, $dte->getId(), $dte);
             }
         }
     }
 
     /**
-     * Writes how the stored caravans touched by this operation were received or declared missing.
+     * The caravans received on a DTE that are not stored yet.
      */
-    private function updateReceptions(EntryOrderEntity $order): void
+    private function insertAnimals(EntryOrder $model, int $dteId, EntryOrderDteEntity $dte): void
     {
-        foreach ($order->changedAnimals() as $animal) {
-            EntryOrderAnimal::withoutGlobalScopes()->whereKey($animal->getId())->update([
-                'reception_status' => $animal->getReceptionStatus()->value,
+        $unsaved = $dte->unsavedAnimals();
+
+        if ($unsaved === []) {
+            return;
+        }
+
+        $breedIdByPosition = $model->breeds()->pluck('id', 'position')->all();
+        $categoryIdByPosition = $model->categories()->pluck('id', 'position')->all();
+        $now = now();
+        $lines = [];
+
+        foreach ($unsaved as $animal) {
+            $lines[] = [
+                'company_id' => $model->company_id,
+                'entry_order_id' => $model->id,
+                'entry_order_dte_id' => $dteId,
+                'caravan_id' => $animal->getCaravanId(),
                 'received_at' => $animal->getReceivedAt(),
                 'reception_method' => $animal->getReceptionMethod()?->value,
                 'received_by_user_id' => $animal->getReceivedByUserId(),
+                'entry_order_breed_id' => $animal->getBreedPosition() !== null
+                    ? ($breedIdByPosition[$animal->getBreedPosition()] ?? null)
+                    : null,
+                'entry_order_category_id' => $animal->getCategoryPosition() !== null
+                    ? ($categoryIdByPosition[$animal->getCategoryPosition()] ?? null)
+                    : null,
                 'caravan_movement_id' => $animal->getCaravanMovementId(),
-            ]);
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        foreach (array_chunk($lines, 500) as $chunk) {
+            DB::table('entry_order_animals')->insert($chunk);
+        }
+
+        $this->insertArrivalFindings($model, $dteId, $unsaved);
+    }
+
+    /**
+     * The boxes marked on the lines just stored. The lines go in bulk, so they are looked up again
+     * by caravan: a caravan is received once per DTE.
+     *
+     * @param EntryOrderAnimalEntity[] $animals
+     */
+    private function insertArrivalFindings(EntryOrder $model, int $dteId, array $animals): void
+    {
+        $marked = array_filter($animals, fn (EntryOrderAnimalEntity $a) => $a->getArrivalFindings() !== []);
+
+        if ($marked === []) {
+            return;
+        }
+
+        $lineIds = DB::table('entry_order_animals')
+            ->where('entry_order_dte_id', $dteId)
+            ->whereIn('caravan_id', array_map(fn (EntryOrderAnimalEntity $a) => $a->getCaravanId(), $marked))
+            ->pluck('id', 'caravan_id');
+        $now = now();
+        $rows = [];
+
+        foreach ($marked as $animal) {
+            foreach ($animal->getArrivalFindings() as $finding) {
+                $rows[] = [
+                    'company_id' => $model->company_id,
+                    'entry_order_animal_id' => $lineIds[$animal->getCaravanId()],
+                    'caravan_id' => $animal->getCaravanId(),
+                    'entry_order_dte_id' => $dteId,
+                    'finding' => $finding->value,
+                    'observed_at' => $animal->getReceivedAt(),
+                    'entry_order_receipt_sheet_id' => $animal->getReceiptSheetId(),
+                    'recorded_by_user_id' => $animal->getReceivedByUserId(),
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+        }
+
+        foreach (array_chunk($rows, 500) as $chunk) {
+            DB::table('entry_order_arrival_findings')->insert($chunk);
         }
     }
 
@@ -366,6 +447,7 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
             EntryOrderReceiptSheet::withoutGlobalScopes()->whereKey($sheet->getId())->update([
                 'status' => $sheet->getStatus()->value,
                 'weighing_mode' => $sheet->getWeighingMode()->value,
+                'reference_mode' => $sheet->getReferenceMode()->value,
                 'processed_pages' => json_encode($sheet->getProcessedPages()),
                 'printed_at' => $sheet->getPrintedAt(),
                 'processed_at' => $sheet->getProcessedAt(),
@@ -381,7 +463,10 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
                 'number' => $sheet->getNumber(),
                 'status' => $sheet->getStatus()->value,
                 'weighing_mode' => $sheet->getWeighingMode()->value,
-                'caravan_ids' => $sheet->getCaravanIds(),
+                'reference_mode' => $sheet->getReferenceMode()->value,
+                'dte_head_count' => $sheet->getDteHeadCount(),
+                'expected_head_count' => $sheet->getExpectedHeadCount(),
+                'row_count' => $sheet->getRowCount(),
                 'page_count' => $sheet->getPageCount(),
                 'processed_pages' => $sheet->getProcessedPages(),
                 'issued_by_user_id' => $sheet->getIssuedByUserId(),

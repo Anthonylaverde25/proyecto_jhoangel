@@ -237,11 +237,6 @@ final class ProcessCact01SubmissionUseCase
                 continue;
             }
 
-            if (!$animal->isInPossession()) {
-                $errorsByRow[$index][] = $this->error('CARAVAN_IN_TRANSIT', "La caravana '{$tag}' está en tránsito: figura en un DTE pero todavía no se recibió.");
-                continue;
-            }
-
             if ($sourceBatch !== null && $animal->getBatchId() !== $sourceBatch->getId()) {
                 // The order may know why: the animal already travelled with it.
                 $explained = $this->orderExecution->absenceFromSource($order, (int) $animal->getId(), $tag);

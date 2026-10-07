@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Application\Services;
 
+use App\Core\Entities\EntryOrderCategoryEntity;
+use App\Core\Enums\SexComposition;
 use App\Core\Exceptions\EntryOrderDomainException;
 use App\Core\ValueObjects\EntryTroop;
 use App\Models\AnimalCategory;
@@ -14,18 +16,24 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * The rules of a troop that need the catalogues. EntryTroop already guarantees what its own values
- * can tell (head and sex counts, age, weights, repeated breeds); this checks what they point to.
+ * can tell (head and sex counts, age, weights, repeated breeds and categories); this checks what
+ * they point to.
  */
 final class EntryOrderValidator
 {
     /**
+     * The troop, valid, with the name and sex of each category: what a reception in the same
+     * operation ("Registrar ingreso") reads to tell each animal's category.
+     *
      * @throws EntryOrderDomainException
      */
-    public function assertValid(EntryTroop $troop, int $companyId): void
+    public function assertValid(EntryTroop $troop, int $companyId): EntryTroop
     {
         $this->assertOrigin($troop, $companyId);
-        $this->assertCategory($troop);
+        $troop = $this->assertCategories($troop);
         $this->assertBreeds($troop);
+
+        return $troop;
     }
 
     private function assertOrigin(EntryTroop $troop, int $companyId): void
@@ -47,25 +55,83 @@ final class EntryOrderValidator
         }
     }
 
-    private function assertCategory(EntryTroop $troop): void
+    /**
+     * Each category exists and admits the declared sexes. A troop of one sex only holds categories
+     * that admit it. A troop of both sexes holds categories of either, and its males and females
+     * have to fit them: 30 Novillito are 30 males at least.
+     */
+    private function assertCategories(EntryTroop $troop): EntryTroop
     {
-        if ($troop->categoryId === null) {
-            return;
+        if ($troop->categories === []) {
+            return $troop;
         }
 
-        $category = AnimalCategory::find($troop->categoryId);
+        $catalogue = AnimalCategory::whereIn('id', array_map(fn ($line) => $line->getCategoryId(), $troop->categories))
+            ->get(['id', 'name', 'sex'])
+            ->keyBy('id');
+        $composition = $troop->sexComposition;
+        $onlyOf = ['M' => 0, 'H' => 0];
+        $admits = ['M' => false, 'H' => false];
+        $described = [];
 
-        if ($category === null) {
-            throw EntryOrderDomainException::invalid('La categoría no existe.', 'CATEGORY_INVALID', 'category_id');
-        }
+        foreach ($troop->categoriesByPosition() as $line) {
+            $category = $catalogue->get($line->getCategoryId());
 
-        if ($troop->sexComposition !== null && !$troop->sexComposition->allowsCategorySex((string) $category->sex)) {
-            throw EntryOrderDomainException::invalid(
-                "La categoría {$category->name} no admite una tropa de {$troop->sexComposition->label()}.",
-                'SEX_NOT_ALLOWED_BY_CATEGORY',
-                'sex_composition'
+            if ($category === null) {
+                throw EntryOrderDomainException::invalid("La categoría {$line->getPosition()} no existe.", 'CATEGORY_INVALID', 'categories');
+            }
+
+            $sex = strtoupper((string) $category->sex);
+            $described[] = new EntryOrderCategoryEntity(
+                id: $line->getId(),
+                position: $line->getPosition(),
+                categoryId: $line->getCategoryId(),
+                headCount: $line->getHeadCount(),
+                categoryName: (string) $category->name,
+                categorySex: $sex
             );
+
+            if ($composition !== null && $composition !== SexComposition::MIXED && !$composition->allowsCategorySex($sex)) {
+                throw EntryOrderDomainException::invalid(
+                    "La categoría {$category->name} no admite una tropa de {$composition->label()}.",
+                    'SEX_NOT_ALLOWED_BY_CATEGORY',
+                    'sex_composition'
+                );
+            }
+
+            $admits['M'] = $admits['M'] || $sex !== 'H';
+            $admits['H'] = $admits['H'] || $sex !== 'M';
+
+            if (isset($onlyOf[$sex])) {
+                $onlyOf[$sex] += (int) $line->getHeadCount();
+            }
         }
+
+        if ($composition !== SexComposition::MIXED) {
+            return $troop->withCategories($described);
+        }
+
+        foreach (['M' => 'machos', 'H' => 'hembras'] as $sex => $word) {
+            if (!$admits[$sex]) {
+                throw EntryOrderDomainException::invalid(
+                    "Ninguna de las categorías admite {$word}: la tropa no puede ser de ambos sexos.",
+                    'SEX_NOT_ALLOWED_BY_CATEGORY',
+                    'sex_composition'
+                );
+            }
+        }
+
+        foreach (['M' => [$troop->maleCount, 'machos', 'male_count'], 'H' => [$troop->femaleCount, 'hembras', 'female_count']] as $sex => [$declared, $word, $field]) {
+            if ($declared !== null && $onlyOf[$sex] > $declared) {
+                throw EntryOrderDomainException::invalid(
+                    "Las categorías declaran {$onlyOf[$sex]} {$word}, pero la tropa trae {$declared}.",
+                    'SEX_COUNTS_CONTRADICT_CATEGORIES',
+                    $field
+                );
+            }
+        }
+
+        return $troop->withCategories($described);
     }
 
     private function assertBreeds(EntryTroop $troop): void

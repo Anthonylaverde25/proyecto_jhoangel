@@ -56,6 +56,8 @@ final class ProcessPar01SubmissionUseCase
     private const ITEM_RESOLVE = 'resolve';
     /** A row that reports a female past her due date without calving (only N). */
     private const ITEM_OVERDUE = 'overdue';
+    /** A row without a mark: only kept when obtaining an order, as a female still to calve. */
+    private const ITEM_PENDING = 'pending';
 
     public function __construct(
         private readonly ICaravanRepository $caravanRepository,
@@ -82,13 +84,45 @@ final class ProcessPar01SubmissionUseCase
     }
 
     /**
-     * Every check of the sheet, collected and thrown together.
+     * "Obtener orden de parición" on the PAR-01 review: the sheet carries no order, and one is
+     * generated from it — checked exactly as confirming it would be — without registering anything.
+     * Its roll is every female the sheet resolved, marked or not, so the same paper can be loaded
+     * again on later days against it.
+     *
+     * @throws Par01ValidationException
+     * @throws DomainException
+     */
+    public function obtainOrder(Par01SubmissionDTO $dto): BirthOrderEntity
+    {
+        if ($dto->birthOrderId !== null || $dto->paperOrderCode !== null) {
+            throw new DomainException('La planilla ya trae una orden de parición: no hace falta obtener otra.');
+        }
+
+        $checked = $this->validate($dto, forOrder: true);
+        $females = array_map(fn (array $item) => [
+            'mother_id' => (int) $item['mother']->getId(),
+            'gestation_id' => $item['gestation_id'],
+            'batch_id' => $item['mother']->getBatchId(),
+        ], $checked['items']);
+
+        return DB::transaction(fn (): BirthOrderEntity => $this->orderExecution->createFromSheet(
+            $dto,
+            $females,
+            'Orden obtenida desde la revisión de una planilla PAR-01 escaneada que no traía orden'
+        ));
+    }
+
+    /**
+     * Every check of the sheet, collected and thrown together. Shared by confirming the sheet and by
+     * obtaining its order (`$forOrder`), so both answer the same about the same paper. Obtaining an
+     * order also keeps the unmarked females and lets an N stand without an order yet: both become
+     * lines of the order being generated.
      *
      * @return array<string, mixed>
      *
      * @throws Par01ValidationException
      */
-    private function validate(Par01SubmissionDTO $dto): array
+    private function validate(Par01SubmissionDTO $dto, bool $forOrder = false): array
     {
         $headerErrors = [];
         $warnings = [];
@@ -161,8 +195,9 @@ final class ProcessPar01SubmissionUseCase
 
             // 3. Nothing written: a female that did not calve yet, or one already registered.
             $mark = BirthSheetMark::parse($row['resultado']);
+            $pending = $mark->isEmpty() && !$this->hasCalfData($row);
 
-            if ($mark->isEmpty() && !$this->hasCalfData($row)) {
+            if ($pending && !$forOrder) {
                 continue;
             }
 
@@ -173,11 +208,6 @@ final class ProcessPar01SubmissionUseCase
                 continue;
             }
 
-            if (!$mother->isInPossession()) {
-                $errorsByRow[$index][] = $this->error('CARAVAN_IN_TRANSIT', "La caravana '{$tag}' está en tránsito: figura en un DTE pero todavía no se recibió.", 'caravana_madre');
-                continue;
-            }
-
             if ($mother->getSex() !== AnimalSex::FEMALE) {
                 $errorsByRow[$index][] = $this->error('NOT_A_FEMALE', "La caravana '{$tag}' no es de una hembra.", 'caravana_madre');
                 continue;
@@ -185,6 +215,24 @@ final class ProcessPar01SubmissionUseCase
 
             $motherId = (int) $mother->getId();
             $line = $order?->animalByMotherId($motherId);
+
+            // An order being obtained lists every female on the sheet, so none may be held elsewhere.
+            if ($forOrder && isset($committed[$motherId])) {
+                $errorsByRow[$index][] = $this->error('ANIMAL_IN_OPEN_ORDER', "La hembra '{$tag}' está en la orden de parición {$committed[$motherId]}. Registrala con esa orden.", 'caravana_madre');
+                continue;
+            }
+
+            if ($pending) {
+                $active = $mother->getActiveGestation();
+
+                if ($active === null) {
+                    $errorsByRow[$index][] = $this->error('NO_ACTIVE_GESTATION', "'{$tag}' no tiene una preñez en curso: no puede quedar pendiente de parir en la orden.", 'caravana_madre');
+                    continue;
+                }
+
+                $items[] = ['kind' => self::ITEM_PENDING, 'index' => $index, 'mother' => $mother, 'gestation_id' => $active->getId()];
+                continue;
+            }
 
             // 4. R1: what the order already knows goes before any other check — the calf tag in use
             //    included, since the previous load created it.
@@ -225,7 +273,7 @@ final class ProcessPar01SubmissionUseCase
             }
 
             if ($outcome === null) {
-                $item = $this->overdueItem($row, $index, $tag, $mother, $line, $order, $today, $warnings, $rowErrors);
+                $item = $this->overdueItem($row, $index, $tag, $mother, $line, $order, $today, $warnings, $rowErrors, $forOrder);
 
                 if ($rowErrors !== []) {
                     $errorsByRow[$index] = array_merge($errorsByRow[$index] ?? [], $rowErrors);
@@ -593,7 +641,8 @@ final class ProcessPar01SubmissionUseCase
         ?BirthOrderEntity $order,
         string $today,
         array &$warnings,
-        array &$rowErrors
+        array &$rowErrors,
+        bool $forOrder = false
     ): ?array {
         if ($this->hasCalfData($row, withDate: false)) {
             $rowErrors[] = $this->overdueWithCalfData($tag);
@@ -601,13 +650,14 @@ final class ProcessPar01SubmissionUseCase
             return null;
         }
 
-        if ($order === null) {
+        // An order being obtained takes her in as a line, and the N is recorded when the sheet is confirmed.
+        if ($order === null && !$forOrder) {
             $rowErrors[] = $this->error('OVERDUE_NEEDS_ORDER', "'{$tag}': la N (no parió) necesita una orden de parición abierta donde quedar como alerta. Una planilla en blanco sirve para una sola carga: emití la orden para recorridas de varios días.", 'resultado');
 
             return null;
         }
 
-        if ($line === null) {
+        if ($order !== null && $line === null) {
             $rowErrors[] = $this->error('OVERDUE_NOT_IN_ORDER', "'{$tag}' no está en la orden {$order->getCode()}: la N avisa de una hembra de la orden que no parió.", 'resultado');
 
             return null;
@@ -621,7 +671,7 @@ final class ProcessPar01SubmissionUseCase
             return null;
         }
 
-        if ($line->getGestationId() !== null && $active->getId() !== $line->getGestationId()) {
+        if ($line?->getGestationId() !== null && $active->getId() !== $line->getGestationId()) {
             $rowErrors[] = $this->error('GESTATION_CLOSED', "La preñez de '{$tag}' que listaba la orden ya se cerró por otro camino.", 'resultado');
 
             return null;

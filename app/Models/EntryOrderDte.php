@@ -22,6 +22,8 @@ class EntryOrderDte extends Model
         'dte_number',
         'dte_date',
         'head_count',
+        'missing_head_count',
+        'uncaravaned_head_count',
         'loaded_by_user_id',
         'observations',
     ];
@@ -34,6 +36,8 @@ class EntryOrderDte extends Model
         'entry_order_id' => 'integer',
         'dte_date' => 'date:Y-m-d',
         'head_count' => 'integer',
+        'missing_head_count' => 'integer',
+        'uncaravaned_head_count' => 'integer',
         'loaded_by_user_id' => 'integer',
     ];
 

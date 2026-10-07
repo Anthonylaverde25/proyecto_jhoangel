@@ -67,11 +67,6 @@ final class AssignExternalCaravansToOwnBatchUseCase
                     $affectedSourceBatchIds[$sourceBatchId] = true;
                 }
 
-                if (!$caravan->isInPossession()) {
-                    $state = $caravan->isInTransit() ? 'está en tránsito: todavía no se recibió' : 'se declaró como que no llegará';
-                    throw new DomainException("La caravana {$caravan->getIdentification()->getValue()} {$state}, así que no se puede asignar a un lote propio.");
-                }
-
                 $sourceBatch = $sourceBatchId ? $this->batchRepository->findById($sourceBatchId) : null;
                 if ($sourceBatch && $sourceBatch->isOwn()) {
                     throw new DomainException("La caravana con identificación {$caravan->getIdentification()->getValue()} ya pertenece a un lote propio.");

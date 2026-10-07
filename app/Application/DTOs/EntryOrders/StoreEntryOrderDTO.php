@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\DTOs\EntryOrders;
 
 use App\Core\Entities\EntryOrderBreedEntity;
+use App\Core\Entities\EntryOrderCategoryEntity;
 use App\Core\Enums\BatchNameMode;
 use App\Core\Enums\SexComposition;
 use App\Core\Enums\TroopCondition;
@@ -63,14 +64,24 @@ final readonly class StoreEntryOrderDTO
             );
         }
 
+        $categories = [];
+
+        foreach (array_values($t['categories'] ?? []) as $index => $line) {
+            $categories[] = new EntryOrderCategoryEntity(
+                id: null,
+                position: $index + 1,
+                categoryId: (int) $line['category_id'],
+                headCount: isset($line['head_count']) && $line['head_count'] !== '' ? (int) $line['head_count'] : null
+            );
+        }
+
         $auction = isset($t['auction_number']) ? trim((string) $t['auction_number']) : '';
 
         return new EntryTroop(
             providerId: (int) $t['provider_id'],
             farmId: (int) $t['farm_id'],
             auctionNumber: $auction !== '' ? $auction : null,
-            headCount: isset($t['head_count']) ? (int) $t['head_count'] : null,
-            categoryId: isset($t['category_id']) ? (int) $t['category_id'] : null,
+            categories: $categories,
             sexComposition: $sex,
             maleCount: $sex === SexComposition::MIXED && isset($t['male_count']) ? (int) $t['male_count'] : null,
             femaleCount: $sex === SexComposition::MIXED && isset($t['female_count']) ? (int) $t['female_count'] : null,

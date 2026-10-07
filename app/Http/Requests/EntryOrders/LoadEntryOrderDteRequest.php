@@ -7,9 +7,8 @@ namespace App\Http\Requests\EntryOrders;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * A DTE and the caravans it lists. Sex and breed per caravan are optional here: whether the order
- * needs them is decided by EntryOrderDteService, which reports each missing cell by row. No arrival
- * date and no weights: the animals are received later.
+ * A DTE: its number, date and the head it declares. No caravans, arrival date nor weights: the
+ * animals are received later.
  */
 final class LoadEntryOrderDteRequest extends FormRequest
 {
@@ -43,10 +42,7 @@ final class LoadEntryOrderDteRequest extends FormRequest
             "{$prefix}dte_number" => 'required|string|max:40',
             "{$prefix}dte_date" => 'required|date|before_or_equal:today',
             "{$prefix}observations" => 'nullable|string|max:2000',
-            "{$prefix}animals" => 'required|array|min:1|max:5000',
-            "{$prefix}animals.*.caravana" => 'present|nullable|string|max:30',
-            "{$prefix}animals.*.sex" => 'nullable|string|max:1',
-            "{$prefix}animals.*.breed_position" => 'nullable|integer|min:1|max:10',
+            "{$prefix}head_count" => 'required|integer|min:1|max:5000',
         ];
     }
 
@@ -59,8 +55,8 @@ final class LoadEntryOrderDteRequest extends FormRequest
             "{$prefix}dte_number.required" => 'Falta el número de DTE.',
             "{$prefix}dte_date.required" => 'Falta la fecha del DTE.',
             "{$prefix}dte_date.before_or_equal" => 'La fecha del DTE no puede ser futura.',
-            "{$prefix}animals.required" => 'El DTE no trae caravanas.',
-            "{$prefix}animals.min" => 'El DTE no trae caravanas.',
+            "{$prefix}head_count.required" => 'Faltan las cabezas que declara el DTE.',
+            "{$prefix}head_count.min" => 'El DTE tiene que declarar al menos una cabeza.',
         ];
     }
 }

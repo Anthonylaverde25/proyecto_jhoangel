@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\WorkTemplates;
 
+use Tests\Feature\DryRun\AssertsDryRun;
 use App\Models\Activity;
 use App\Models\AnimalCategory;
 use App\Models\AnimalSubcategory;
@@ -24,6 +25,8 @@ use Tests\Feature\Veterinary\VeterinaryTestCase;
  */
 class Cact01TemplateProcessingTest extends VeterinaryTestCase
 {
+    use AssertsDryRun;
+
     private Batch $sourceBatch;
     private AnimalCategory $ternero;
     private int $operationalTypeId;
@@ -90,6 +93,41 @@ class Cact01TemplateProcessingTest extends VeterinaryTestCase
 
         // The old weights are kept as history, only unflagged.
         $this->assertSame(2, CaravanWeight::where('caravan_id', $animals[0]->id)->count());
+    }
+
+    public function test_a_dry_run_answers_as_the_real_sheet_and_saves_nothing(): void
+    {
+        $animal = $this->animal('CACT-D-01', 200, 2);
+        $sheet = fn () => $this->submit(
+            [$this->newDestination('RECRIA DRY', 'Recría Dry', 'RECRIA', isConfined: true)],
+            [$this->row('CACT-D-01', 'RECRIA DRY', 240, '4D')]
+        );
+
+        $preview = $this->assertDryRunLeavesNothing(
+            ['batches', 'caravan_movements', 'caravan_weights', 'transfer_orders'],
+            $sheet,
+            201
+        );
+        $this->assertSame(1, $preview->json('data.destinations.0.count'));
+        $this->assertSame($this->sourceBatch->id, (int) $animal->fresh()->batch_id);
+        $this->assertSame(2, (int) $animal->fresh()->teeth);
+
+        $sheet()->assertStatus(201);
+        $this->assertNotSame($this->sourceBatch->id, (int) $animal->fresh()->batch_id);
+    }
+
+    public function test_a_dry_run_reports_the_same_row_errors(): void
+    {
+        $this->animal('CACT-D-02', 200, 2);
+        $sheet = fn () => $this->submit(
+            [$this->newDestination('RECRIA DRY2', 'Recría Dry 2', 'RECRIA', isConfined: true)],
+            [$this->row('CACT-D-02', 'RECRIA DRY2', 240, '4D'), $this->row('CACT-NOPE', 'RECRIA DRY2', 240, '4D')]
+        );
+
+        $preview = $this->assertDryRunLeavesNothing(['batches', 'caravan_movements'], $sheet, 422);
+        $real = $sheet()->assertStatus(422);
+
+        $this->assertSame($real->json('row_errors'), $preview->json('row_errors'));
     }
 
     public function test_one_source_closes_once_no_matter_how_many_destinations(): void

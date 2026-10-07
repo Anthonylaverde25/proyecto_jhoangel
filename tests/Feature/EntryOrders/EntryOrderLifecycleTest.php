@@ -90,7 +90,7 @@ class EntryOrderLifecycleTest extends EntryOrderTestCase
             'farm_id' => $this->farm->id,
             'batch_name_mode' => 'AUTO',
             'purchase_date' => now()->toDateString(),
-            'head_count' => null,
+            'categories' => [],
             'breeds' => [],
             'confirm' => false,
         ])->assertCreated()->json('order');
@@ -99,12 +99,13 @@ class EntryOrderLifecycleTest extends EntryOrderTestCase
         $this->assertNull($draft['head_count']);
         $this->assertNull($draft['batch_name']);
         $this->assertSame([], $draft['breeds']);
+        $this->assertSame([], $draft['categories']);
 
         // Confirming an incomplete troop says what is missing, on its field.
         $this->apiAs('POST', "/entry-orders/{$draft['id']}/confirm")
             ->assertStatus(422)
             ->assertJsonPath('code', 'TROOP_INCOMPLETE')
-            ->assertJsonPath('field', 'head_count');
+            ->assertJsonPath('field', 'categories');
 
         $this->apiAs('PUT', "/entry-orders/{$draft['id']}", [...$this->troop(), 'confirm' => false])->assertOk();
         $confirmed = $this->apiAs('POST', "/entry-orders/{$draft['id']}/confirm")->assertOk()->json('order');
@@ -121,7 +122,7 @@ class EntryOrderLifecycleTest extends EntryOrderTestCase
             'batch_name_mode' => 'AUTO',
             'purchase_date' => now()->toDateString(),
             'confirm' => true,
-        ])->assertStatus(422)->assertJsonValidationErrors(['head_count', 'category_id', 'breeds']);
+        ])->assertStatus(422)->assertJsonValidationErrors(['categories', 'breeds']);
     }
 
     public function test_a_confirmed_order_is_no_longer_editable(): void

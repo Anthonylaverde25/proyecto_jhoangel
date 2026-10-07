@@ -29,7 +29,6 @@ class EntryOrder extends Model
         'batch_name',
         'batch_name_mode',
         'head_count',
-        'category_id',
         'sex_composition',
         'male_count',
         'female_count',
@@ -63,7 +62,6 @@ class EntryOrder extends Model
         'farm_id' => 'integer',
         'batch_id' => 'integer',
         'head_count' => 'integer',
-        'category_id' => 'integer',
         'male_count' => 'integer',
         'female_count' => 'integer',
         'age_min_months' => 'integer',
@@ -97,9 +95,9 @@ class EntryOrder extends Model
         return $this->belongsTo(Batch::class);
     }
 
-    public function category(): BelongsTo
+    public function categories(): HasMany
     {
-        return $this->belongsTo(AnimalCategory::class, 'category_id');
+        return $this->hasMany(EntryOrderCategory::class)->orderBy('position');
     }
 
     public function requestedByUser(): BelongsTo

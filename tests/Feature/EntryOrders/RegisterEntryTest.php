@@ -10,7 +10,8 @@ use App\Models\EntryOrder;
 
 /**
  * "Registrar ingreso": the DTE and the animals are already in hand, so the order is created with
- * its DTE and every caravan received on the entry day, all or nothing.
+ * its DTE — the head it declares — and a caravan for every animal received on the entry day, all
+ * or nothing.
  */
 class RegisterEntryTest extends EntryOrderTestCase
 {
@@ -28,12 +29,37 @@ class RegisterEntryTest extends EntryOrderTestCase
         $this->assertSame('COMPLETED', $order['status']);
         $this->assertSame('REGISTERED', $order['kind']);
         $this->assertSame(3, $order['received_count']);
+        $this->assertSame(3, $order['dtes'][0]['head_count']);
         $this->assertSame(3, Caravan::where('batch_id', $order['batch']['id'])->count());
         $this->assertSame(3, (int) Batch::findOrFail($order['batch']['id'])->caravans_count);
         $this->assertSame(['MANUAL'], array_values(array_unique(array_column($order['dtes'][0]['animals'], 'reception_method'))));
         $this->assertEquals(185.0, (float) Caravan::where('identification', 'EO-R-1')->value('entry_weight'));
         $this->assertSame(now()->toDateString(), Caravan::where('identification', 'EO-Q-1')->firstOrFail()->entry_date->toDateString());
         $this->assertCount(1, $order['history']);
+    }
+
+    public function test_fewer_animals_than_the_dte_declares_stay_in_transit(): void
+    {
+        $order = $this->apiAs('POST', '/entry-orders/register', [
+            ...$this->troop(['head_count' => 3, 'sex_composition' => 'MALE', 'male_count' => null, 'female_count' => null]),
+            'dte' => $this->registerDte($this->animals('V', 2), ['head_count' => 3]),
+        ])->assertCreated()->json('order');
+
+        $this->assertSame('IN_TRANSIT', $order['status']);
+        $this->assertSame(2, $order['received_count']);
+        $this->assertSame(1, $order['in_transit_count']);
+    }
+
+    public function test_more_animals_than_the_dte_declares_raise_an_incident(): void
+    {
+        $order = $this->apiAs('POST', '/entry-orders/register', [
+            ...$this->troop(['head_count' => 2, 'sex_composition' => 'MALE', 'male_count' => null, 'female_count' => null]),
+            'dte' => $this->registerDte($this->animals('Y', 3), ['head_count' => 2]),
+        ])->assertCreated()->json('order');
+
+        $this->assertSame('COMPLETED', $order['status']);
+        $this->assertSame(3, $order['received_count']);
+        $this->assertSame(['ARRIVAL_EXCESS'], array_column($order['incidents'], 'type'));
     }
 
     public function test_a_short_dte_can_close_the_order_incomplete_at_once(): void

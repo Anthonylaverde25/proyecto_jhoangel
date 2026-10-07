@@ -31,6 +31,8 @@ final class OperationalKpiController extends Controller
         $entryPendingStatuses = [
             EntryOrderStatus::AWAITING_DTE->value,
             EntryOrderStatus::IN_TRANSIT->value,
+            // Received by count, its caravans still to write: not finished either.
+            EntryOrderStatus::RECEIVED->value,
             EntryOrderStatus::DRAFT->value,
         ];
 
@@ -200,6 +202,7 @@ final class OperationalKpiController extends Controller
                     'breakdown' => [
                         'awaiting_dte' => $entryStatusCounts[EntryOrderStatus::AWAITING_DTE->value] ?? 0,
                         'in_transit' => $entryStatusCounts[EntryOrderStatus::IN_TRANSIT->value] ?? 0,
+                        'received' => $entryStatusCounts[EntryOrderStatus::RECEIVED->value] ?? 0,
                         'draft' => $entryStatusCounts[EntryOrderStatus::DRAFT->value] ?? 0,
                     ],
                     'items' => $entryRecentItems,

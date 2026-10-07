@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Entities;
 
 use App\Core\Enums\ReceiptSheetStatus;
+use App\Core\Enums\ReferenceMode;
 use App\Core\Enums\WeighingMode;
 use App\Core\Exceptions\EntryOrderDomainException;
 use DateTimeImmutable;
@@ -12,26 +13,28 @@ use DateTimeInterface;
 
 /**
  * An ING-03 receipt sheet: the paper one DTE of an entry order is received on at the chute, an
- * appendix of the order's ING-02. It lists the caravans of the DTE still in transit when it was
- * issued, a few free lines for animals that arrive without being listed, and is identified on
- * every page by order code, DTE, its number (R1, R2…) and "Hoja N de M", so a loose page can be
- * traced back. The system keeps which pages came back scanned.
+ * appendix of the order's ING-02. It has one blank line per head of the DTE still in transit when
+ * it was issued, where the chute writes the caravan of each animal that arrives, plus a few free
+ * lines for animals of more. It is identified on every page by order code, DTE, its number (R1,
+ * R2…) and "Hoja N de M", so a loose page can be traced back. The system keeps which pages came
+ * back scanned, and the head of the DTE it was issued for: if the DTE is corrected, it is outdated.
  *
  * How the animals are weighed is part of the paper — a weight per line, or one average in the
- * header — so it is chosen when the sheet is issued and can only change while it was not printed.
+ * header — and so is how each line names its breed, coat and category — written in words, or by
+ * the letter and number of the header's reference. Both are chosen when the sheet is issued and
+ * can only change while it was not printed.
  */
 final class EntryOrderReceiptSheetEntity
 {
     /** Lines per printed page, the same as every other sheet. */
     public const ROWS_PER_PAGE = 20;
 
-    /** Free lines after the listed caravans, for animals the DTE does not list. */
+    /** Free lines after the head expected, for animals of more. */
     public const FREE_ROWS = 4;
 
     private bool $changed = false;
 
     /**
-     * @param int[] $caravanIds in print order
      * @param int[] $processedPages
      */
     public function __construct(
@@ -40,7 +43,9 @@ final class EntryOrderReceiptSheetEntity
         private readonly ?int $dteId,
         private readonly string $dteNumber,
         private ReceiptSheetStatus $status,
-        private readonly array $caravanIds,
+        private readonly int $dteHeadCount,
+        private readonly int $expectedHeadCount,
+        private readonly int $rowCount,
         private readonly int $pageCount,
         private array $processedPages = [],
         private readonly ?int $issuedByUserId = null,
@@ -49,31 +54,51 @@ final class EntryOrderReceiptSheetEntity
         private ?DateTimeInterface $replacedAt = null,
         private readonly ?DateTimeInterface $createdAt = null,
         private readonly ?string $issuedByUserName = null,
-        private WeighingMode $weighingMode = WeighingMode::INDIVIDUAL
+        private WeighingMode $weighingMode = WeighingMode::INDIVIDUAL,
+        private ReferenceMode $referenceMode = ReferenceMode::WRITTEN
     ) {
     }
 
     /**
-     * @param int[] $caravanIds the caravans in transit of the DTE, in print order
+     * One blank line per head of the DTE still to identify — in transit, or received by count
+     * without caravan — and the free lines.
      */
-    public static function issue(int $number, EntryOrderDteEntity $dte, array $caravanIds, ?int $userId, WeighingMode $weighingMode = WeighingMode::INDIVIDUAL): self
-    {
+    public static function issue(
+        int $number,
+        EntryOrderDteEntity $dte,
+        ?int $userId,
+        WeighingMode $weighingMode = WeighingMode::INDIVIDUAL,
+        ReferenceMode $referenceMode = ReferenceMode::WRITTEN
+    ): self {
+        $rows = $dte->toIdentifyCount() + self::FREE_ROWS;
+
         return new self(
             id: null,
             number: $number,
             dteId: $dte->getId(),
             dteNumber: $dte->getDteNumber(),
             status: ReceiptSheetStatus::ISSUED,
-            caravanIds: array_values($caravanIds),
-            pageCount: self::pagesFor(count($caravanIds)),
+            dteHeadCount: $dte->getHeadCount(),
+            expectedHeadCount: $dte->toIdentifyCount(),
+            rowCount: $rows,
+            pageCount: self::pagesFor($rows),
             issuedByUserId: $userId,
-            weighingMode: $weighingMode
+            weighingMode: $weighingMode,
+            referenceMode: $referenceMode
         );
     }
 
-    public static function pagesFor(int $caravans): int
+    public static function pagesFor(int $rows): int
     {
-        return max(1, (int) ceil(($caravans + self::FREE_ROWS) / self::ROWS_PER_PAGE));
+        return max(1, (int) ceil($rows / self::ROWS_PER_PAGE));
+    }
+
+    /**
+     * Still out, but issued for another head count than the DTE declares now.
+     */
+    public function isOutdatedFor(EntryOrderDteEntity $dte): bool
+    {
+        return $this->status->isActive() && $this->dteHeadCount !== $dte->getHeadCount();
     }
 
     /** "R1". */
@@ -100,24 +125,47 @@ final class EntryOrderReceiptSheetEntity
             return;
         }
 
+        $this->assertPaperCanChange('weighing_mode', 'cómo se pesa', 'pesar de otra forma');
+        $this->weighingMode = $mode;
+        $this->changed = true;
+    }
+
+    /**
+     * Words or codes are other columns on the paper: like the weighing, only before it is printed.
+     *
+     * @throws EntryOrderDomainException
+     */
+    public function changeReferenceMode(ReferenceMode $mode): void
+    {
+        if ($mode === $this->referenceMode) {
+            return;
+        }
+
+        $this->assertPaperCanChange('reference_mode', 'cómo se anota la raza y la categoría', 'anotarlas de otra forma');
+        $this->referenceMode = $mode;
+        $this->changed = true;
+    }
+
+    /**
+     * @throws EntryOrderDomainException
+     */
+    private function assertPaperCanChange(string $field, string $what, string $otherwise): void
+    {
         if (!$this->status->isActive()) {
             throw EntryOrderDomainException::invalid(
-                "La hoja {$this->label()} está " . mb_strtolower($this->status->label()) . ': no se puede cambiar cómo se pesa.',
+                "La hoja {$this->label()} está " . mb_strtolower($this->status->label()) . ": no se puede cambiar {$what}.",
                 'RECEIPT_SHEET_NOT_ACTIVE',
-                'weighing_mode'
+                $field
             );
         }
 
         if ($this->printedAt !== null) {
             throw EntryOrderDomainException::invalid(
-                "La hoja {$this->label()} ya se imprimió: para pesar de otra forma emití una hoja nueva, que la reemplaza.",
+                "La hoja {$this->label()} ya se imprimió: para {$otherwise} emití una hoja nueva, que la reemplaza.",
                 'RECEIPT_SHEET_ALREADY_PRINTED',
-                'weighing_mode'
+                $field
             );
         }
-
-        $this->weighingMode = $mode;
-        $this->changed = true;
     }
 
     public function markPrinted(): void
@@ -196,17 +244,29 @@ final class EntryOrderReceiptSheetEntity
         return $this->status;
     }
 
-    /**
-     * @return int[]
-     */
-    public function getCaravanIds(): array
+    public function getDteHeadCount(): int
     {
-        return $this->caravanIds;
+        return $this->dteHeadCount;
+    }
+
+    public function getExpectedHeadCount(): int
+    {
+        return $this->expectedHeadCount;
+    }
+
+    public function getRowCount(): int
+    {
+        return $this->rowCount;
     }
 
     public function getWeighingMode(): WeighingMode
     {
         return $this->weighingMode;
+    }
+
+    public function getReferenceMode(): ReferenceMode
+    {
+        return $this->referenceMode;
     }
 
     public function getPageCount(): int

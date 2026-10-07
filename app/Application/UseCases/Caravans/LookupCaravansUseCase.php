@@ -49,8 +49,7 @@ final class LookupCaravansUseCase
                     $identification,
                     CaravanLookupStatus::OWN_COMPANY,
                     $holder->caravanId,
-                    $holder->batchName,
-                    $holder->inTransitOrderCode
+                    $holder->batchName
                 );
             }
 

@@ -9,8 +9,8 @@ use App\Core\Entities\EntryOrderEntity;
 interface IEntryOrderRepository
 {
     /**
-     * Persists the order, its breeds, the DTEs not stored yet with their caravans, the receptions of
-     * stored caravans, and the incidents raised or resolved. A history line
+     * Persists the order, its breeds, the DTEs not stored yet, the head corrected or declared missing
+     * on stored ones, the caravans received, the ING-03 sheets, and the incidents raised or resolved. A history line
      * is written when the order is new, when its status changes, or when `$metadata` is given.
      *
      * @param array<string, mixed>|null $metadata
@@ -22,7 +22,7 @@ interface IEntryOrderRepository
     public function findByCode(string $code, int $companyId): ?EntryOrderEntity;
 
     /**
-     * @return EntryOrderEntity[] newest first, with their DTEs (counted, without caravans) and incidents, without history
+     * @return EntryOrderEntity[] newest first, with their DTEs (received counted, without caravans) and incidents, without history
      */
     public function list(int $companyId, ?string $status = null, ?int $providerId = null, bool $withOpenIncidents = false): array;
 

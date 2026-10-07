@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace App\Core\ValueObjects;
 
 use App\Core\Entities\EntryOrderBreedEntity;
+use App\Core\Entities\EntryOrderCategoryEntity;
+use App\Core\Enums\AnimalSex;
 use App\Core\Enums\SexComposition;
 use App\Core\Enums\TroopCondition;
 use App\Core\Exceptions\EntryOrderDomainException;
 
 /**
  * What an entry order declares about the purchase: where the troop comes from, what it is and
- * how it is. Everything a draft can rewrite, as one value. No activity nor batch type: the
+ * how it is. Everything a draft can rewrite, as one value. A purchase may bring several categories,
+ * each with its head; the order's head is their sum. No activity nor batch type: the
  * external batch only holds the purchase until its animals are assigned to an own batch, and that
  * one is classified when it is created.
  *
@@ -23,7 +26,11 @@ use App\Core\Exceptions\EntryOrderDomainException;
  */
 final readonly class EntryTroop
 {
+    /** Sum of the head of its categories; null while any of them is not declared. */
+    public ?int $headCount;
+
     /**
+     * @param EntryOrderCategoryEntity[] $categories
      * @param EntryOrderBreedEntity[] $breeds
      *
      * @throws EntryOrderDomainException
@@ -32,8 +39,7 @@ final readonly class EntryTroop
         public int $providerId,
         public int $farmId,
         public ?string $auctionNumber,
-        public ?int $headCount,
-        public ?int $categoryId,
+        public array $categories,
         public ?SexComposition $sexComposition,
         public ?int $maleCount,
         public ?int $femaleCount,
@@ -51,6 +57,8 @@ final readonly class EntryTroop
         public ?string $observations,
         public array $breeds
     ) {
+        $this->assertCategories();
+        $this->headCount = self::sumOfHead($categories);
         $this->assertHeadAndSexes();
         $this->assertAge();
         $this->assertWeights();
@@ -64,9 +72,21 @@ final readonly class EntryTroop
      */
     public function assertComplete(): void
     {
+        if ($this->categories === []) {
+            throw EntryOrderDomainException::invalid('Declará al menos una categoría con sus cabezas. Hace falta para confirmar la compra.', 'TROOP_INCOMPLETE', 'categories');
+        }
+
+        foreach ($this->categoriesByPosition() as $line) {
+            if ($line->getHeadCount() === null) {
+                throw EntryOrderDomainException::invalid(
+                    "Indicá las cabezas de la categoría {$line->getPosition()}. Hace falta para confirmar la compra.",
+                    'TROOP_INCOMPLETE',
+                    'categories'
+                );
+            }
+        }
+
         $missing = [
-            'head_count' => [$this->headCount, 'Indicá cuántas cabezas se compraron.'],
-            'category_id' => [$this->categoryId, 'Elegí la categoría.'],
             'sex_composition' => [$this->sexComposition, 'Indicá si la tropa es de machos, hembras o ambos.'],
             'condition' => [$this->condition, 'Indicá el estado de la tropa.'],
             'knows_to_eat' => [$this->knowsToEat, 'Indicá si la tropa sabe comer.'],
@@ -112,6 +132,86 @@ final readonly class EntryTroop
         return $byPosition;
     }
 
+    /**
+     * The same troop with these category lines: the same categories, described.
+     *
+     * @param EntryOrderCategoryEntity[] $categories
+     *
+     * @throws EntryOrderDomainException
+     */
+    public function withCategories(array $categories): self
+    {
+        return new self(
+            providerId: $this->providerId,
+            farmId: $this->farmId,
+            auctionNumber: $this->auctionNumber,
+            categories: $categories,
+            sexComposition: $this->sexComposition,
+            maleCount: $this->maleCount,
+            femaleCount: $this->femaleCount,
+            condition: $this->condition,
+            ageMinMonths: $this->ageMinMonths,
+            ageMaxMonths: $this->ageMaxMonths,
+            knowsToEat: $this->knowsToEat,
+            tickVaccinated: $this->tickVaccinated,
+            shrinkPercent: $this->shrinkPercent,
+            estimatedWeight: $this->estimatedWeight,
+            minWeight: $this->minWeight,
+            maxWeight: $this->maxWeight,
+            purchaseDate: $this->purchaseDate,
+            responsable: $this->responsable,
+            observations: $this->observations,
+            breeds: $this->breeds
+        );
+    }
+
+    /**
+     * @return EntryOrderCategoryEntity[] keyed by position
+     */
+    public function categoriesByPosition(): array
+    {
+        $byPosition = [];
+
+        foreach ($this->categories as $line) {
+            $byPosition[$line->getPosition()] = $line;
+        }
+
+        ksort($byPosition);
+
+        return $byPosition;
+    }
+
+    /**
+     * The category lines an animal of this sex can belong to. Needs the categories' sexes.
+     *
+     * @return EntryOrderCategoryEntity[] keyed by position
+     */
+    public function categoriesAdmitting(AnimalSex $sex): array
+    {
+        return array_filter($this->categoriesByPosition(), fn (EntryOrderCategoryEntity $line) => $line->admits($sex));
+    }
+
+    /**
+     * Whether some animal's sex leaves more than one category possible, so its line has to say which
+     * one: a category column on the ING-03 and on the manual reception. Needs the categories' sexes.
+     */
+    public function needsCategoryPerAnimal(): bool
+    {
+        $sexes = match ($this->sexComposition) {
+            SexComposition::MALE => [AnimalSex::MALE],
+            SexComposition::FEMALE => [AnimalSex::FEMALE],
+            default => [AnimalSex::MALE, AnimalSex::FEMALE],
+        };
+
+        foreach ($sexes as $sex) {
+            if (count($this->categoriesAdmitting($sex)) > 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function hasSeveralBreeds(): bool
     {
         return count($this->breeds) > 1;
@@ -127,12 +227,60 @@ final readonly class EntryTroop
             : null;
     }
 
-    private function assertHeadAndSexes(): void
+    /**
+     * @param EntryOrderCategoryEntity[] $categories
+     */
+    private static function sumOfHead(array $categories): ?int
     {
-        if ($this->headCount !== null && $this->headCount < 1) {
-            throw EntryOrderDomainException::invalid('La orden tiene que tener al menos una cabeza.', 'HEAD_COUNT_INVALID', 'head_count');
+        if ($categories === []) {
+            return null;
         }
 
+        $sum = 0;
+
+        foreach ($categories as $line) {
+            if ($line->getHeadCount() === null) {
+                return null;
+            }
+
+            $sum += $line->getHeadCount();
+        }
+
+        return $sum;
+    }
+
+    private function assertCategories(): void
+    {
+        $positions = [];
+        $ids = [];
+
+        foreach ($this->categories as $line) {
+            $positions[] = $line->getPosition();
+
+            if (isset($ids[$line->getCategoryId()])) {
+                throw EntryOrderDomainException::invalid(
+                    'La misma categoría está declarada dos veces: sumá sus cabezas en un solo renglón.',
+                    'CATEGORY_DUPLICATED',
+                    'categories'
+                );
+            }
+
+            $ids[$line->getCategoryId()] = true;
+
+            if ($line->getHeadCount() !== null && $line->getHeadCount() < 1) {
+                throw EntryOrderDomainException::invalid('Cada categoría lleva al menos una cabeza.', 'HEAD_COUNT_INVALID', 'categories');
+            }
+        }
+
+        sort($positions);
+
+        if ($positions !== [] && $positions !== range(1, count($positions))) {
+            throw EntryOrderDomainException::invalid('Las categorías se numeran 1, 2, 3… sin saltos.', 'CATEGORY_POSITIONS_INVALID', 'categories');
+        }
+    }
+
+    private function assertHeadAndSexes(): void
+    {
         if ($this->sexComposition === null) {
             return;
         }

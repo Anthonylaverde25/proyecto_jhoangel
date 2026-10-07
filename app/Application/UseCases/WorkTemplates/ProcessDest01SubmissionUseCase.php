@@ -170,11 +170,6 @@ final class ProcessDest01SubmissionUseCase
                 continue;
             }
 
-            if (!$calf->isInPossession()) {
-                $errorsByRow[$index][] = $this->error('CARAVAN_IN_TRANSIT', "La caravana '{$tag}' está en tránsito: figura en un DTE pero todavía no se recibió.");
-                continue;
-            }
-
             $calvesByRow[$index] = $calf;
             $keyByRow[$index] = $key;
         }

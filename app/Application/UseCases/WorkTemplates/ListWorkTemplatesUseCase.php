@@ -14,11 +14,17 @@ final class ListWorkTemplatesUseCase
     ) {
     }
 
+    /** Official documents read by the AI (a SENASA TRI) are not sheets to print or scan. */
+    public const EXTERNAL_DOCUMENT = 'EXTERNAL_DOCUMENT';
+
     /**
      * @return WorkTemplateEntity[]
      */
     public function __invoke(int $companyId): array
     {
-        return $this->repository->findByCompanyId($companyId);
+        return array_values(array_filter(
+            $this->repository->findByCompanyId($companyId),
+            fn (WorkTemplateEntity $template) => $template->getCategory() !== self::EXTERNAL_DOCUMENT
+        ));
     }
 }

@@ -19,7 +19,6 @@ final readonly class CaravanOwnership
         public int $companyId,
         public ?int $batchId,
         public ?string $batchName,
-        public ?string $inTransitOrderCode = null,
     ) {
     }
 }

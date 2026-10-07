@@ -51,8 +51,6 @@ final class ProcessLser01SubmissionUseCase
         $bull = $this->findCaravan($dto->toroCaravana);
         if ($bull === null) {
             $headerErrors[] = $this->headerError('BULL_NOT_FOUND', "No existe la caravana de toro '{$dto->toroCaravana}'.");
-        } elseif (!$bull->isInPossession()) {
-            $headerErrors[] = $this->headerError('CARAVAN_IN_TRANSIT', "El toro '{$dto->toroCaravana}' está en tránsito: figura en un DTE pero todavía no se recibió.");
         } elseif ($bull->getSex() !== AnimalSex::MALE) {
             $headerErrors[] = $this->headerError('BULL_NOT_MALE', "La caravana '{$dto->toroCaravana}' no corresponde a un macho.");
         } elseif ($bull->getCategoryId() === null) {
@@ -91,11 +89,6 @@ final class ProcessLser01SubmissionUseCase
             $caravan = $this->findCaravan($tag);
             if ($caravan === null) {
                 $errorsByRow[$index][] = $this->error('NOT_FOUND', "No existe la caravana '{$tag}'.");
-                continue;
-            }
-
-            if (!$caravan->isInPossession()) {
-                $errorsByRow[$index][] = $this->error('CARAVAN_IN_TRANSIT', "La caravana '{$tag}' está en tránsito: figura en un DTE pero todavía no se recibió.");
                 continue;
             }
 

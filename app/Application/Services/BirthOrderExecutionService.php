@@ -91,8 +91,9 @@ final class BirthOrderExecutionService
     }
 
     /**
-     * The order of a sheet that arrived without one, created on confirming it and inside the
-     * calvings' transaction. It is a REGISTERED order — the calvings happened before the system knew
+     * The order of a sheet that arrived without one: created on confirming it, inside the calvings'
+     * transaction, or obtained beforehand from the review (with every female on the sheet, so it stays
+     * open for later rounds). It is a REGISTERED order — the calvings happened before the system knew
      * of them — whose roll is the females the sheet resolved. It is issued without the commitment
      * check on purpose: the sheet is a fact, and a female held elsewhere was already reported per row.
      *
@@ -100,7 +101,11 @@ final class BirthOrderExecutionService
      *
      * @throws BirthOrderDomainException
      */
-    public function createFromSheet(Par01SubmissionDTO $dto, array $females): BirthOrderEntity
+    public function createFromSheet(
+        Par01SubmissionDTO $dto,
+        array $females,
+        string $reason = 'Orden creada al confirmar una planilla PAR-01 escaneada que no traía orden'
+    ): BirthOrderEntity
     {
         $animals = array_map(fn (array $female) => new BirthOrderAnimalEntity(
             id: null,
@@ -123,7 +128,7 @@ final class BirthOrderExecutionService
                 issue: true
             ),
             TransferOrderKind::REGISTERED,
-            'Orden creada al confirmar una planilla PAR-01 escaneada que no traía orden',
+            $reason,
             checkCommitment: false,
             animals: $animals
         );

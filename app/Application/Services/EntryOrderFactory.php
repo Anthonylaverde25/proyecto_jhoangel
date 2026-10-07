@@ -61,10 +61,7 @@ final class EntryOrderFactory
      */
     public function troopOf(StoreEntryOrderDTO $dto): EntryTroop
     {
-        $troop = $dto->toTroop();
-        $this->validator->assertValid($troop, $dto->companyId);
-
-        return $troop;
+        return $this->validator->assertValid($dto->toTroop(), $dto->companyId);
     }
 
     /**

@@ -48,12 +48,14 @@ class AiAgentOCRProvider implements IOCRProvider
      *  - Fetches the schema_definition from the tenant database.
      *  - Extracts all header fields and table rows guided by the schema.
      *
-     * @param UploadedFile $file  The uploaded worksheet image.
-     * @return array              The raw response from the microservice.
+     * @param UploadedFile $file          The uploaded worksheet image (or PDF).
+     * @param ?string      $templateCode  Forces the schema to read it with, skipping detection
+     *                                    (official documents such as a TRI carry no code of ours).
+     * @return array                      The raw response from the microservice.
      *
      * @throws \RuntimeException  If the microservice is unreachable or returns an error.
      */
-    public function analyze(UploadedFile $file): array
+    public function analyze(UploadedFile $file, ?string $templateCode = null): array
     {
         if (function_exists('set_time_limit')) {
             @set_time_limit(220);
@@ -85,7 +87,7 @@ class AiAgentOCRProvider implements IOCRProvider
             ->attach('document', $fileContents, $file->getClientOriginalName(), [
                 'Content-Type' => $file->getMimeType() ?? 'image/png',
             ])
-            ->post("{$this->baseUrl}/api/v1/templates/analyze");
+            ->post("{$this->baseUrl}/api/v1/templates/analyze", $templateCode !== null ? ['template_code' => $templateCode] : []);
 
         if ($response->failed()) {
             $errorBody = $response->json() ?? ['detail' => $response->body()];

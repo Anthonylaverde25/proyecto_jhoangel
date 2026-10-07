@@ -38,8 +38,7 @@ class EntryOrderIncidentTest extends EntryOrderTestCase
     {
         $order = $this->excessOrder();
 
-        $done = $this->receive($order['id'], ['method' => 'MANUAL', 'dte_id' => $order['dtes'][0]['id'], 'received' => $this->lines($this->caravanIds($order))])
-            ->assertOk()->json('order');
+        $done = $this->receiveOn($order, $this->animals('IC', 3));
 
         $this->assertSame('COMPLETED', $done['status']);
         $this->assertSame(1, $done['open_incidents_count']);
@@ -69,6 +68,6 @@ class EntryOrderIncidentTest extends EntryOrderTestCase
     {
         $order = $this->createOrder(['head_count' => 1, 'sex_composition' => 'MALE', 'male_count' => null, 'female_count' => null])->json('order');
 
-        return $this->loadDte($order['id'], $this->animals('I' . $order['number'], 3, 'M', 1));
+        return $this->loadDte($order['id'], 3);
     }
 }

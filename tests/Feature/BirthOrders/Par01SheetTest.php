@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\BirthOrders;
 
+use Tests\Feature\DryRun\AssertsDryRun;
 use App\Models\Batch;
 use App\Models\BirthOrderAnimal;
 use App\Models\Caravan;
@@ -16,6 +17,8 @@ use App\Models\Color;
  */
 class Par01SheetTest extends BirthOrderTestCase
 {
+    use AssertsDryRun;
+
     public function test_the_calf_is_born_where_its_mother_is_now(): void
     {
         $a = $this->pregnantFemale('BO-G1');
@@ -35,6 +38,19 @@ class Par01SheetTest extends BirthOrderTestCase
 
         $this->assertSame($paddock->id, (int) Caravan::where('identification', 'BO-GC1')->value('batch_id'));
         $this->assertContains('MOTHER_MOVED', array_column($response->json('data.warnings'), 'code'));
+    }
+
+    public function test_a_dry_run_answers_as_the_real_sheet_and_saves_nothing(): void
+    {
+        $mother = $this->pregnantFemale('BO-DRY1');
+        $orderId = (int) $this->emit([$mother])->json('id');
+        $sheet = fn () => $this->scan($orderId, [$this->liveRow($mother, 'BO-DRYC1')]);
+
+        $this->assertDryRunLeavesNothing(['caravans', 'caravan_movements', 'caravan_lineage', 'caravan_gestations'], $sheet, 201);
+        $this->assertNull(Caravan::where('identification', 'BO-DRYC1')->first());
+
+        $sheet()->assertStatus(201);
+        $this->assertNotNull(Caravan::where('identification', 'BO-DRYC1')->first());
     }
 
     public function test_every_problem_is_reported_per_row_and_nothing_is_saved(): void

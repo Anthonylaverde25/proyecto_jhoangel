@@ -13,7 +13,6 @@ final readonly class CaravanLookupResultDTO
         public CaravanLookupStatus $status,
         public ?int $caravanId = null,
         public ?string $batchName = null,
-        public ?string $inTransitOrderCode = null,
     ) {
     }
 
@@ -32,9 +31,6 @@ final readonly class CaravanLookupResultDTO
         if ($this->status === CaravanLookupStatus::OWN_COMPANY) {
             $data['caravan_id'] = $this->caravanId;
             $data['batch_name'] = $this->batchName;
-            // Ours, but listed in a DTE that has not arrived: not in the field yet.
-            $data['in_transit'] = $this->inTransitOrderCode !== null;
-            $data['entry_order_code'] = $this->inTransitOrderCode;
         }
 
         return $data;

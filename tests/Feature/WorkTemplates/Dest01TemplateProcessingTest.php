@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\WorkTemplates;
 
+use Tests\Feature\DryRun\AssertsDryRun;
 use App\Models\AnimalCategory;
 use App\Models\Batch;
 use App\Models\BatchType;
@@ -22,6 +23,8 @@ use Tests\Feature\Veterinary\VeterinaryTestCase;
  */
 class Dest01TemplateProcessingTest extends VeterinaryTestCase
 {
+    use AssertsDryRun;
+
     private Batch $breedingBatch;
     private AnimalCategory $vaca;
     private AnimalCategory $ternero;
@@ -82,6 +85,24 @@ class Dest01TemplateProcessingTest extends VeterinaryTestCase
         }
 
         $this->assertEquals(180.0, (float) $batch->fresh()->current_weight);
+    }
+
+    public function test_a_dry_run_answers_as_the_real_sheet_and_saves_nothing(): void
+    {
+        $calves = [$this->nursingCalf('DEST-D-01', 'DEST-DV-01', 'M'), $this->nursingCalf('DEST-D-02', 'DEST-DV-02', 'H')];
+        $sheet = fn () => $this->submit(['new_batch_name' => 'Destete DEST Dry'], [$this->row('DEST-D-01', 170), $this->row('DEST-D-02', 180)]);
+
+        $preview = $this->assertDryRunLeavesNothing(
+            ['batches', 'caravan_movements', 'caravan_weights', 'weaning_orders'],
+            $sheet,
+            201
+        );
+        $this->assertSame(2, $preview->json('data.calves_count'));
+        $this->assertSame($this->breedingBatch->id, (int) $calves[0]->fresh()->batch_id);
+
+        $saved = $sheet()->assertStatus(201);
+        $this->assertNull($saved->json('dry_run'));
+        $this->assertNotSame($this->breedingBatch->id, (int) $calves[0]->fresh()->batch_id);
     }
 
     public function test_calves_can_join_an_existing_weaning_batch(): void

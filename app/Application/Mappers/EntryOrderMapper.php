@@ -6,6 +6,7 @@ namespace App\Application\Mappers;
 
 use App\Core\Entities\EntryOrderAnimalEntity;
 use App\Core\Entities\EntryOrderBreedEntity;
+use App\Core\Entities\EntryOrderCategoryEntity;
 use App\Core\Entities\EntryOrderDteEntity;
 use App\Core\Entities\EntryOrderEntity;
 use App\Core\Entities\EntryOrderIncidentEntity;
@@ -17,10 +18,11 @@ use App\Core\Enums\EntryOrderIncidentType;
 use App\Core\Enums\ReceiptSheetStatus;
 use App\Core\Enums\EntryOrderStatus;
 use App\Core\Enums\ReceptionMethod;
-use App\Core\Enums\ReceptionStatus;
 use App\Core\Enums\SexComposition;
 use App\Core\Enums\TransferOrderKind;
 use App\Core\Enums\TroopCondition;
+use App\Core\Enums\ArrivalFinding;
+use App\Core\Enums\ReferenceMode;
 use App\Core\Enums\WeighingMode;
 use App\Core\ValueObjects\EntryTroop;
 use App\Models\EntryOrder;
@@ -44,6 +46,23 @@ class EntryOrderMapper
             }
         }
 
+        $categories = [];
+
+        if ($model->relationLoaded('categories')) {
+            foreach ($model->categories as $line) {
+                $category = $line->relationLoaded('category') ? $line->category : null;
+
+                $categories[] = new EntryOrderCategoryEntity(
+                    id: (int) $line->id,
+                    position: (int) $line->position,
+                    categoryId: (int) $line->category_id,
+                    headCount: $line->head_count,
+                    categoryName: $category?->name,
+                    categorySex: $category?->sex
+                );
+            }
+        }
+
         $dtes = [];
 
         if ($model->relationLoaded('dtes')) {
@@ -54,6 +73,7 @@ class EntryOrderMapper
                     foreach ($dte->animals as $line) {
                         $caravan = $line->relationLoaded('caravan') ? $line->caravan : null;
                         $breedLine = $line->relationLoaded('breedLine') ? $line->breedLine : null;
+                        $categoryLine = $line->relationLoaded('categoryLine') ? $line->categoryLine : null;
                         $sex = $caravan?->sex;
 
                         $animals[] = new EntryOrderAnimalEntity(
@@ -64,10 +84,13 @@ class EntryOrderMapper
                             breedPosition: $breedLine?->position,
                             caravanMovementId: $line->caravan_movement_id,
                             entryWeight: $caravan?->entry_weight !== null ? (float) $caravan->entry_weight : null,
-                            receptionStatus: ReceptionStatus::tryFrom((string) $line->reception_status) ?? ReceptionStatus::PENDING,
-                            receivedAt: $line->received_at !== null ? self::date($line->received_at) : null,
+                            receivedAt: self::date($line->received_at),
                             receptionMethod: ReceptionMethod::tryFrom((string) $line->reception_method),
-                            receivedByUserId: $line->received_by_user_id
+                            receivedByUserId: $line->received_by_user_id,
+                            categoryPosition: $categoryLine?->position,
+                            arrivalFindings: $line->relationLoaded('arrivalFindings')
+                                ? array_values(array_filter($line->arrivalFindings->map(fn ($f) => ArrivalFinding::tryFrom((string) $f->finding))->all()))
+                                : []
                         );
                     }
                 }
@@ -76,17 +99,16 @@ class EntryOrderMapper
                     id: (int) $dte->id,
                     dteNumber: (string) $dte->dte_number,
                     dteDate: self::date($dte->dte_date),
+                    headCount: (int) $dte->head_count,
+                    missingHeadCount: (int) $dte->missing_head_count,
                     animals: $animals,
                     loadedByUserId: $dte->loaded_by_user_id,
                     observations: $dte->observations,
                     loadedByUserName: $dte->relationLoaded('loadedByUser') ? $dte->loadedByUser?->name : null,
                     createdAt: $dte->created_at,
-                    storedHeadCount: (int) $dte->head_count,
-                    storedReceptionCounts: [
-                        ReceptionStatus::PENDING->value => (int) ($dte->pending_count ?? 0),
-                        ReceptionStatus::RECEIVED->value => (int) ($dte->received_count ?? 0),
-                        ReceptionStatus::MISSING->value => (int) ($dte->missing_count ?? 0),
-                    ]
+                    // The list counts the caravans instead of loading them.
+                    storedReceivedCount: $dte->relationLoaded('animals') ? null : (int) ($dte->received_count ?? 0),
+                    uncaravanedHeadCount: (int) $dte->uncaravaned_head_count
                 );
             }
         }
@@ -128,7 +150,9 @@ class EntryOrderMapper
                     dteId: (int) $sheet->entry_order_dte_id,
                     dteNumber: (string) ($dteNumbers[$sheet->entry_order_dte_id] ?? ''),
                     status: ReceiptSheetStatus::from($sheet->status),
-                    caravanIds: array_map('intval', $sheet->caravan_ids ?? []),
+                    dteHeadCount: (int) $sheet->dte_head_count,
+                    expectedHeadCount: (int) $sheet->expected_head_count,
+                    rowCount: (int) $sheet->row_count,
                     pageCount: (int) $sheet->page_count,
                     processedPages: array_map('intval', $sheet->processed_pages ?? []),
                     issuedByUserId: $sheet->issued_by_user_id,
@@ -137,7 +161,8 @@ class EntryOrderMapper
                     replacedAt: $sheet->replaced_at,
                     createdAt: $sheet->created_at,
                     issuedByUserName: $sheet->relationLoaded('issuedBy') ? $sheet->issuedBy?->name : null,
-                    weighingMode: WeighingMode::tryFrom((string) $sheet->weighing_mode) ?? WeighingMode::INDIVIDUAL
+                    weighingMode: WeighingMode::tryFrom((string) $sheet->weighing_mode) ?? WeighingMode::INDIVIDUAL,
+                    referenceMode: ReferenceMode::tryFrom((string) $sheet->reference_mode) ?? ReferenceMode::CODE
                 );
             }
         }
@@ -163,8 +188,7 @@ class EntryOrderMapper
             providerId: (int) $model->provider_id,
             farmId: (int) $model->farm_id,
             auctionNumber: $model->auction_number,
-            headCount: $model->head_count !== null ? (int) $model->head_count : null,
-            categoryId: $model->category_id !== null ? (int) $model->category_id : null,
+            categories: $categories,
             sexComposition: SexComposition::tryFrom((string) $model->sex_composition),
             maleCount: $model->male_count,
             femaleCount: $model->female_count,
@@ -184,7 +208,6 @@ class EntryOrderMapper
         );
 
         $farm = $model->relationLoaded('farm') ? $model->farm : null;
-        $category = $model->relationLoaded('category') ? $model->category : null;
 
         return new EntryOrderEntity(
             id: (int) $model->id,
@@ -214,8 +237,6 @@ class EntryOrderMapper
                 'farm' => $farm?->name,
                 'farm_renspa' => $farm?->renspa,
                 'batch' => $model->relationLoaded('batch') ? $model->batch?->name : null,
-                'category' => $category?->name,
-                'category_sex' => $category?->sex,
                 'requested_by' => $model->relationLoaded('requestedByUser') ? $model->requestedByUser?->name : null,
             ]
         );

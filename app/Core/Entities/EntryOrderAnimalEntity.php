@@ -4,59 +4,33 @@ declare(strict_types=1);
 
 namespace App\Core\Entities;
 
+use App\Core\Enums\ArrivalFinding;
 use App\Core\Enums\ReceptionMethod;
-use App\Core\Enums\ReceptionStatus;
 
 /**
- * A caravan listed in a DTE of the order. It exists from the moment the DTE is loaded, in transit
- * (PENDING) until it is received or declared missing. How, when and by whom it was received is a
- * declared fact, kept as such.
+ * A caravan received on a DTE of the order. It only exists once the animal arrived: the DTE
+ * declares head, not caravans, and the caravan is written down at the reception. How, when and by
+ * whom it was received is a declared fact, kept as such — and so is what the chute saw on it as it
+ * came off the truck (an injured eye, ear or limb), and the ING-03 sheet that recorded it.
  */
 final class EntryOrderAnimalEntity
 {
-    private bool $receptionChanged = false;
-
     public function __construct(
         private readonly ?int $id,
         private readonly int $caravanId,
         private readonly string $identification,
         private readonly string $sex,
         private readonly ?int $breedPosition,
-        private ?int $caravanMovementId,
-        private ?float $entryWeight = null,
-        private ReceptionStatus $receptionStatus = ReceptionStatus::PENDING,
-        private ?string $receivedAt = null,
-        private ?ReceptionMethod $receptionMethod = null,
-        private ?int $receivedByUserId = null
+        private readonly ?int $caravanMovementId,
+        private readonly ?float $entryWeight,
+        private readonly string $receivedAt,
+        private readonly ?ReceptionMethod $receptionMethod,
+        private readonly ?int $receivedByUserId,
+        private readonly ?int $categoryPosition = null,
+        /** @var list<ArrivalFinding> */
+        private readonly array $arrivalFindings = [],
+        private readonly ?int $receiptSheetId = null
     ) {
-    }
-
-    public function markReceived(string $receivedAt, ReceptionMethod $method, ?int $userId, ?int $movementId, ?float $weight): void
-    {
-        $this->receptionStatus = ReceptionStatus::RECEIVED;
-        $this->receivedAt = $receivedAt;
-        $this->receptionMethod = $method;
-        $this->receivedByUserId = $userId;
-        $this->caravanMovementId = $movementId;
-        $this->entryWeight = $weight;
-        $this->receptionChanged = true;
-    }
-
-    public function markMissing(?int $userId): void
-    {
-        $this->receptionStatus = ReceptionStatus::MISSING;
-        $this->receivedByUserId = $userId;
-        $this->receptionChanged = true;
-    }
-
-    public function isPending(): bool
-    {
-        return $this->receptionStatus === ReceptionStatus::PENDING;
-    }
-
-    public function isReceptionChanged(): bool
-    {
-        return $this->receptionChanged;
     }
 
     public function getId(): ?int
@@ -84,25 +58,28 @@ final class EntryOrderAnimalEntity
         return $this->breedPosition;
     }
 
+    /**
+     * The order's category line it entered with.
+     */
+    public function getCategoryPosition(): ?int
+    {
+        return $this->categoryPosition;
+    }
+
     public function getCaravanMovementId(): ?int
     {
         return $this->caravanMovementId;
     }
 
     /**
-     * The weight taken on reception, if any. A DTE brings no weights.
+     * The weight taken on reception, if any.
      */
     public function getEntryWeight(): ?float
     {
         return $this->entryWeight;
     }
 
-    public function getReceptionStatus(): ReceptionStatus
-    {
-        return $this->receptionStatus;
-    }
-
-    public function getReceivedAt(): ?string
+    public function getReceivedAt(): string
     {
         return $this->receivedAt;
     }
@@ -115,5 +92,21 @@ final class EntryOrderAnimalEntity
     public function getReceivedByUserId(): ?int
     {
         return $this->receivedByUserId;
+    }
+
+    /**
+     * @return list<ArrivalFinding>
+     */
+    public function getArrivalFindings(): array
+    {
+        return $this->arrivalFindings;
+    }
+
+    /**
+     * The ING-03 sheet it was received on; null when it was received by hand.
+     */
+    public function getReceiptSheetId(): ?int
+    {
+        return $this->receiptSheetId;
     }
 }

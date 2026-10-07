@@ -213,7 +213,7 @@ class Caravan extends Model
     }
 
     /**
-     * The line of the entry order whose DTE listed this caravan, if it came from one.
+     * The line of the entry order whose DTE this caravan was received on, if it came from one.
      */
     public function entryOrderAnimal(): HasOne
     {
@@ -221,29 +221,14 @@ class Caravan extends Model
     }
 
     /**
-     * Caravans that are in the field: born or imported here, or bought and already received.
-     * One listed in a DTE that has not arrived (or never will) is not stock.
+     * Caravans that are in the field: stock. Today every caravan is — a purchased one is only
+     * created when it is received, and head still on their way are a count on their DTE, not
+     * caravans — so it filters nothing. It stays on the queries where possession matters (heads
+     * and weight of a batch, activities, TOR-01): the next way of losing possession (sold awaiting
+     * pickup, a leased field) is said by its document, and goes here.
      */
     public function scopeInPossession(Builder $query): Builder
     {
-        return $query->whereNotExists(function ($sub): void {
-            $sub->selectRaw('1')
-                ->from('entry_order_animals')
-                ->whereColumn('entry_order_animals.caravan_id', 'caravans.id')
-                ->where('entry_order_animals.reception_status', '!=', 'RECEIVED');
-        });
-    }
-
-    /**
-     * Caravans listed in a loaded DTE that have not arrived yet.
-     */
-    public function scopeInTransit(Builder $query): Builder
-    {
-        return $query->whereExists(function ($sub): void {
-            $sub->selectRaw('1')
-                ->from('entry_order_animals')
-                ->whereColumn('entry_order_animals.caravan_id', 'caravans.id')
-                ->where('entry_order_animals.reception_status', 'PENDING');
-        });
+        return $query;
     }
 }

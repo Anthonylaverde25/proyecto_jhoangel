@@ -7,9 +7,9 @@ namespace App\Http\Requests\EntryOrders;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * "Registrar ingreso": the troop of an order plus its DTE under `dte`, with the day the animals
- * entered and the weight of each one if taken (the DTE and the animals arrive together), and
- * optionally the reason to close it incomplete at once when the DTE brings fewer head than were bought.
+ * "Registrar ingreso": the troop of an order plus its DTE under `dte` — the head it declares, the
+ * day the animals entered and the animals received, one per caravan — and optionally the reason
+ * to close it incomplete at once when fewer head arrived than were bought.
  */
 final class RegisterEntryRequest extends FormRequest
 {
@@ -40,7 +40,8 @@ final class RegisterEntryRequest extends FormRequest
             'dte' => 'required|array',
             ...LoadEntryOrderDteRequest::dteRules('dte.'),
             'dte.entered_at' => 'required|date|before_or_equal:today',
-            'dte.animals.*.weight' => 'nullable|numeric|max:2000',
+            ...ReceiveEntryOrderRequest::animalRules('dte.'),
+            'dte.animals' => 'required|array|min:1|max:5000',
             'close_incomplete_reason' => 'nullable|string|max:1000',
         ];
     }
@@ -55,6 +56,8 @@ final class RegisterEntryRequest extends FormRequest
             ...LoadEntryOrderDteRequest::dteMessages('dte.'),
             'dte.entered_at.required' => 'Falta la fecha de ingreso.',
             'dte.entered_at.before_or_equal' => 'La fecha de ingreso no puede ser futura.',
+            'dte.animals.required' => 'Cargá las caravanas de los animales que ingresaron.',
+            'dte.animals.min' => 'Cargá las caravanas de los animales que ingresaron.',
         ];
     }
 }

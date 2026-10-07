@@ -1009,16 +1009,107 @@ class WorkTemplateSeeder extends Seeder
                 ]
             );
 
+            // TRI: Tarjeta de Registro Individual de Tropa, the SENASA document that travels with a
+            // DTE and lists the caravan of each animal. Not a sheet of ours: it is never printed nor
+            // listed in the gallery (EXTERNAL_DOCUMENT). Its schema only guides the AI when a TRI is
+            // attached to the reception of a DTE, to fill in the caravans.
+            WorkTemplate::updateOrCreate(
+                ['company_id' => $company->id, 'code' => 'TRI'],
+                [
+                    'category' => 'EXTERNAL_DOCUMENT',
+                    'title' => 'Tarjeta de Registro Individual de Tropa (SENASA)',
+                    'description' => 'Documento oficial de SENASA que acompaña al DTE: encabezado con el N° de Tarjeta Individual de Tropa, RENSPA de origen, CUIG, titular y establecimiento, y una grilla numerada (It.) con Nro. Caravana, Código de barras, Carga y Desc. por animal. La grilla tiene dos columnas lado a lado (ítems 1 a 25 a la izquierda, 26 a 50 a la derecha) y un bloque inferior (51 a 55 y 56 a 60). Puede tener varias hojas ("Hoja N de M").',
+                    'status' => 'active',
+                    'schema_definition' => [
+                        'header_fields' => [
+                            [
+                                'name' => 'tri_numero',
+                                'label' => 'N° de Tarjeta Individual de Tropa',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Número del recuadro "Tarjeta Individual de Tropa N°", arriba a la derecha (ej: 0000000000000-0). Copiarlo tal cual.',
+                            ],
+                            [
+                                'name' => 'renspa_origen',
+                                'label' => 'RENSPA origen',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'RENSPA escrito después de "RENSPA origen:". Vacío si no se lee.',
+                            ],
+                            [
+                                'name' => 'cuig',
+                                'label' => 'CUIG',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Código después de "CUIG:". Vacío si no se lee.',
+                            ],
+                            [
+                                'name' => 'titular',
+                                'label' => 'Titular RENSPA',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Nombre después de "Titular RENSPA:".',
+                            ],
+                            [
+                                'name' => 'establecimiento',
+                                'label' => 'Establecimiento',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Nombre después de "Establecimiento:".',
+                            ],
+                            [
+                                'name' => 'hoja_numero',
+                                'label' => 'Hoja N°',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'El N de "Hoja N de M", arriba a la derecha de la grilla.',
+                            ],
+                            [
+                                'name' => 'hoja_total',
+                                'label' => 'De (total de hojas)',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'El M de "Hoja N de M".',
+                            ],
+                        ],
+                        // One row per item (It.) with something written. Reading order: the item number.
+                        'table_columns' => [
+                            [
+                                'name' => 'item',
+                                'label' => 'It.',
+                                'type' => 'number',
+                                'required' => false,
+                                'ai_hint' => 'Número impreso en la columna It. de ESTE renglón (1 a 60). La grilla tiene dos columnas lado a lado: leer los ítems 1 a 25 a la izquierda y 26 a 50 a la derecha, y luego el bloque de abajo (51 a 60). Devolver los renglones ordenados por It. y omitir los que no tienen caravana escrita.',
+                            ],
+                            [
+                                'name' => 'caravana',
+                                'label' => 'Nro. Caravana',
+                                'type' => 'string',
+                                'required' => true,
+                                'ai_hint' => 'Número escrito en la columna Nro. Caravana del mismo ítem. Copiar letras, números y guiones exactamente, sin espacios. No confundir con el Código de barras de la columna siguiente.',
+                            ],
+                            [
+                                'name' => 'codigo_barras',
+                                'label' => 'Cód. de barras',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Código de barras del mismo ítem, si está escrito. Vacío si no.',
+                            ],
+                        ],
+                    ],
+                ]
+            );
+
             // Seed ING-02: Orden de Ingreso de Hacienda Externa. Es el documento de la compra: la
             // orden nace sin caravanas (llegan después con el DTE), así que la hoja es sólo
-            // encabezado más la tabla de razas. Se imprime desde una orden (completa) o en blanco,
+            // encabezado (con sus renglones de categoría) más la tabla de razas. Se imprime desde una orden (completa) o en blanco,
             // para llenarla en el remate y escanearla después.
             WorkTemplate::updateOrCreate(
                 ['company_id' => $company->id, 'code' => 'ING-02'],
                 [
                     'category' => 'ENTRY',
                     'title' => 'Orden de Ingreso de Hacienda Externa',
-                    'description' => 'Documento de la compra de una tropa externa (subasta o compra directa): lote externo, proveedor, establecimiento de origen, cabezas, categoría, sexo, razas, pesos, estado, edad, sabe comer, garrapata y desbaste. Las caravanas se cargan después, con el DTE.',
+                    'description' => 'Documento de la compra de una tropa externa (subasta o compra directa): lote externo, proveedor, establecimiento de origen, una o más categorías con sus cabezas (tabla TROPA COMPRADA · CATEGORÍAS, renglones numerados 1 a 4), sexo, razas, pesos, estado, edad, sabe comer, garrapata y desbaste. Las caravanas se cargan después, con el DTE.',
                     'status' => 'active',
                     'schema_definition' => [
                         'header_fields' => [
@@ -1071,20 +1162,23 @@ class WorkTemplateSeeder extends Seeder
                                 'required' => true,
                                 'ai_hint' => 'Fecha de la compra o del remate (DD/MM/AAAA).',
                             ],
-                            [
-                                'name' => 'cabezas',
-                                'label' => 'Cabezas',
-                                'type' => 'number',
-                                'required' => true,
-                                'ai_hint' => 'Cantidad de animales comprados, número entero.',
-                            ],
-                            [
-                                'name' => 'categoria',
-                                'label' => 'Categoría',
-                                'type' => 'string',
-                                'required' => true,
-                                'ai_hint' => 'Categoría general de la tropa, tal como está escrita (Ternero, Vaquillona, Novillito, Novillo, Vaca, Toro).',
-                            ],
+                            // The CATEGORÍAS grid: up to four lines, each a category and its head.
+                            ...array_merge(...array_map(fn (int $n) => [
+                                [
+                                    'name' => "categoria_{$n}",
+                                    'label' => "Categoría {$n}",
+                                    'type' => 'string',
+                                    'required' => $n === 1,
+                                    'ai_hint' => "Categoría escrita en el renglón N° {$n} de la tabla TROPA COMPRADA · CATEGORÍAS, tal como está escrita (Ternero, Vaquillona, Novillito, Novillo, Torito, Vaca, Toro). Vacío si el renglón está en blanco.",
+                                ],
+                                [
+                                    'name' => "cabezas_{$n}",
+                                    'label' => "Cabezas {$n}",
+                                    'type' => 'number',
+                                    'required' => $n === 1,
+                                    'ai_hint' => "Cabezas de la categoría del renglón N° {$n} de la tabla TROPA COMPRADA · CATEGORÍAS, número entero. Vacío si el renglón está en blanco.",
+                                ],
+                            ], range(1, 4))),
                             [
                                 'name' => 'sexo',
                                 'label' => 'Sexo',
@@ -1191,16 +1285,21 @@ class WorkTemplateSeeder extends Seeder
                 ]
             );
 
-            // ING-03: the receipt sheet of one DTE, an appendix of the ING-02. Never printed blank:
-            // it is issued from the order with the caravans in transit of the DTE. Weighed per
-            // animal (a PESO column) or with one average (a PESO PROMEDIO cell in the header), and
-            // printed portrait or landscape: the same fields either way.
+            // ING-03: the receipt sheet of one DTE, an appendix of the ING-02. It is issued from the
+            // order with one blank line per head of the DTE in transit, where the chute writes the
+            // caravan of each animal that arrives. Sex, category and breed only get a column when the
+            // order leaves them to each animal; category and breed are written in words (CATEGORÍA,
+            // RAZA, PELAJE) or by the header's reference (a number and a letter), as the sheet says.
+            // Three boxes per line (OJO, OREJA, APLOMO) mark what the animal came off the truck
+            // with. Weighed per animal (a PESO column) or with one average (a PESO PROMEDIO cell in
+            // the header), and printed portrait or landscape: the same fields either way. The
+            // extraction copies what is written; the server resolves it against the order.
             WorkTemplate::updateOrCreate(
                 ['company_id' => $company->id, 'code' => 'ING-03'],
                 [
                     'category' => 'ENTRY',
                     'title' => 'Recepción de DTE',
-                    'description' => 'Anexo de la ING-02: las caravanas de un DTE que siguen en tránsito, con su sexo, raza y pelaje (en columnas separadas), para marcar en la manga cuáles llegaron, cuáles no van a llegar, su estado corporal (EC, escala 1 a 5) y su peso, más renglones libres para animales que llegan sin figurar en el DTE. El peso es por animal (columna PESO) o un único peso promedio en el encabezado (recuadro PESO PROMEDIO), según la hoja. La hoja puede estar impresa en vertical o en horizontal (apaisada): los campos son los mismos. Cada hoja se identifica por la orden, el DTE, el número de hoja de recepción (R1, R2…) y "Hoja N de M".',
+                    'description' => 'Anexo de la ING-02: renglones en blanco, uno por cabeza del DTE en tránsito, donde en la manga se escribe a mano la caravana de cada animal que llega, su estado corporal (EC, escala 1 a 5), su peso y, en las casillas OJO, OREJA y APLOMO, una X si llegó con una lesión; si la tropa es de ambos sexos, también el sexo (M/H); si el sexo de un animal admite varias de las categorías de la orden, su categoría (columna CATEGORÍA escrita con palabras, o CAT. con el número 1, 2…), y si tiene varias razas, la raza y el pelaje (columnas RAZA y PELAJE escritas con palabras, o RAZA con la letra A, B…). Los datos que valen para todos los renglones se imprimen una sola vez en el recuadro TROPA del encabezado. Los renglones grises del final son libres, para animales de más. Un renglón vacío es una cabeza que todavía no llegó. El peso es por animal (columna PESO) o un único peso promedio en el encabezado (recuadro PESO PROMEDIO), según la hoja. La hoja puede estar impresa en vertical o en horizontal (apaisada): los campos son los mismos. Cada hoja se identifica por la orden, el DTE, el número de hoja de recepción (R1, R2…) y "Hoja N de M".',
                     'status' => 'active',
                     'schema_definition' => [
                         'header_fields' => [
@@ -1254,11 +1353,11 @@ class WorkTemplateSeeder extends Seeder
                                 'ai_hint' => 'Sólo en las hojas de peso promedio: kg escritos a mano en el recuadro PESO PROMEDIO (KG) del encabezado. Vacío si la hoja no tiene ese recuadro o no se escribió.',
                             ],
                             [
-                                'name' => 'motivo_no_llegan',
-                                'label' => 'Motivo de las que no llegan',
+                                'name' => 'observaciones',
+                                'label' => 'Observaciones',
                                 'type' => 'text',
                                 'required' => false,
-                                'ai_hint' => 'Texto escrito a mano en el recuadro MOTIVO DE LAS QUE NO LLEGAN, al pie de la grilla. Vacío si no se escribió.',
+                                'ai_hint' => 'Texto escrito a mano en el recuadro OBSERVACIONES, al pie de la grilla. Vacío si no se escribió.',
                             ],
                         ],
                         'table_columns' => [
@@ -1267,42 +1366,35 @@ class WorkTemplateSeeder extends Seeder
                                 'label' => 'Caravana',
                                 'type' => 'string',
                                 'required' => false,
-                                'ai_hint' => 'Caravana de ESTE renglón: impresa en los renglones del DTE, escrita a mano en los renglones libres del final. Copiar letras y números exactamente.',
+                                'ai_hint' => 'Caravana escrita a mano en la columna CARAVANA de ESTE renglón. Copiar letras, números y guiones exactamente. Vacío si el renglón está en blanco.',
                             ],
                             [
                                 'name' => 'sexo',
                                 'label' => 'Sexo',
                                 'type' => 'string',
                                 'required' => false,
-                                'ai_hint' => 'M o H de la columna SEXO del mismo renglón, impresa o escrita a mano.',
+                                'ai_hint' => 'Sólo si la hoja tiene columna SEXO: M o H escrito a mano en el renglón. Vacío si la hoja no tiene esa columna o no se escribió.',
+                            ],
+                            [
+                                'name' => 'cat',
+                                'label' => 'Categoría',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Sólo si la hoja tiene columna CATEGORÍA o CAT.: lo escrito a mano en el renglón, COPIADO TAL CUAL: un número (1, 2…) o el nombre de la categoría (ej: Novillito, Torito). No corregir, no completar ni traducir un número a nombre. Vacío si la hoja no tiene esa columna o no se escribió.',
                             ],
                             [
                                 'name' => 'raza',
                                 'label' => 'Raza',
                                 'type' => 'string',
                                 'required' => false,
-                                'ai_hint' => 'Raza de la columna RAZA del mismo renglón, tal como figura (ej: Angus, Brangus, Hereford): impresa en los renglones del DTE, escrita a mano en los renglones libres. Sólo la raza, sin el pelaje. Vacío si no hay nada.',
+                                'ai_hint' => 'Sólo si la hoja tiene columna RAZA: lo escrito a mano en el renglón, COPIADO TAL CUAL: una letra (A, B…) o el nombre de la raza (ej: Braford, Brangus), aunque esté abreviado. No corregir ni completar. Vacío si la hoja no tiene esa columna o no se escribió.',
                             ],
                             [
                                 'name' => 'pelaje',
                                 'label' => 'Pelaje',
                                 'type' => 'string',
                                 'required' => false,
-                                'ai_hint' => 'Pelaje de la columna PELAJE del mismo renglón, tal como figura (ej: Colorado, Negro, Pampa): impreso en los renglones del DTE, escrito a mano en los renglones libres. Vacío si no hay nada.',
-                            ],
-                            [
-                                'name' => 'llego',
-                                'label' => 'Llegó',
-                                'type' => 'string',
-                                'required' => false,
-                                'ai_hint' => 'Columna LLEGÓ: UNA casilla por renglón. Devolver X si la casilla de ESTE renglón tiene una X o tilde de tinta encima, y vacío si no. No deducirlo de que haya un peso escrito.',
-                            ],
-                            [
-                                'name' => 'no_llega',
-                                'label' => 'No llega',
-                                'type' => 'string',
-                                'required' => false,
-                                'ai_hint' => 'Columna NO LLEGA: UNA casilla por renglón. Devolver X si la casilla de ESTE renglón tiene una X o tilde de tinta encima, y vacío si no.',
+                                'ai_hint' => 'Sólo si la hoja tiene columna PELAJE: el pelaje escrito a mano en el renglón (ej: Colorado, Negro, Pampa), COPIADO TAL CUAL, aunque esté abreviado (Col., Ne). Vacío si la hoja no tiene esa columna o no se escribió.',
                             ],
                             [
                                 'name' => 'ec',
@@ -1317,6 +1409,27 @@ class WorkTemplateSeeder extends Seeder
                                 'type' => 'number',
                                 'required' => false,
                                 'ai_hint' => 'Peso en kg escrito a mano en la columna PESO del renglón. Vacío si no se escribió o si la hoja no tiene columna PESO (hoja de peso promedio).',
+                            ],
+                            [
+                                'name' => 'lesion_ojo',
+                                'label' => 'Lesión ojo',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Columna OJO, bajo LESIÓN AL ARRIBO: UNA casilla por renglón. Devolver X si la casilla de ESTE renglón tiene una X o un tilde de tinta encima, y vacío si no. No deducirlo de otras columnas.',
+                            ],
+                            [
+                                'name' => 'lesion_oreja',
+                                'label' => 'Lesión oreja',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Columna OREJA, bajo LESIÓN AL ARRIBO: UNA casilla por renglón. Devolver X si la casilla de ESTE renglón tiene una X o un tilde de tinta encima, y vacío si no.',
+                            ],
+                            [
+                                'name' => 'lesion_aplomo',
+                                'label' => 'Lesión aplomo',
+                                'type' => 'string',
+                                'required' => false,
+                                'ai_hint' => 'Columna APLOMO (renguera o golpe en las patas), bajo LESIÓN AL ARRIBO: UNA casilla por renglón. Devolver X si la casilla de ESTE renglón tiene una X o un tilde de tinta encima, y vacío si no.',
                             ],
                         ],
                     ],

@@ -11,7 +11,6 @@ use App\Application\Services\EntryOrderDteService;
 use App\Application\Services\EntryOrderFactory;
 use App\Application\Services\EntryOrderReceptionService;
 use App\Core\Entities\EntryOrderEntity;
-use App\Core\Enums\EntryOrderStatus;
 use App\Core\Enums\TransferOrderKind;
 use App\Core\Exceptions\EntryDteValidationException;
 use App\Core\Exceptions\EntryOrderDomainException;
@@ -20,10 +19,10 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * "Registrar ingreso": the DTE and the animals are already in hand. The order, its batch, the DTE
- * and the caravans are created, and every caravan received on the entry day, in one transaction:
- * if any row fails, nothing exists. If the DTE brings fewer head than were bought the order stays
- * AWAITING_DTE, waiting for another DTE, unless a closing reason is given to close it incomplete
- * right away.
+ * with the head it declares and a caravan for every animal received on the entry day are created
+ * in one transaction: if any row fails, nothing exists. If fewer head than were bought have a DTE,
+ * the order stays AWAITING_DTE; if fewer animals than the DTE declares arrived, the rest stay in
+ * transit. Either way a closing reason closes it incomplete right away.
  */
 final class RegisterEntryUseCase
 {
@@ -36,31 +35,24 @@ final class RegisterEntryUseCase
     }
 
     /**
-     * @param array<string, ?float> $weights entry weight by caravan number, as read on arrival
+     * @param array<int, array<string, mixed>> $animals the animals received, one per caravan
      * @return array{order: EntryOrderEntity, warnings: list<array{code: string, message: string, row?: int}>}
      *
      * @throws EntryOrderDomainException
      * @throws EntryDteValidationException
      */
-    public function __invoke(StoreEntryOrderDTO $dto, LoadDteDTO $dte, string $enteredAt, array $weights = [], ?string $closeIncompleteReason = null): array
+    public function __invoke(StoreEntryOrderDTO $dto, LoadDteDTO $dte, string $enteredAt, array $animals, ?string $closeIncompleteReason = null): array
     {
-        return DB::transaction(function () use ($dto, $dte, $enteredAt, $weights, $closeIncompleteReason): array {
+        return DB::transaction(function () use ($dto, $dte, $enteredAt, $animals, $closeIncompleteReason): array {
             $built = $this->factory->build($dto, TransferOrderKind::REGISTERED, true);
             $order = $built['order'];
             $loaded = $this->dteService->load($order, $dte, $dto->userId);
 
-            $received = $this->receptionService->receive($order, ReceiveDTO::wholeDte(
-                $dte->dteNumber,
-                $enteredAt,
-                array_map(fn (array $row) => [
-                    'identification' => $row['caravana'],
-                    'weight' => $weights[mb_strtoupper($row['caravana'])] ?? null,
-                ], $dte->animals)
-            ), $dto->userId);
+            $received = $this->receptionService->receive($order, ReceiveDTO::wholeDte($dte->dteNumber, $enteredAt, $animals), $dto->userId);
 
             $reason = trim((string) $closeIncompleteReason);
 
-            if ($reason !== '' && $order->getStatus() === EntryOrderStatus::AWAITING_DTE) {
+            if ($reason !== '' && $order->getStatus()->acceptsReception()) {
                 $order->closeIncomplete($reason, $dto->userId);
             }
 
