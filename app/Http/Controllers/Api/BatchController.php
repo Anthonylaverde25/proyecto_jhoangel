@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Application\DTOs\CreateBatchDTO;
 use App\Application\DTOs\CreateServiceBatchDTO;
+use App\Application\DTOs\ServiceOrders\StartBatchServiceOrderDTO;
 use App\Application\DTOs\Batches\AssignExternalCaravansToOwnBatchDTO;
 use App\Application\UseCases\Batches\BatchUseCases;
 use App\Core\Interfaces\ICompanyContext;
@@ -13,10 +14,12 @@ use App\Core\Interfaces\IEntryOrderRepository;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BatchResource;
 use App\Http\Resources\BatchWeightResource;
+use App\Http\Resources\ServiceOrderResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Http\Requests\Batches\CreateBatchRequest;
 use App\Http\Requests\Batches\CreateServiceBatchRequest;
+use App\Http\Requests\Batches\StartBatchServiceRequest;
 use App\Http\Requests\Batches\ChangeBatchActivityRequest;
 use App\Http\Requests\Batches\ChangeBatchManagementRequest;
 use App\Http\Requests\AssignExternalCaravansToOwnBatchRequest;
@@ -190,6 +193,38 @@ class BatchController extends Controller
 
         return response()->json(
             new BatchResource($entity),
+            201
+        );
+    }
+
+    /**
+     * Inicia un servicio de entore a partir de un lote propio existente de actividad Cría.
+     */
+    public function startService(StartBatchServiceRequest $request, int $id): JsonResponse
+    {
+        $companyId = (int) $request->header('X-Company-ID');
+        if ($companyId === 0) {
+            $companyId = (int) (auth()->user()?->company_id ?? 1);
+        }
+        $userId = (int) (auth()->id() ?? 1);
+
+        $validated = $request->validated();
+        $validated['origin_batch_id'] = $id;
+        $validated['company_id'] = $companyId;
+        $validated['user_id'] = $userId;
+
+        $dto = StartBatchServiceOrderDTO::fromArray($validated);
+
+        try {
+            $serviceOrderEntity = ($this->batch->startService)($dto);
+        } catch (\App\Core\Exceptions\DomainException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json(
+            new ServiceOrderResource($serviceOrderEntity),
             201
         );
     }

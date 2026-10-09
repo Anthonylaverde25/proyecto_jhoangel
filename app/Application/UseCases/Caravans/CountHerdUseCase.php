@@ -7,7 +7,8 @@ namespace App\Application\UseCases\Caravans;
 use App\Core\Interfaces\ICaravanRepository;
 
 /**
- * How many head make up the active company's herd, for the phone's home screen.
+ * How many head make up the active company's herd, and their demographic breakdown
+ * for the phone's home screen.
  */
 final class CountHerdUseCase
 {
@@ -16,8 +17,17 @@ final class CountHerdUseCase
     ) {
     }
 
-    public function __invoke(): int
+    /**
+     * @return array{
+     *     total: int,
+     *     by_sex: array{
+     *         females: array{count: int, percentage: float, categories: array<int, array<string, mixed>>},
+     *         males: array{count: int, percentage: float, categories: array<int, array<string, mixed>>}
+     *     }
+     * }
+     */
+    public function __invoke(): array
     {
-        return $this->repository->countOwn();
+        return $this->repository->getDemographicsBreakdown();
     }
 }

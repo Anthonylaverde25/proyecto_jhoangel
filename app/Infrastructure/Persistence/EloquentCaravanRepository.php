@@ -10,6 +10,7 @@ use App\Core\ValueObjects\CaravanNumber;
 use App\Models\Caravan;
 use Illuminate\Support\Facades\DB;
 use App\Application\Mappers\CaravanMapper;
+use App\Core\Enums\AnimalSex;
 
 class EloquentCaravanRepository implements ICaravanRepository
 {
@@ -170,6 +171,86 @@ class EloquentCaravanRepository implements ICaravanRepository
         $this->applyOwnScope($query);
 
         return $query->count();
+    }
+
+    public function getDemographicsBreakdown(): array
+    {
+        $baseQuery = Caravan::query();
+        $this->applyOwnScope($baseQuery);
+
+        $sexRows = (clone $baseQuery)
+            ->select('sex', \Illuminate\Support\Facades\DB::raw('count(*) as count'))
+            ->groupBy('sex')
+            ->get();
+
+        $total = 0;
+        $femalesCount = 0;
+        $malesCount = 0;
+
+        foreach ($sexRows as $row) {
+            $count = (int) $row->count;
+            $total += $count;
+            $val = $row->sex instanceof \BackedEnum ? $row->sex->value : (is_scalar($row->sex) ? (string) $row->sex : null);
+            if ($val === AnimalSex::FEMALE->value || $val === 'H') {
+                $femalesCount += $count;
+            } elseif ($val === AnimalSex::MALE->value || $val === 'M') {
+                $malesCount += $count;
+            }
+        }
+
+        $catRows = (clone $baseQuery)
+            ->leftJoin('animal_categories', 'caravans.category_id', '=', 'animal_categories.id')
+            ->select(
+                'caravans.sex',
+                'animal_categories.id as category_id',
+                'animal_categories.name as category_name',
+                'animal_categories.code as category_code',
+                \Illuminate\Support\Facades\DB::raw('count(*) as count')
+            )
+            ->groupBy('caravans.sex', 'animal_categories.id', 'animal_categories.name', 'animal_categories.code')
+            ->orderByDesc('count')
+            ->get();
+
+        $femaleCategories = [];
+        $maleCategories = [];
+
+        foreach ($catRows as $row) {
+            $count = (int) $row->count;
+            $val = $row->sex instanceof \BackedEnum ? $row->sex->value : (is_scalar($row->sex) ? (string) $row->sex : null);
+            $isFemale = ($val === AnimalSex::FEMALE->value || $val === 'H');
+
+            $catItem = [
+                'id' => $row->category_id ? (int) $row->category_id : 0,
+                'name' => $row->category_name ?? ($isFemale ? 'Hembra sin categoría' : 'Macho sin categoría'),
+                'code' => $row->category_code ?? 'S/C',
+                'count' => $count,
+                'percentage' => $isFemale
+                    ? ($femalesCount > 0 ? round(($count / $femalesCount) * 100, 1) : 0.0)
+                    : ($malesCount > 0 ? round(($count / $malesCount) * 100, 1) : 0.0),
+            ];
+
+            if ($isFemale) {
+                $femaleCategories[] = $catItem;
+            } else {
+                $maleCategories[] = $catItem;
+            }
+        }
+
+        return [
+            'total' => $total,
+            'by_sex' => [
+                'females' => [
+                    'count' => $femalesCount,
+                    'percentage' => $total > 0 ? round(($femalesCount / $total) * 100, 1) : 0.0,
+                    'categories' => $femaleCategories,
+                ],
+                'males' => [
+                    'count' => $malesCount,
+                    'percentage' => $total > 0 ? round(($malesCount / $total) * 100, 1) : 0.0,
+                    'categories' => $maleCategories,
+                ],
+            ],
+        ];
     }
 
     /**

@@ -33,8 +33,23 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
 
             // Sync pivote tables with company_id
             $malePivotData = [];
-            foreach ($entity->getMaleCaravanIds() as $maleId) {
-                $malePivotData[$maleId] = ['company_id' => $model->company_id];
+            if ($entity->getMaleDetails() !== []) {
+                foreach ($entity->getMaleDetails() as $d) {
+                    $malePivotData[(int)$d['male_caravan_id']] = [
+                        'company_id'                     => $model->company_id,
+                        'status'                         => $d['status'] ?? 'ACTIVE',
+                        'retired_at'                     => $d['retired_at'] ?? null,
+                        'snapshot_scrotal_circumference' => $d['scrotal_circumference'] ?? null,
+                        'service_capacity'               => $d['service_capacity'] ?? null,
+                    ];
+                }
+            } else {
+                foreach ($entity->getAllMaleCaravanIds() as $maleId) {
+                    $malePivotData[$maleId] = [
+                        'company_id' => $model->company_id,
+                        'status'     => 'ACTIVE',
+                    ];
+                }
             }
             $model->males()->sync($malePivotData);
 
@@ -67,7 +82,17 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
             }
 
             // Load relations to build the entity correctly
-            $model->load(['males', 'females', 'history']);
+            $model->load([
+                'males',
+                'females',
+                'history',
+                'serviceOrderMales',
+                'bullReplacements.retiredMaleCaravan.currentWeight',
+                'bullReplacements.replacementMaleCaravan.currentWeight',
+                'bullReplacements.replacementMaleCaravan.bullHealthEvaluation',
+                'bullReplacements.destinationBatch',
+                'bullReplacements.user',
+            ]);
 
             return ServiceOrderMapper::toEntity($model);
         });
@@ -75,7 +100,17 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
 
     public function findById(int $id, int $companyId): ?ServiceOrderEntity
     {
-        $model = ServiceOrder::with(['males', 'females', 'history'])
+        $model = ServiceOrder::with([
+            'males',
+            'females',
+            'history',
+            'serviceOrderMales',
+            'bullReplacements.retiredMaleCaravan.currentWeight',
+            'bullReplacements.replacementMaleCaravan.currentWeight',
+            'bullReplacements.replacementMaleCaravan.bullHealthEvaluation',
+            'bullReplacements.destinationBatch',
+            'bullReplacements.user',
+        ])
             ->where('id', $id)
             ->where('company_id', $companyId)
             ->first();
@@ -94,11 +129,12 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
             ServiceOrderStatus::APPROVED->value,
         ];
 
-        // Search caravans assigned as males in active service orders
+        // Search caravans assigned as ACTIVE males in active service orders
         $maleConflicts = DB::table('service_order_males')
             ->join('service_orders', 'service_order_males.service_order_id', '=', 'service_orders.id')
             ->where('service_orders.company_id', $companyId)
             ->whereIn('service_orders.status', $activeStatuses)
+            ->where('service_order_males.status', 'ACTIVE')
             ->whereIn('service_order_males.male_caravan_id', $caravanIds)
             ->pluck('service_order_males.male_caravan_id')
             ->toArray();
@@ -183,7 +219,17 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
 
     public function listAll(int $companyId): array
     {
-        $models = ServiceOrder::with(['males', 'females', 'history'])
+        $models = ServiceOrder::with([
+            'males',
+            'females',
+            'history',
+            'serviceOrderMales',
+            'bullReplacements.retiredMaleCaravan.currentWeight',
+            'bullReplacements.replacementMaleCaravan.currentWeight',
+            'bullReplacements.replacementMaleCaravan.bullHealthEvaluation',
+            'bullReplacements.destinationBatch',
+            'bullReplacements.user',
+        ])
             ->where('company_id', $companyId)
             ->orderBy('id', 'desc')
             ->get();

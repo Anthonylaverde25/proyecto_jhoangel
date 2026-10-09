@@ -40,8 +40,54 @@ final class ServiceOrderEntity
         private ?DateTimeInterface $updatedAt = null,
         private string $serviceType = 'single',
         private bool $isControlledService = false,
-        private array $femaleSireAssignments = []
+        private array $femaleSireAssignments = [],
+        private ?int $originBatchId = null,
+        private ?int $serviceBatchId = null,
+        private ?float $targetBullRatio = 3.0,
+        private ?string $plannedEndDate = null,
+        private ?float $finalPregnancyRate = null,
+        private array $maleDetails = [],
+        private array $bullReplacements = [],
+        private array $allMaleCaravanIds = []
     ) {
+        if (empty($this->allMaleCaravanIds)) {
+            $this->allMaleCaravanIds = $this->maleCaravanIds;
+        }
+    }
+
+    public function getMaleDetails(): array
+    {
+        return $this->maleDetails;
+    }
+
+    public function getBullReplacements(): array
+    {
+        return $this->bullReplacements;
+    }
+
+    public function getOriginBatchId(): ?int
+    {
+        return $this->originBatchId;
+    }
+
+    public function getServiceBatchId(): ?int
+    {
+        return $this->serviceBatchId;
+    }
+
+    public function getTargetBullRatio(): ?float
+    {
+        return $this->targetBullRatio;
+    }
+
+    public function getPlannedEndDate(): ?string
+    {
+        return $this->plannedEndDate;
+    }
+
+    public function getFinalPregnancyRate(): ?float
+    {
+        return $this->finalPregnancyRate;
     }
 
     public function getServiceType(): string
@@ -143,11 +189,42 @@ final class ServiceOrderEntity
     }
 
     /**
+     * Returns only the active bulls currently serving in this order.
+     *
      * @return int[]
      */
     public function getMaleCaravanIds(): array
     {
-        return $this->maleCaravanIds;
+        return $this->getActiveMaleCaravanIds();
+    }
+
+    /**
+     * @return int[]
+     */
+    public function getActiveMaleCaravanIds(): array
+    {
+        if (empty($this->maleDetails)) {
+            return $this->maleCaravanIds;
+        }
+
+        $active = [];
+        foreach ($this->maleDetails as $d) {
+            if (($d['status'] ?? 'ACTIVE') === 'ACTIVE') {
+                $active[] = (int) $d['male_caravan_id'];
+            }
+        }
+
+        return $active;
+    }
+
+    /**
+     * Returns all bulls that have ever participated in this service order.
+     *
+     * @return int[]
+     */
+    public function getAllMaleCaravanIds(): array
+    {
+        return !empty($this->allMaleCaravanIds) ? $this->allMaleCaravanIds : $this->maleCaravanIds;
     }
 
     /**
@@ -237,14 +314,14 @@ final class ServiceOrderEntity
      *
      * @throws ServiceOrderDomainException
      */
-    public function complete(?string $observations = null): void
+    public function complete(?string $observations = null, ?string $actualEndDate = null): void
     {
         if ($this->status !== ServiceOrderStatus::APPROVED) {
             throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::SUCCESS->value);
         }
 
         $this->status = ServiceOrderStatus::SUCCESS;
-        $this->actualEndDate = (new DateTimeImmutable())->format('Y-m-d');
+        $this->actualEndDate = $actualEndDate ?? (new DateTimeImmutable())->format('Y-m-d');
         if ($observations !== null) {
             $this->observations = $observations;
         }

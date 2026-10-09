@@ -58,6 +58,7 @@ Route::middleware([
 
     Route::post('/caravans/import', ImportCaravansController::class);
     Route::post('/caravans/import-gestation-ocr', ImportOCRGestationController::class);
+    Route::get('/caravans/summary', [CaravanController::class, 'summary']);
     Route::get('/caravans', [CaravanController::class, 'index']);
     Route::post('/caravans', [CaravanController::class, 'upsert']);
     Route::post('/caravans/bulk', [CaravanController::class, 'bulkStore']);
@@ -84,6 +85,7 @@ Route::middleware([
     Route::apiResource('farms', FarmController::class)->only(['index', 'store', 'show']);
     Route::get('/batches/reserve', [BatchController::class, 'reserve']);
     Route::post('/batches/service', [BatchController::class, 'storeService']);
+    Route::post('/batches/{id}/start-service', [BatchController::class, 'startService']);
     Route::post('/batches/assign-to-own', [BatchController::class, 'assignExternalToOwn']);
     Route::apiResource('batches', BatchController::class)->only(['index', 'store', 'show']);
     Route::patch('/batches/{id}/activity', [BatchController::class, 'changeActivity']);
@@ -201,6 +203,9 @@ Route::middleware([
         Route::post('/service-orders/{id}/complete', [ServiceOrderController::class, 'complete']);
         Route::patch('/service-orders/{id}/status', [ServiceOrderController::class, 'updateStatus']);
         Route::post('/service-orders/{id}/upload-pdf', [ServiceOrderController::class, 'uploadPdf']);
+        Route::post('/service-orders/{id}/replace-bull', [ServiceOrderController::class, 'replaceBull'])->whereNumber('id');
+        Route::get('/service-orders/{id}/bull-replacements', [ServiceOrderController::class, 'getBullReplacements'])->whereNumber('id');
+        Route::post('/service-orders/{id}/close-service', [ServiceOrderController::class, 'closeService'])->whereNumber('id');
 
         // Pre-Servicio, Salud del Toro & Diagnósticos Veterinarios
         Route::get('/pre-service/bulls', [\App\Http\Controllers\Api\BullHealthEvaluationController::class, 'getBulls']);

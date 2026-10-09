@@ -20,6 +20,8 @@ class ServiceOrder extends Model
     protected $fillable = [
         'company_id',
         'batch_id',
+        'origin_batch_id',
+        'service_batch_id',
         'code',
         'status',
         'requested_by_user_id',
@@ -29,8 +31,11 @@ class ServiceOrder extends Model
         'approved_at',
         'executed_at',
         'planned_start_date',
+        'planned_end_date',
         'actual_start_date',
         'actual_end_date',
+        'target_bull_ratio',
+        'final_pregnancy_rate',
         'observations',
         'rejection_reason',
         'service_type',
@@ -43,6 +48,8 @@ class ServiceOrder extends Model
     protected $casts = [
         'company_id' => 'integer',
         'batch_id' => 'integer',
+        'origin_batch_id' => 'integer',
+        'service_batch_id' => 'integer',
         'requested_by_user_id' => 'integer',
         'reviewed_by_user_id' => 'integer',
         'approved_by_user_id' => 'integer',
@@ -50,14 +57,27 @@ class ServiceOrder extends Model
         'approved_at' => 'datetime',
         'executed_at' => 'datetime',
         'planned_start_date' => 'date:Y-m-d',
+        'planned_end_date' => 'date:Y-m-d',
         'actual_start_date' => 'date:Y-m-d',
         'actual_end_date' => 'date:Y-m-d',
+        'target_bull_ratio' => 'float',
+        'final_pregnancy_rate' => 'float',
         'is_controlled_service' => 'boolean',
     ];
 
     public function batch(): BelongsTo
     {
         return $this->belongsTo(Batch::class);
+    }
+
+    public function originBatch(): BelongsTo
+    {
+        return $this->belongsTo(Batch::class, 'origin_batch_id');
+    }
+
+    public function serviceBatch(): BelongsTo
+    {
+        return $this->belongsTo(Batch::class, 'service_batch_id');
     }
 
     public function requestedByUser(): BelongsTo
@@ -78,7 +98,19 @@ class ServiceOrder extends Model
     public function males(): BelongsToMany
     {
         return $this->belongsToMany(Caravan::class, 'service_order_males', 'service_order_id', 'male_caravan_id')
+            ->withPivot(['status', 'retired_at', 'snapshot_scrotal_circumference', 'service_capacity'])
             ->withTimestamps();
+    }
+
+    public function serviceOrderMales(): HasMany
+    {
+        return $this->hasMany(ServiceOrderMale::class, 'service_order_id');
+    }
+
+    public function bullReplacements(): HasMany
+    {
+        return $this->hasMany(ServiceOrderBullReplacement::class, 'service_order_id')
+            ->orderByDesc('replacement_date');
     }
 
     public function females(): BelongsToMany
@@ -98,3 +130,4 @@ class ServiceOrder extends Model
         return $this->hasMany(CaravanGestation::class);
     }
 }
+

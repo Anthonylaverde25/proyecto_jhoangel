@@ -23,6 +23,8 @@ use App\Http\Resources\CaravanPedigreeResource;
 use App\Application\DTOs\BulkTransferCaravansDTO;
 use App\Http\Requests\Caravans\BulkTransferCaravansRequest;
 use App\Application\UseCases\Caravans\BulkTransferCaravansUseCase;
+use App\Application\UseCases\Caravans\PaginateCaravansSummaryUseCase;
+use App\Http\Resources\CaravanSummaryResource;
 
 
 class CaravanController extends Controller
@@ -34,7 +36,8 @@ class CaravanController extends Controller
         private readonly \App\Application\UseCases\Caravans\RegisterGestationDiagnosisUseCase $registerGestationDiagnosis,
         private readonly \App\Application\UseCases\Caravans\BulkRegisterGestationDiagnosisUseCase $bulkRegisterGestationDiagnosis,
         private readonly GetCaravanPedigreeUseCase $getCaravanPedigree,
-        private readonly BulkTransferCaravansUseCase $bulkTransferCaravans
+        private readonly BulkTransferCaravansUseCase $bulkTransferCaravans,
+        private readonly PaginateCaravansSummaryUseCase $paginateCaravansSummary
     ) {
     }
 
@@ -75,6 +78,32 @@ class CaravanController extends Controller
         
         return response()->json(
             CaravanResource::collection($entities)
+        );
+    }
+
+    /**
+     * Lista paginada y ligera de caravanas para vistas de inventario y tablas de alto rendimiento.
+     */
+    public function summary(\Illuminate\Http\Request $request): JsonResponse
+    {
+        $scope = (string) $request->query('scope', 'own');
+        $batchId = $request->query('batch_id');
+        $search = $request->query('search');
+        $sex = $request->query('sex');
+        $page = (int) $request->query('page', 1);
+        $perPage = (int) $request->query('per_page', 25);
+
+        $paginator = ($this->paginateCaravansSummary)(
+            scope: $scope,
+            batchId: $batchId,
+            search: $search ? (string) $search : null,
+            sex: $sex ? (string) $sex : null,
+            page: $page,
+            perPage: $perPage
+        );
+
+        return response()->json(
+            CaravanSummaryResource::collection($paginator)->response()->getData(true)
         );
     }
 

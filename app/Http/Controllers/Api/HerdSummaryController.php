@@ -22,9 +22,12 @@ final class HerdSummaryController extends Controller
 
     public function __invoke(): JsonResponse
     {
+        $breakdown = ($this->countHerd)();
+
         return response()->json([
             'data' => [
-                'total' => ($this->countHerd)(),
+                'total' => $breakdown['total'],
+                'by_sex' => $breakdown['by_sex'],
                 'updated_at' => Carbon::now()->toIso8601String(),
             ],
         ]);

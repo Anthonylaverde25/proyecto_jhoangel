@@ -8,18 +8,24 @@ use App\Application\DTOs\ServiceOrders\CreateServiceOrderDTO;
 use App\Application\UseCases\ServiceOrders\CreateServiceOrderUseCase;
 use App\Application\UseCases\ServiceOrders\ApproveServiceOrderUseCase;
 use App\Application\UseCases\ServiceOrders\CompleteServiceOrderUseCase;
+use App\Application\UseCases\ServiceOrders\CloseServiceOrderWithBullWithdrawalUseCase;
 use App\Application\UseCases\ServiceOrders\UpdateServiceOrderStatusUseCase;
 use App\Application\UseCases\ServiceOrders\GetServiceOrderUseCase;
 use App\Application\UseCases\ServiceOrders\ListServiceOrdersUseCase;
+use App\Application\UseCases\ServiceOrders\ReplaceServiceBullUseCase;
 use App\Core\Exceptions\ServiceOrderDomainException;
 use App\Core\Enums\ServiceOrderStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CreateServiceOrderRequest;
 use App\Http\Requests\ReviewServiceOrderRequest;
 use App\Http\Requests\ServiceOrders\CompleteServiceOrderRequest;
+use App\Http\Requests\ServiceOrders\CloseServiceOrderWithBullWithdrawalRequest;
+use App\Http\Requests\ServiceOrders\ReplaceServiceBullRequest;
 use App\Http\Requests\ServiceOrders\UpdateServiceOrderStatusRequest;
 use App\Http\Requests\ServiceOrders\UploadServiceOrderPdfRequest;
+use App\Http\Resources\ServiceOrderBullReplacementResource;
 use App\Http\Resources\ServiceOrderResource;
+use App\Models\ServiceOrderBullReplacement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -30,9 +36,11 @@ class ServiceOrderController extends Controller
         private readonly CreateServiceOrderUseCase $createUseCase,
         private readonly ApproveServiceOrderUseCase $approveUseCase,
         private readonly CompleteServiceOrderUseCase $completeUseCase,
+        private readonly CloseServiceOrderWithBullWithdrawalUseCase $closeServiceUseCase,
         private readonly UpdateServiceOrderStatusUseCase $updateStatusUseCase,
         private readonly GetServiceOrderUseCase $getUseCase,
-        private readonly ListServiceOrdersUseCase $listUseCase
+        private readonly ListServiceOrdersUseCase $listUseCase,
+        private readonly ReplaceServiceBullUseCase $replaceBullUseCase
     ) {
     }
 
@@ -142,4 +150,60 @@ class ServiceOrderController extends Controller
 
         return response()->json(['url' => $url]);
     }
+
+    public function replaceBull(ReplaceServiceBullRequest $request, int $id): JsonResponse
+    {
+        $companyId = (int) $request->header('X-Company-ID');
+        $userId = (int) Auth::id();
+
+        try {
+            $dto = $request->toDTO($id, $companyId, $userId);
+            $replacement = ($this->replaceBullUseCase)($dto);
+
+            return response()->json([
+                'message'     => 'Sustitución de reproductor registrada exitosamente',
+                'replacement' => new ServiceOrderBullReplacementResource($replacement),
+            ], 201);
+        } catch (\App\Core\Exceptions\DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    public function getBullReplacements(Request $request, int $id): JsonResponse
+    {
+        $companyId = (int) $request->header('X-Company-ID');
+
+        $replacements = ServiceOrderBullReplacement::where('service_order_id', $id)
+            ->where('company_id', $companyId)
+            ->with([
+                'retiredMaleCaravan.currentWeight',
+                'replacementMaleCaravan.currentWeight',
+                'replacementMaleCaravan.bullHealthEvaluation',
+                'destinationBatch',
+                'user',
+            ])
+            ->orderByDesc('replacement_date')
+            ->get();
+
+        return response()->json(ServiceOrderBullReplacementResource::collection($replacements));
+    }
+
+    public function closeService(CloseServiceOrderWithBullWithdrawalRequest $request, int $id): JsonResponse
+    {
+        $companyId = (int) $request->header('X-Company-ID');
+        $userId = (int) Auth::id();
+
+        try {
+            $dto = $request->toDTO($id, $companyId, $userId);
+            $entity = ($this->closeServiceUseCase)($dto);
+
+            return response()->json([
+                'message' => 'Servicio finalizado y torada retirada al descanso exitosamente',
+                'order'   => new ServiceOrderResource($entity),
+            ]);
+        } catch (ServiceOrderDomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
 }
+

@@ -71,6 +71,19 @@ interface ICaravanRepository
      */
     public function countOwn(): int;
 
+    /**
+     * Demographic composition of the own herd broken down by sex and category.
+     *
+     * @return array{
+     *     total: int,
+     *     by_sex: array{
+     *         females: array{count: int, percentage: float, categories: array<int, array<string, mixed>>},
+     *         males: array{count: int, percentage: float, categories: array<int, array<string, mixed>>}
+     *     }
+     * }
+     */
+    public function getDemographicsBreakdown(): array;
+
 
     /**
      * @param int $batchId

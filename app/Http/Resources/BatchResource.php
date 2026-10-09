@@ -79,6 +79,9 @@ class BatchResource extends JsonResource
                 'planned_end_date'        => $this->resource->getServiceDetail()->getPlannedEndDate(),
                 'notes'                   => $this->resource->getServiceDetail()->getNotes(),
             ] : null,
+            'is_in_service'   => $this->resource->getId() ? \App\Models\ServiceOrder::where('origin_batch_id', $this->resource->getId())->where('status', 'APPROVED')->exists() : false,
+            'active_service_order' => $this->resource->getId() ? \App\Models\ServiceOrder::where('origin_batch_id', $this->resource->getId())->where('status', 'APPROVED')->select('id', 'code', 'status', 'planned_start_date', 'service_batch_id')->first() : null,
+            'service_order_origin_batch_id' => $this->resource->getId() ? \App\Models\ServiceOrder::where('service_batch_id', $this->resource->getId())->value('origin_batch_id') : null,
             'entry_order'   => $this->entryOrder,
             'created_at'    => $this->resource->getCreatedAt()?->format('Y-m-d H:i:s'),
         ];
