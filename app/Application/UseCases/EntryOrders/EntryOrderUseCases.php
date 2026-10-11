@@ -14,6 +14,8 @@ final class EntryOrderUseCases
         public readonly CorrectEntryOrderDteHeadCountUseCase $correctDteHeadCount,
         public readonly RegisterEntryUseCase $register,
         public readonly ReceiveEntryOrderUseCase $receive,
+        public readonly RedistributeEntryOrderUseCase $redistribute,
+        public readonly WriteOffPendingHeadsUseCase $writeOffPending,
         public readonly ReadTriUseCase $readTri,
         public readonly ResolveEntryOrderIncidentUseCase $resolveIncident,
         public readonly CloseIncompleteEntryOrderUseCase $closeIncomplete,

@@ -15,6 +15,8 @@ use App\Core\Enums\ReceptionMethod;
  * head that arrived: that closes the DTE, and its caravans become optional. Any line may bring the weight and the body condition seen at
  * arrival (official scale 1 to 5), and what the chute saw on the animal (an injured eye, ear or limb).
  * Breed and category come by position, or as written on a sheet printed with words (`*_text`).
+ * Head confirmed by count that went to more than one batch say how many went to each
+ * (`headsByBatch`); with a single batch possible they all go there.
  */
 final readonly class ReceiveDTO
 {
@@ -33,7 +35,9 @@ final readonly class ReceiveDTO
         public ?int $receiptSheetId = null,
         public array $pages = [],
         public ?int $receivedHeadCount = null,
-        public ?string $triNumber = null
+        public ?string $triNumber = null,
+        /** @var array<int, int> batch id → head counted that went there */
+        public array $headsByBatch = []
     ) {
     }
 
@@ -54,8 +58,26 @@ final readonly class ReceiveDTO
             receiptSheetId: isset($data['receipt_sheet_id']) && $data['receipt_sheet_id'] !== '' ? (int) $data['receipt_sheet_id'] : null,
             pages: array_map('intval', array_values($data['pages'] ?? [])),
             receivedHeadCount: isset($data['received_head_count']) && $data['received_head_count'] !== '' ? (int) $data['received_head_count'] : null,
-            triNumber: isset($data['tri_number']) && trim((string) $data['tri_number']) !== '' ? trim((string) $data['tri_number']) : null
+            triNumber: isset($data['tri_number']) && trim((string) $data['tri_number']) !== '' ? trim((string) $data['tri_number']) : null,
+            headsByBatch: self::headsByBatch($data['heads_by_batch'] ?? [])
         );
+    }
+
+    /**
+     * @param mixed $rows list of {batch_id, head_count}
+     * @return array<int, int>
+     */
+    private static function headsByBatch(mixed $rows): array
+    {
+        $byBatch = [];
+
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            if (isset($row['batch_id']) && $row['batch_id'] !== '') {
+                $byBatch[(int) $row['batch_id']] = ($byBatch[(int) $row['batch_id']] ?? 0) + (int) ($row['head_count'] ?? 0);
+            }
+        }
+
+        return $byBatch;
     }
 
     /**

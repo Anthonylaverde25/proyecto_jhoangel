@@ -19,6 +19,11 @@ class BatchResource extends JsonResource
     private ?array $entryOrder = null;
 
     /**
+     * @var list<array<string, mixed>>
+     */
+    private array $incomingEntryOrders = [];
+
+    /**
      * The entry order the batch was born from, when it is an external batch of a purchase.
      *
      * @param array<string, mixed>|null $summary
@@ -26,6 +31,18 @@ class BatchResource extends JsonResource
     public function withEntryOrder(?array $summary): self
     {
         $this->entryOrder = $summary;
+
+        return $this;
+    }
+
+    /**
+     * The open entry orders that bring animals to this own batch.
+     *
+     * @param list<array<string, mixed>> $summaries
+     */
+    public function withIncomingEntryOrders(array $summaries): self
+    {
+        $this->incomingEntryOrders = $summaries;
 
         return $this;
     }
@@ -50,6 +67,10 @@ class BatchResource extends JsonResource
             'current_weight'=> $this->resource->getCurrentWeight(),
             'total_weight'  => $this->resource->getTotalWeight(),
             'caravans_count'=> $this->resource->getCaravansCount(),
+            // Received by count, their caravans still to write: in the batch, not yet caravans.
+            'pending_identification_count' => $this->resource->getPendingIdentificationCount() ?? 0,
+            // What the stock views count: caravans plus head pending identification.
+            'head_count'    => $this->resource->getHeadCount(),
             'weighed_count' => $this->resource->getWeighedCount(),
             'is_active'     => $this->resource->isActive(),
             'is_system'    => $this->resource->isSystem(),
@@ -83,6 +104,7 @@ class BatchResource extends JsonResource
             'active_service_order' => $this->resource->getId() ? \App\Models\ServiceOrder::where('origin_batch_id', $this->resource->getId())->where('status', 'APPROVED')->select('id', 'code', 'status', 'planned_start_date', 'service_batch_id')->first() : null,
             'service_order_origin_batch_id' => $this->resource->getId() ? \App\Models\ServiceOrder::where('service_batch_id', $this->resource->getId())->value('origin_batch_id') : null,
             'entry_order'   => $this->entryOrder,
+            'incoming_entry_orders' => $this->incomingEntryOrders,
             'created_at'    => $this->resource->getCreatedAt()?->format('Y-m-d H:i:s'),
         ];
 

@@ -6,15 +6,19 @@ namespace App\Application\DTOs\EntryOrders;
 
 use App\Core\Entities\EntryOrderBreedEntity;
 use App\Core\Entities\EntryOrderCategoryEntity;
+use App\Core\Entities\EntryOrderDestinationEntity;
 use App\Core\Enums\BatchNameMode;
+use App\Core\Enums\DestinationSexScope;
 use App\Core\Enums\SexComposition;
 use App\Core\Enums\TroopCondition;
 use App\Core\Exceptions\EntryOrderDomainException;
+use App\Core\ValueObjects\EntryDestinationPlan;
 use App\Core\ValueObjects\EntryTroop;
 
 /**
- * What the "Nueva orden de ingreso" form sends: the troop, the name of its batch and whether the
- * purchase is confirmed now or kept as a draft. A draft may leave everything but its origin out.
+ * What the "Nueva orden de ingreso" form sends: the troop, where its animals go (by category line
+ * and sex), the name of its transit batch and whether the purchase is confirmed now or kept as a
+ * draft. A draft may leave everything but its origin out.
  */
 final readonly class StoreEntryOrderDTO
 {
@@ -49,6 +53,36 @@ final readonly class StoreEntryOrderDTO
     /**
      * @throws EntryOrderDomainException
      */
+    public function toDestinations(): EntryDestinationPlan
+    {
+        return self::destinationsOf($this->troop['destinations'] ?? []);
+    }
+
+    /**
+     * Destination rules as sent: the line by its position (1, 2, 3…), the sex it takes (ALL, M, H)
+     * and the own batch.
+     *
+     * @param mixed $rows
+     */
+    public static function destinationsOf(mixed $rows): EntryDestinationPlan
+    {
+        $rules = [];
+
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            if (!isset($row['category_position'], $row['destination_batch_id']) || $row['destination_batch_id'] === '') {
+                continue;
+            }
+
+            $rules[] = new EntryOrderDestinationEntity(
+                categoryPosition: (int) $row['category_position'],
+                sexScope: DestinationSexScope::tryFrom(strtoupper((string) ($row['sex_scope'] ?? 'ALL'))) ?? DestinationSexScope::ALL,
+                batchId: (int) $row['destination_batch_id']
+            );
+        }
+
+        return EntryDestinationPlan::of($rules);
+    }
+
     public function toTroop(): EntryTroop
     {
         $t = $this->troop;

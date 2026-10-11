@@ -57,9 +57,17 @@ class BatchController extends Controller
             array_values(array_filter(array_map(fn ($e) => $e->getProviderId() !== null ? $e->getId() : null, $entities))),
             (int) $companyContext->getCompanyId()
         );
+        // The own batches show the purchases that bring animals to them, and their head pending identification.
+        $incoming = $entryOrders->incomingSummariesByBatch(
+            array_values(array_filter(array_map(fn ($e) => $e->getProviderId() === null ? $e->getId() : null, $entities))),
+            (int) $companyContext->getCompanyId()
+        );
 
         return response()->json(array_map(
-            fn ($entity) => (new BatchResource($entity))->withEntryOrder($summaries[$entity->getId()] ?? null)->resolve($request),
+            fn ($entity) => (new BatchResource($entity))
+                ->withEntryOrder($summaries[$entity->getId()] ?? null)
+                ->withIncomingEntryOrders($incoming[$entity->getId()] ?? [])
+                ->resolve($request),
             $entities
         ));
     }
@@ -113,8 +121,13 @@ class BatchController extends Controller
         }
 
         $summary = $entryOrders->summariesByBatch([(int) $entity->getId()], (int) $companyContext->getCompanyId());
+        $incoming = $entity->getProviderId() === null
+            ? $entryOrders->incomingSummariesByBatch([(int) $entity->getId()], (int) $companyContext->getCompanyId())
+            : [];
 
-        return response()->json((new BatchResource($entity))->withEntryOrder($summary[$entity->getId()] ?? null));
+        return response()->json((new BatchResource($entity))
+            ->withEntryOrder($summary[$entity->getId()] ?? null)
+            ->withIncomingEntryOrders($incoming[$entity->getId()] ?? []));
     }
 
     public function changeActivity(ChangeBatchActivityRequest $request, int $id): JsonResponse

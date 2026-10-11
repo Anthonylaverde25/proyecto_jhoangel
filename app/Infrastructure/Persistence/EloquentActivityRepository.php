@@ -21,11 +21,11 @@ class EloquentActivityRepository implements IActivityRepository
             $query->with(['companies' => function ($q) use ($companyId) {
                 $q->where('company_id', $companyId);
             }, 'batches' => function ($q) use ($companyId) {
-                $q->where('company_id', $companyId)->with(['farm', 'batchType'])->withCount(['caravans' => fn ($c) => $c->inPossession()])->withExists('outgoingMovements');
+                $q->where('company_id', $companyId)->with(['farm', 'batchType'])->withPendingIdentification()->withCount(['caravans' => fn ($c) => $c->inPossession()])->withExists('outgoingMovements');
             }]);
         } else {
             $query->with(['batches' => function ($q) {
-                $q->with(['farm', 'batchType'])->withCount(['caravans' => fn ($c) => $c->inPossession()])->withExists('outgoingMovements');
+                $q->with(['farm', 'batchType'])->withPendingIdentification()->withCount(['caravans' => fn ($c) => $c->inPossession()])->withExists('outgoingMovements');
             }]);
         }
 
@@ -84,7 +84,8 @@ class EloquentActivityRepository implements IActivityRepository
                 batchTypeName: $b->batchType?->name,
                 batchTypeCode: $b->batchType?->code,
                 isConfined: $b->is_confined !== null ? (bool) $b->is_confined : null,
-                wasEmptied: (bool) ($b->outgoing_movements_exists ?? false)
+                wasEmptied: (bool) ($b->outgoing_movements_exists ?? false),
+                pendingIdentificationCount: (int) ($b->pending_identification_count ?? 0)
             ))->toArray());
 
             return $entity;
@@ -103,7 +104,7 @@ class EloquentActivityRepository implements IActivityRepository
         })->with(['companies' => function ($q) use ($companyId) {
             $q->where('company_id', $companyId);
         }, 'batches' => function ($query) use ($companyId) {
-            $query->where('company_id', $companyId)->with(['farm', 'batchType'])->withCount(['caravans' => fn ($c) => $c->inPossession()])->withExists('outgoingMovements');
+            $query->where('company_id', $companyId)->with(['farm', 'batchType'])->withPendingIdentification()->withCount(['caravans' => fn ($c) => $c->inPossession()])->withExists('outgoingMovements');
         }])->get()->map(function ($model) {
             $pivot = $model->companies->first()?->pivot;
             $isInitial = $pivot ? (bool) $pivot->is_initial : false;
@@ -141,7 +142,8 @@ class EloquentActivityRepository implements IActivityRepository
                 batchTypeName: $b->batchType?->name,
                 batchTypeCode: $b->batchType?->code,
                 isConfined: $b->is_confined !== null ? (bool) $b->is_confined : null,
-                wasEmptied: (bool) ($b->outgoing_movements_exists ?? false)
+                wasEmptied: (bool) ($b->outgoing_movements_exists ?? false),
+                pendingIdentificationCount: (int) ($b->pending_identification_count ?? 0)
             ))->toArray());
 
             return $entity;

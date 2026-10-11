@@ -24,6 +24,8 @@ class ActivityResource extends JsonResource
             'is_final' => $this->resource->isFinal(),
             'sort_order' => $this->resource->getSortOrder(),
             'caravans_count' => $this->resource->getCaravansCount(),
+            'pending_identification_count' => $this->resource->getPendingIdentificationCount(),
+            'head_count' => $this->resource->getHeadCount(),
             'batches' => array_map(fn($batch) => [
                 'id' => $batch->getId(),
                 'name' => $batch->getName(),
@@ -32,6 +34,8 @@ class ActivityResource extends JsonResource
                 'total_weight' => $batch->getTotalWeight(),
                 'weighed_count' => $batch->getWeighedCount(),
                 'count' => $batch->getCaravansCount(),
+                'pending_identification_count' => $batch->getPendingIdentificationCount() ?? 0,
+                'head_count' => $batch->getHeadCount(),
                 'activity_id' => $batch->getActivityId(),
                 'batch_type_id' => $batch->getBatchTypeId(),
                 'batch_type_name' => $batch->getBatchTypeName(),

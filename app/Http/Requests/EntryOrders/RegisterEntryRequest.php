@@ -33,7 +33,8 @@ final class RegisterEntryRequest extends FormRequest
                 : $rule,
             $rules
         );
-        $rules['batch_name'] = 'nullable|required_if:batch_name_mode,CUSTOM|string|max:255';
+        // The transit batch's name is only needed when some animal has no destination: the domain says.
+        $rules['batch_name'] = 'nullable|string|max:255';
 
         return [
             ...$rules,

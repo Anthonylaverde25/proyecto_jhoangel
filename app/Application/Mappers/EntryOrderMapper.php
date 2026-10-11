@@ -7,12 +7,14 @@ namespace App\Application\Mappers;
 use App\Core\Entities\EntryOrderAnimalEntity;
 use App\Core\Entities\EntryOrderBreedEntity;
 use App\Core\Entities\EntryOrderCategoryEntity;
+use App\Core\Entities\EntryOrderDestinationEntity;
 use App\Core\Entities\EntryOrderDteEntity;
 use App\Core\Entities\EntryOrderEntity;
 use App\Core\Entities\EntryOrderIncidentEntity;
 use App\Core\Entities\EntryOrderReceiptSheetEntity;
 use App\Core\Entities\TransferOrderHistoryEntity;
 use App\Core\Enums\BatchNameMode;
+use App\Core\Enums\DestinationSexScope;
 use App\Core\Enums\EntryOrderIncidentStatus;
 use App\Core\Enums\EntryOrderIncidentType;
 use App\Core\Enums\ReceiptSheetStatus;
@@ -24,6 +26,7 @@ use App\Core\Enums\TroopCondition;
 use App\Core\Enums\ArrivalFinding;
 use App\Core\Enums\ReferenceMode;
 use App\Core\Enums\WeighingMode;
+use App\Core\ValueObjects\EntryDestinationPlan;
 use App\Core\ValueObjects\EntryTroop;
 use App\Models\EntryOrder;
 
@@ -90,7 +93,9 @@ class EntryOrderMapper
                             categoryPosition: $categoryLine?->position,
                             arrivalFindings: $line->relationLoaded('arrivalFindings')
                                 ? array_values(array_filter($line->arrivalFindings->map(fn ($f) => ArrivalFinding::tryFrom((string) $f->finding))->all()))
-                                : []
+                                : [],
+                            currentBatchId: $caravan?->batch_id !== null ? (int) $caravan->batch_id : null,
+                            currentBatchName: $caravan !== null && $caravan->relationLoaded('batch') ? $caravan->batch?->name : null
                         );
                     }
                 }
@@ -108,7 +113,15 @@ class EntryOrderMapper
                     createdAt: $dte->created_at,
                     // The list counts the caravans instead of loading them.
                     storedReceivedCount: $dte->relationLoaded('animals') ? null : (int) ($dte->received_count ?? 0),
-                    uncaravanedHeadCount: (int) $dte->uncaravaned_head_count
+                    uncaravanedHeadCount: (int) $dte->uncaravaned_head_count,
+                    pendingByBatch: $dte->relationLoaded('pendingHeads')
+                        ? $dte->pendingHeads->mapWithKeys(fn ($p) => [(int) $p->batch_id => (int) $p->head_count])->all()
+                        : [],
+                    headsReceivedAt: $dte->heads_received_at !== null ? self::date($dte->heads_received_at) : null,
+                    writtenOffHeadCount: (int) ($dte->written_off_head_count ?? 0),
+                    batchNames: $dte->relationLoaded('pendingHeads')
+                        ? $dte->pendingHeads->mapWithKeys(fn ($p) => [(int) $p->batch_id => $p->relationLoaded('batch') ? (string) $p->batch?->name : ''])->all()
+                        : []
                 );
             }
         }
@@ -208,6 +221,25 @@ class EntryOrderMapper
         );
 
         $farm = $model->relationLoaded('farm') ? $model->farm : null;
+        $positionOf = $model->relationLoaded('categories') ? $model->categories->pluck('position', 'id')->all() : [];
+        $destinations = [];
+
+        if ($model->relationLoaded('destinations')) {
+            foreach ($model->destinations as $rule) {
+                $position = $positionOf[$rule->entry_order_category_id] ?? null;
+
+                if ($position === null) {
+                    continue;
+                }
+
+                $destinations[] = new EntryOrderDestinationEntity(
+                    categoryPosition: (int) $position,
+                    sexScope: DestinationSexScope::from((string) $rule->sex_scope),
+                    batchId: (int) $rule->destination_batch_id,
+                    batchName: $rule->relationLoaded('batch') ? $rule->batch?->name : null
+                );
+            }
+        }
 
         return new EntryOrderEntity(
             id: (int) $model->id,
@@ -231,6 +263,7 @@ class EntryOrderMapper
             history: $history,
             createdAt: $model->created_at,
             receiptSheets: $receiptSheets,
+            destinations: EntryDestinationPlan::of($destinations),
             names: [
                 'provider' => $model->relationLoaded('provider') ? $model->provider?->name : null,
                 'provider_cuit' => $model->relationLoaded('provider') ? $model->provider?->cuit : null,

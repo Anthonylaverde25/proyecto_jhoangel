@@ -48,4 +48,13 @@ interface IEntryOrderRepository
      * @return array<int, array{id: int, code: string, status: string, status_label: string, head_count: int, with_dte_count: int, received_count: int, in_transit_count: int, open_incidents_count: int}>
      */
     public function summariesByBatch(array $batchIds, int $companyId): array;
+
+    /**
+     * The open orders that bring animals to each own batch: by a destination rule, or with head
+     * already received there and still waiting for their caravan.
+     *
+     * @param int[] $batchIds
+     * @return array<int, list<array{id: int, code: string, status: string, status_label: string, rules: list<string>, in_transit_count: int, pending_count: int, single_destination: bool}>>
+     */
+    public function incomingSummariesByBatch(array $batchIds, int $companyId): array;
 }

@@ -52,6 +52,11 @@ class BatchMapper
             $model->max_weight !== null ? (float) $model->max_weight : null
         );
 
+        // Read with Batch::withPendingIdentification().
+        if (array_key_exists('pending_identification_count', $model->getAttributes())) {
+            $entity->setPendingIdentificationCount((int) $model->pending_identification_count);
+        }
+
         if ($model->relationLoaded('farm') && $model->farm) {
             $entity->setFarmName($model->farm->name);
             

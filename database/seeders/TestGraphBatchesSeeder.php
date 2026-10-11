@@ -24,6 +24,7 @@ class TestGraphBatchesSeeder extends Seeder
 {
     public const INGRESS_BATCH_NAME = 'LOTE DE INGRESO ANIMALES TEST';
     public const EGRESS_BATCH_NAME = 'LOTE DESTINO EGRESO ANIMALES TEST';
+    public const ANTHONY_BATCH_NAME = 'LOTE_ANTHONY';
 
     public function run(): void
     {
@@ -35,6 +36,7 @@ class TestGraphBatchesSeeder extends Seeder
         }
 
         $companyId = (int) $company->id;
+        $farmId = \App\Models\Farm::withoutGlobalScopes()->where('company_id', $companyId)->value('id');
 
         $criaActivityId = Activity::withoutGlobalScopes()->where('code', 'CRIA')->value('id')
             ?? Activity::withoutGlobalScopes()->first()?->id;
@@ -48,6 +50,9 @@ class TestGraphBatchesSeeder extends Seeder
         $steersTypeId = BatchType::withoutGlobalScopes()->where('code', 'GROWING_STEERS')->value('id')
             ?? BatchType::withoutGlobalScopes()->first()?->id;
 
+        $operationalTypeId = BatchType::withoutGlobalScopes()->where('code', 'OPERATIONAL')->value('id')
+            ?? BatchType::withoutGlobalScopes()->first()?->id;
+
         // ---------------------------------------------------------------------
         // 1. Lote de Ingreso Animales Test (CRIA / WEANING)
         // ---------------------------------------------------------------------
@@ -57,6 +62,7 @@ class TestGraphBatchesSeeder extends Seeder
                 'name' => self::INGRESS_BATCH_NAME,
             ],
             [
+                'farm_id' => $farmId,
                 'activity_id' => $criaActivityId,
                 'batch_type_id' => $weaningTypeId,
                 'is_active' => true,
@@ -97,6 +103,7 @@ class TestGraphBatchesSeeder extends Seeder
                 'name' => self::EGRESS_BATCH_NAME,
             ],
             [
+                'farm_id' => $farmId,
                 'activity_id' => $recriaActivityId,
                 'batch_type_id' => $steersTypeId,
                 'is_active' => true,
@@ -128,12 +135,56 @@ class TestGraphBatchesSeeder extends Seeder
             'weighing_date' => now()->toDateString(),
         ]);
 
+        // ---------------------------------------------------------------------
+        // 3. LOTE_ANTHONY (CRIA / OPERATIONAL - TOTALMENTE VACIO)
+        // ---------------------------------------------------------------------
+        $anthonyBatch = Batch::withoutGlobalScopes()->updateOrCreate(
+            [
+                'company_id' => $companyId,
+                'name' => self::ANTHONY_BATCH_NAME,
+            ],
+            [
+                'farm_id' => $farmId,
+                'activity_id' => $criaActivityId,
+                'batch_type_id' => $operationalTypeId,
+                'is_active' => true,
+                'is_confined' => false,
+                'current_weight' => null,
+                'total_weight' => 0.0,
+                'caravans_count' => 0,
+                'weighed_count' => 0,
+                'min_weight' => null,
+                'max_weight' => null,
+                'observaciones' => 'Lote propio operacional de cría, totalmente vacío para pruebas.',
+            ]
+        );
+
+        // Ensure 0 animals
+        Caravan::withoutGlobalScopes()
+            ->where('batch_id', $anthonyBatch->id)
+            ->update(['batch_id' => null]);
+
+        // Reset batch weights to clean initial point
+        BatchWeight::where('batch_id', $anthonyBatch->id)->delete();
+        BatchWeight::create([
+            'batch_id' => $anthonyBatch->id,
+            'activity_id' => $criaActivityId,
+            'weight' => null,
+            'total_weight' => 0.0,
+            'caravans_count' => 0,
+            'weighed_count' => 0,
+            'type' => 'INITIAL',
+            'weighing_date' => now()->toDateString(),
+        ]);
+
         $this->command?->info(sprintf(
-            'TestGraphBatchesSeeder executed: "%s" (ID: %d) and "%s" (ID: %d) created with 0 animals ready for graph testing.',
+            'TestGraphBatchesSeeder executed: "%s" (ID: %d), "%s" (ID: %d) and "%s" (ID: %d) created with 0 animals ready for testing.',
             $ingressBatch->name,
             $ingressBatch->id,
             $egressBatch->name,
-            $egressBatch->id
+            $egressBatch->id,
+            $anthonyBatch->name,
+            $anthonyBatch->id
         ));
     }
 }

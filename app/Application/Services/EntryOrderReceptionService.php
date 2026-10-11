@@ -46,6 +46,12 @@ use App\Models\Farm;
  * A sheet weighed with one average records that weight on each caravan as an average, not as a
  * weighing of the animal.
  *
+ * Each caravan goes to the batch its line and sex are sent to (the order's destinations), or to the
+ * order's transit batch. One that enters an own batch directly takes that farm's RENSPA, keeps the
+ * seller's in its provenance and has a single PURCHASE movement. Head confirmed by count are pending
+ * in the batches they went to; a caravan written later for one of them enters with the day it
+ * arrived, not the day it was written.
+ *
  * Everything is checked before anything is written, and every problem is reported at once, by row.
  * Must run inside the transaction that saves the order, and `settleBatch()` must follow the save.
  */
@@ -53,7 +59,8 @@ final class EntryOrderReceptionService
 {
     public function __construct(
         private readonly BatchWeightService $batchWeightService,
-        private readonly IBreedRepository $breedRepository
+        private readonly IBreedRepository $breedRepository,
+        private readonly EntryOrderDestinationValidator $destinationValidator
     ) {
     }
 
@@ -68,17 +75,38 @@ final class EntryOrderReceptionService
         ['dte' => $dte, 'sheet' => $sheet, 'warnings' => $warnings, 'rows' => $rows] = $this->validate($order, $dto);
 
         $origin = $this->origin($order, $dte);
+        $targets = $this->targets($order, $rows);
+        $dates = $this->entryDates($dte, $dto, $targets);
         $animals = [];
         $otherBreed = [];
-        foreach ($rows as $row) {
-            $animals[] = $this->enter($order, $dte, $row, $origin, $dto, $userId, $sheet);
+        foreach ($rows as $i => $row) {
+            $animals[] = $this->enter($order, $dte, $row, $origin, $dto, $userId, $sheet, $targets[$i], $dates[$i]);
 
             if ($row['other_breed'] !== null) {
                 $otherBreed[$row['caravana']] = $row['other_breed']['label'];
             }
         }
 
-        $incidents = $order->receive($dte, $animals, $dto->missingHeadCount, $dto->reason, $userId, $sheet?->label(), $dto->receivedHeadCount);
+        $incidents = $order->receive(
+            $dte,
+            $animals,
+            $dto->missingHeadCount,
+            $dto->reason,
+            $userId,
+            $sheet?->label(),
+            $dto->receivedHeadCount,
+            array_map(fn (array $t) => $t['batch_id'], $targets),
+            $dto->headsByBatch,
+            $dto->receivedAt
+        );
+
+        foreach ($order->pendingCorrections() as $correction) {
+            $warnings[] = [
+                'code' => 'PENDING_SPLIT_CORRECTED',
+                'message' => "Una caravana de {$this->batchLabel($correction['batch_id'], $targets)} identificó una cabeza que se había anotado en otro lote "
+                    . "(DTE {$correction['dte_number']}): el reparto declarado al recibir no era exacto y se corrigió.",
+            ];
+        }
         $sheet?->process($dto->pages !== [] ? $dto->pages : range(1, $sheet->getPageCount()));
 
         if ($otherBreed !== []) {
@@ -95,10 +123,18 @@ final class EntryOrderReceptionService
             }
         }
 
+        $byBatch = [];
+        foreach ($targets as $target) {
+            $byBatch[$target['batch_id']] = ($byBatch[$target['batch_id']] ?? 0) + 1;
+        }
+
         return [
             'warnings' => $warnings,
             'metadata' => [
                 'reception' => true,
+                // Caravans created in each batch: the ones whose weight is recalculated.
+                'batches' => array_map(fn (int $id, int $count) => ['batch_id' => $id, 'caravans' => $count], array_keys($byBatch), $byBatch),
+                'pending_by_batch' => $dte->getPendingByBatch(),
                 'method' => $dto->method->value,
                 'dte_number' => $dte->getDteNumber(),
                 'received_at' => $dto->receivedAt,
@@ -125,13 +161,79 @@ final class EntryOrderReceptionService
      */
     public function settleBatch(EntryOrderEntity $order, array $metadata): void
     {
-        if (($metadata['received'] ?? 0) > 0 && $order->getBatchId() !== null) {
-            $this->batchWeightService->recalculateBatchWeight(
-                $order->getBatchId(),
-                BatchWeightCause::MOVEMENT_IN,
-                new \DateTimeImmutable((string) $metadata['received_at'])
-            );
+        foreach ($metadata['batches'] ?? [] as $batch) {
+            if (($batch['caravans'] ?? 0) > 0) {
+                $this->batchWeightService->recalculateBatchWeight(
+                    (int) $batch['batch_id'],
+                    BatchWeightCause::MOVEMENT_IN,
+                    new \DateTimeImmutable((string) $metadata['received_at'])
+                );
+            }
         }
+    }
+
+    /**
+     * The batch each line goes to, and whether it is an own batch (a destination) or the order's
+     * transit batch. The destinations used are checked again: a batch may have been closed since
+     * they were declared.
+     *
+     * @param list<array<string, mixed>> $rows validated lines
+     * @return list<array{batch_id: int, own: bool, renspa: ?string, name: ?string}>
+     *
+     * @throws EntryOrderDomainException
+     */
+    private function targets(EntryOrderEntity $order, array $rows): array
+    {
+        $troop = $order->getTroop();
+        $ids = [];
+
+        foreach ($rows as $row) {
+            $sex = AnimalSex::from($troop->sexComposition?->inheritedSex()?->value ?? (string) $row['sex']);
+            $ids[] = $order->batchFor(self::categoryOf($troop, $row['category_position'], $sex), $sex);
+        }
+
+        $own = array_values(array_filter(array_unique($ids), fn (int $id) => $id !== $order->getBatchId()));
+        $batches = $this->destinationValidator->assertUsable($own, true);
+
+        return array_map(fn (int $id) => [
+            'batch_id' => $id,
+            'own' => isset($batches[$id]),
+            'renspa' => isset($batches[$id]) ? ($batches[$id]->getRenspa() ?? 'NO_DEFINIDO') : null,
+            'name' => isset($batches[$id]) ? $batches[$id]->getName() : $order->getBatchName(),
+        ], $ids);
+    }
+
+    /**
+     * The entry day of each line: the day of the reception, unless the caravan identifies a head
+     * received by count before — then the day that head arrived.
+     *
+     * @param list<array{batch_id: int, own: bool, renspa: ?string, name: ?string}> $targets
+     * @return list<string>
+     */
+    private function entryDates(EntryOrderDteEntity $dte, ReceiveDTO $dto, array $targets): array
+    {
+        if ($dto->receivedHeadCount !== null || $dte->getHeadsReceivedAt() === null) {
+            return array_fill(0, count($targets), $dto->receivedAt);
+        }
+
+        return array_map(
+            fn (array $step) => $step['identifies'] ? (string) $dte->getHeadsReceivedAt() : $dto->receivedAt,
+            $dte->identificationOf(array_map(fn (array $t) => $t['batch_id'], $targets))
+        );
+    }
+
+    /**
+     * @param list<array{batch_id: int, own: bool, renspa: ?string, name: ?string}> $targets
+     */
+    private function batchLabel(int $batchId, array $targets): string
+    {
+        foreach ($targets as $target) {
+            if ($target['batch_id'] === $batchId && $target['name'] !== null) {
+                return "el lote {$target['name']}";
+            }
+        }
+
+        return 'otro lote';
     }
 
     /**
@@ -192,6 +294,23 @@ final class EntryOrderReceptionService
             $header[] = $this->error('received_at', 'DATE_IN_FUTURE', 'La fecha de recepción no puede ser futura.');
         } elseif ($dto->receivedAt < $dte->getDteDate()) {
             $header[] = $this->error('received_at', 'RECEIVED_BEFORE_DTE', 'La hacienda no pudo llegar antes de que se emitiera su DTE.');
+        }
+
+        if ($byHead && $dto->receivedHeadCount > 0) {
+            $possible = $order->possibleBatchIds();
+            $split = array_filter($dto->headsByBatch, fn (int $count) => $count > 0);
+
+            if ($split === [] && count($possible) > 1) {
+                $header[] = $this->error('heads_by_batch', 'PENDING_SPLIT_REQUIRED', 'La hacienda va a más de un lote: indicá cuántas cabezas fueron a cada uno.');
+            } elseif ($split !== [] && array_diff(array_keys($split), $possible) !== []) {
+                $header[] = $this->error('heads_by_batch', 'PENDING_SPLIT_UNKNOWN_BATCH', 'Una parte de las cabezas va a un lote que no es destino de esta orden.');
+            } elseif ($split !== [] && array_sum($split) !== $dto->receivedHeadCount) {
+                $header[] = $this->error(
+                    'heads_by_batch',
+                    'PENDING_SPLIT_MISMATCH',
+                    'Las cabezas por lote suman ' . array_sum($split) . ", pero se recibieron {$dto->receivedHeadCount}."
+                );
+            }
         }
 
         if ($dto->animals === [] && $dto->missingHeadCount === 0 && !$byHead) {
@@ -489,6 +608,8 @@ final class EntryOrderReceptionService
      *
      * @param array<string, mixed> $row a validated line, its breed and category resolved
      * @param array{renspa: string, provenance: array<string, mixed>, single_breed: ?EntryOrderBreedEntity} $origin
+     * @param array{batch_id: int, own: bool, renspa: ?string, name: ?string} $target where it enters
+     * @param string $receivedAt its entry day
      */
     private function enter(
         EntryOrderEntity $order,
@@ -497,7 +618,9 @@ final class EntryOrderReceptionService
         array $origin,
         ReceiveDTO $dto,
         ?int $userId,
-        ?EntryOrderReceiptSheetEntity $sheet
+        ?EntryOrderReceiptSheetEntity $sheet,
+        array $target,
+        string $receivedAt
     ): EntryOrderAnimalEntity {
         $troop = $order->getTroop();
         $sex = $troop->sexComposition?->inheritedSex()?->value ?? (string) $row['sex'];
@@ -505,13 +628,17 @@ final class EntryOrderReceptionService
         $breedLine = $otherBreed !== null ? null : ($row['breed_position'] !== null ? $troop->breedsByPosition()[$row['breed_position']] : $origin['single_breed']);
         $categoryLine = self::categoryOf($troop, $row['category_position'], AnimalSex::from($sex));
         $weight = $row['weight'];
-        $receivedAt = $dto->receivedAt;
+        // Entering an own batch directly: the farm's RENSPA, and the seller's kept in the provenance.
+        $renspa = $target['own'] ? (string) $target['renspa'] : $origin['renspa'];
+        $provenance = $target['own']
+            ? [...$origin['provenance'], 'assigned_to_own_batch_at' => $receivedAt]
+            : $origin['provenance'];
 
         $caravan = Caravan::create([
             'company_id' => $order->getCompanyId(),
-            'batch_id' => (int) $order->getBatchId(),
+            'batch_id' => $target['batch_id'],
             'provider_id' => $troop->providerId,
-            'renspa' => $origin['renspa'],
+            'renspa' => $renspa,
             'identification' => $row['caravana'],
             'category_id' => $categoryLine?->getCategoryId(),
             'subcategory_id' => null,
@@ -521,7 +648,7 @@ final class EntryOrderReceptionService
             'color_id' => $otherBreed !== null ? $otherBreed['color_id'] : $breedLine?->getColorId(),
             'entry_weight' => $weight,
             'entry_date' => $receivedAt,
-            'provenance_metadata' => $origin['provenance'],
+            'provenance_metadata' => $provenance,
         ]);
 
         $where = $sheet !== null
@@ -559,7 +686,7 @@ final class EntryOrderReceptionService
             'to_batch_id' => $caravan->batch_id,
             'provider_id' => $caravan->provider_id,
             'renspa' => $caravan->renspa,
-            'from_renspa' => $caravan->renspa,
+            'from_renspa' => $origin['renspa'],
             'type' => 'PURCHASE',
             'movement_date' => $receivedAt,
             'provenance_metadata' => $caravan->provenance_metadata,

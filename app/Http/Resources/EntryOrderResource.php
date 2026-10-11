@@ -7,6 +7,7 @@ namespace App\Http\Resources;
 use App\Core\Entities\EntryOrderAnimalEntity;
 use App\Core\Entities\EntryOrderBreedEntity;
 use App\Core\Entities\EntryOrderCategoryEntity;
+use App\Core\Entities\EntryOrderDestinationEntity;
 use App\Core\Entities\EntryOrderDteEntity;
 use App\Core\Entities\EntryOrderEntity;
 use App\Core\Entities\EntryOrderIncidentEntity;
@@ -14,6 +15,7 @@ use App\Core\Entities\EntryOrderReceiptSheetEntity;
 use App\Core\Entities\TransferOrderHistoryEntity;
 use App\Core\Enums\AnimalSex;
 use App\Core\Enums\ArrivalFinding;
+use App\Core\Enums\DestinationSexScope;
 use App\Core\Enums\EntryOrderStatus;
 use App\Core\Enums\SexComposition;
 use Illuminate\Http\Request;
@@ -22,6 +24,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /**
  * An entry order with its troop and DTEs — head declared, received, in transit and missing — and,
  * unless `summary()` is called, as in the list, the caravans received on each DTE and the history.
+ * Also where its animals go (destinations by category line and sex), what has none (it goes to the
+ * transit batch) and the head received without caravan pending in each batch.
  *
  * @property-read EntryOrderEntity $resource
  */
@@ -68,6 +72,28 @@ class EntryOrderResource extends JsonResource
             'auction_number' => $troop->auctionNumber,
             'batch' => $order->getBatchId() !== null ? ['id' => $order->getBatchId(), 'name' => $order->name('batch')] : null,
             'batch_name' => $order->getBatchName(),
+            'destinations' => array_map(fn (EntryOrderDestinationEntity $r) => [
+                'category_position' => $r->getCategoryPosition(),
+                'sex_scope' => $r->getSexScope()->value,
+                'batch' => ['id' => $r->getBatchId(), 'name' => $r->getBatchName()],
+                'label' => self::ruleLabel($r, $troop->categoriesByPosition()[$r->getCategoryPosition()] ?? null),
+            ], $order->getDestinations()->rules()),
+            // Some animal has no destination: it goes to the transit batch (`batch`).
+            'needs_transit_batch' => $order->needsTransitBatch(),
+            'uncovered' => array_map(fn (array $u) => [
+                'category_position' => $u['position'],
+                'sex' => $u['sex']->value,
+            ], $order->getDestinations()->uncovered($troop)),
+            'possible_batches' => array_map(fn (int $id) => [
+                'id' => $id,
+                'name' => $id === $order->getBatchId() ? $order->name('batch') : self::destinationName($order, $id),
+                'is_transit' => $id === $order->getBatchId(),
+                'rules' => array_map(
+                    fn (EntryOrderDestinationEntity $r) => self::ruleLabel($r, $troop->categoriesByPosition()[$r->getCategoryPosition()] ?? null),
+                    $order->getDestinations()->rulesTo($id)
+                ),
+            ], $order->possibleBatchIds()),
+            'can_redistribute' => $status === EntryOrderStatus::DRAFT || $status->acceptsReception() || $status->awaitsIdentification(),
             'batch_name_mode' => $order->getBatchNameMode()->value,
             'head_count' => $troop->headCount,
             'categories' => array_map(fn (EntryOrderCategoryEntity $c) => [
@@ -115,6 +141,10 @@ class EntryOrderResource extends JsonResource
             'received_count' => $order->receivedCount(),
             // Received by count, their caravans still to write (on an ING-03 or by hand).
             'uncaravaned_count' => $order->uncaravanedCount(),
+            // Head received without caravan by the batch they went to.
+            'pending_by_batch' => self::pendingList($order->pendingByBatch(), $order),
+            'written_off_count' => $order->writtenOffCount(),
+            'can_write_off' => $order->uncaravanedCount() > 0,
             'missing_count' => $order->missingCount(),
             'open_incidents_count' => $order->openIncidentsCount(),
             'dte_count' => count($order->getDtes()),
@@ -137,6 +167,10 @@ class EntryOrderResource extends JsonResource
             'received_count' => $d->receivedCount(),
             'caravaned_count' => $d->caravanedCount(),
             'uncaravaned_count' => $d->getUncaravanedHeadCount(),
+            'pending_by_batch' => self::pendingList($d->getPendingByBatch(), $order, $d),
+            // The day its head were confirmed by count: caravans written later enter with it.
+            'heads_received_at' => $d->getHeadsReceivedAt(),
+            'written_off_head_count' => $d->getWrittenOffHeadCount(),
             // Head an ING-03 of it expects: in transit plus received without caravan.
             'to_identify_count' => $d->toIdentifyCount(),
             'missing_head_count' => $d->getMissingHeadCount(),
@@ -160,6 +194,8 @@ class EntryOrderResource extends JsonResource
                     'received_at' => $a->getReceivedAt(),
                     'reception_method' => $a->getReceptionMethod()?->value,
                     'arrival_findings' => array_map(fn (ArrivalFinding $f) => $f->value, $a->getArrivalFindings()),
+                    // Where the caravan is today: it may have been moved since it entered.
+                    'current_batch' => $a->getCurrentBatchId() !== null ? ['id' => $a->getCurrentBatchId(), 'name' => $a->getCurrentBatchName()] : null,
                 ], $d->getAnimals()),
                 // Caravans that came off the truck with each finding (only with the caravans loaded).
                 'arrival_findings_count' => self::findingCounts($d),
@@ -248,6 +284,54 @@ class EntryOrderResource extends JsonResource
         ], $order->getHistory());
 
         return $data;
+    }
+
+    /**
+     * "Ternero · machos", or the category alone for a rule of the whole line.
+     */
+    private static function ruleLabel(EntryOrderDestinationEntity $rule, ?EntryOrderCategoryEntity $line): string
+    {
+        $name = $line?->getCategoryName() ?? "Categoría {$rule->getCategoryPosition()}";
+
+        return $rule->getSexScope() === DestinationSexScope::ALL ? $name : "{$name} · {$rule->getSexScope()->label()}";
+    }
+
+    private static function destinationName(EntryOrderEntity $order, int $batchId): ?string
+    {
+        foreach ($order->getDestinations()->rulesTo($batchId) as $rule) {
+            if ($rule->getBatchName() !== null) {
+                return $rule->getBatchName();
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<int, int> $pending batch id → head
+     * @return list<array{batch: array{id: int, name: ?string}, head_count: int}>
+     */
+    private static function pendingList(array $pending, EntryOrderEntity $order, ?EntryOrderDteEntity $dte = null): array
+    {
+        $list = [];
+
+        foreach ($pending as $batchId => $count) {
+            $name = $dte?->batchName($batchId);
+
+            if ($name === null || $name === '') {
+                $name = $batchId === $order->getBatchId() ? $order->name('batch') : self::destinationName($order, $batchId);
+            }
+
+            if ($name === null) {
+                foreach ($order->getDtes() as $other) {
+                    $name ??= $other->batchName($batchId) ?: null;
+                }
+            }
+
+            $list[] = ['batch' => ['id' => $batchId, 'name' => $name], 'head_count' => $count];
+        }
+
+        return $list;
     }
 
     /**

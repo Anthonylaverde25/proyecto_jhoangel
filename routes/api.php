@@ -169,6 +169,8 @@ Route::middleware([
         Route::post('/entry-orders/{id}/dtes', [EntryOrderController::class, 'loadDte'])->whereNumber('id');
         Route::patch('/entry-orders/{id}/dtes/{dteId}', [EntryOrderController::class, 'correctDteHeadCount'])->whereNumber(['id', 'dteId']);
         Route::post('/entry-orders/{id}/receive', [EntryOrderController::class, 'receive'])->whereNumber('id')->middleware('dry.run');
+        Route::put('/entry-orders/{id}/destinations', [EntryOrderController::class, 'redistribute'])->whereNumber('id');
+        Route::post('/entry-orders/{id}/pending-heads/write-off', [EntryOrderController::class, 'writeOffPending'])->whereNumber('id');
         Route::post('/entry-orders/{id}/tri', [EntryOrderController::class, 'readTri'])->whereNumber('id');
         Route::post('/entry-orders/{id}/receipt-sheets', [EntryOrderController::class, 'issueReceiptSheet'])->whereNumber('id');
         Route::post('/entry-orders/{id}/receipt-sheets/{sheetId}/printed', [EntryOrderController::class, 'receiptSheetPrinted'])->whereNumber(['id', 'sheetId']);

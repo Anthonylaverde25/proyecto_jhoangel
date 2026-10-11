@@ -13,6 +13,7 @@ use App\Core\Enums\TransferOrderKind;
 use App\Core\Enums\ReferenceMode;
 use App\Core\Enums\WeighingMode;
 use App\Core\Exceptions\EntryOrderDomainException;
+use App\Core\ValueObjects\EntryDestinationPlan;
 use App\Core\ValueObjects\EntryTroop;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -25,10 +26,20 @@ use DateTimeInterface;
  * Once confirmed the status is never set by hand: it tells what the order is waiting for —
  * documents (AWAITING_DTE) or animals (IN_TRANSIT) — and follows the DTEs and receptions.
  * Whatever does not match the purchase is raised as an incident and never blocks the order.
+ *
+ * Its animals go to own batches declared by category line and sex (its destinations), and what no
+ * destination takes goes to its transit batch, which only exists when something needs it.
  */
 final class EntryOrderEntity
 {
     private bool $troopReplaced = false;
+
+    private EntryDestinationPlan $destinations;
+
+    private bool $destinationsReplaced = false;
+
+    /** @var list<array{batch_id: int, from: int, dte_number: string}> */
+    private array $pendingCorrections = [];
 
     /**
      * @param EntryOrderDteEntity[] $dtes
@@ -59,12 +70,15 @@ final class EntryOrderEntity
         private readonly array $history = [],
         private readonly ?DateTimeInterface $createdAt = null,
         private readonly array $names = [],
-        private array $receiptSheets = []
+        private array $receiptSheets = [],
+        ?EntryDestinationPlan $destinations = null
     ) {
+        $this->destinations = $destinations ?? EntryDestinationPlan::none();
     }
 
     /**
-     * A new order, always a draft: confirming it needs its batch, which the factory creates.
+     * A new order, always a draft: confirming it needs its transit batch when some animal has no
+     * destination, which the factory creates.
      *
      * @throws EntryOrderDomainException
      */
@@ -76,8 +90,12 @@ final class EntryOrderEntity
         EntryTroop $troop,
         ?string $batchName,
         BatchNameMode $batchNameMode,
-        ?int $requestedByUserId
+        ?int $requestedByUserId,
+        ?EntryDestinationPlan $destinations = null
     ): self {
+        $destinations ??= EntryDestinationPlan::none();
+        $destinations->assertValid($troop);
+
         return new self(
             id: null,
             companyId: $companyId,
@@ -89,16 +107,21 @@ final class EntryOrderEntity
             batchName: self::cleanBatchName($batchName),
             batchNameMode: $batchNameMode,
             batchId: null,
-            requestedByUserId: $requestedByUserId
+            requestedByUserId: $requestedByUserId,
+            destinations: $destinations
         );
     }
 
     /**
-     * Rewrites a draft: anything the purchase declares can still change.
+     * Rewrites a draft: anything the purchase declares can still change, its destinations too.
+     * Destinations the new troop no longer admits are dropped (a line that is gone, a sex the troop
+     * no longer brings) and returned, to tell the user.
+     *
+     * @return list<EntryOrderDestinationEntity> the destinations dropped
      *
      * @throws EntryOrderDomainException
      */
-    public function updateDraft(EntryTroop $troop, ?string $batchName, BatchNameMode $batchNameMode): void
+    public function updateDraft(EntryTroop $troop, ?string $batchName, BatchNameMode $batchNameMode, ?EntryDestinationPlan $destinations = null): array
     {
         if (!$this->status->isEditable()) {
             throw EntryOrderDomainException::invalid(
@@ -107,15 +130,123 @@ final class EntryOrderEntity
             );
         }
 
+        ['plan' => $plan, 'dropped' => $dropped] = ($destinations ?? $this->destinations)->adjustedTo($troop);
+        $plan->assertValid($troop);
+
         $this->troop = $troop;
         $this->batchName = self::cleanBatchName($batchName);
         $this->batchNameMode = $batchNameMode;
+        $this->destinations = $plan;
         $this->troopReplaced = true;
+        $this->destinationsReplaced = true;
+
+        return $dropped;
     }
 
     /**
-     * A draft may lack anything but its origin. Closing the purchase needs the whole troop and the
-     * name of the batch it creates.
+     * Whether some animal the troop can bring has no destination: it goes to the transit batch.
+     */
+    public function needsTransitBatch(): bool
+    {
+        return !$this->destinations->coversAll($this->troop);
+    }
+
+    /**
+     * The batches a head of this order can end up in: its destinations, and the transit batch when
+     * something goes there.
+     *
+     * @return list<int>
+     */
+    public function possibleBatchIds(): array
+    {
+        $ids = $this->destinations->batchIds();
+
+        if ($this->batchId !== null && $this->needsTransitBatch()) {
+            $ids[] = $this->batchId;
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * Where a received animal of this line and sex goes: its destination, else the transit batch.
+     *
+     * @throws EntryOrderDomainException
+     */
+    public function batchFor(?EntryOrderCategoryEntity $line, AnimalSex $sex): int
+    {
+        $batchId = $line !== null ? $this->destinations->batchFor($line->getPosition(), $sex) : null;
+        $batchId ??= $this->batchId;
+
+        if ($batchId === null) {
+            throw EntryOrderDomainException::invalid(
+                "La orden {$this->code} no tiene dónde recibir ese animal: definí su destino o un lote de tránsito.",
+                'DESTINATION_MISSING',
+                'destinations'
+            );
+        }
+
+        return $batchId;
+    }
+
+    /**
+     * Changes where the animals go from now on. Animals already received stay where they are.
+     * When something is left without a destination and the order has no transit batch yet, it
+     * needs a name for it (the factory creates it with attachTransitBatch()).
+     *
+     * @throws EntryOrderDomainException
+     */
+    public function redistribute(EntryDestinationPlan $destinations, ?string $transitBatchName): void
+    {
+        $open = $this->status === EntryOrderStatus::DRAFT || $this->status->acceptsReception() || $this->status->awaitsIdentification();
+
+        if (!$open) {
+            throw EntryOrderDomainException::invalid(
+                "La orden {$this->code} está {$this->status->label()}: ya no recibe hacienda, su destino no cambia.",
+                'ENTRY_ORDER_NOT_RECEIVING'
+            );
+        }
+
+        $destinations->assertValid($this->troop);
+        $this->destinations = $destinations;
+        $this->destinationsReplaced = true;
+
+        $name = self::cleanBatchName($transitBatchName);
+
+        if ($name !== null) {
+            $this->batchName = $name;
+            $this->batchNameMode = BatchNameMode::CUSTOM;
+        }
+
+        if ($this->status !== EntryOrderStatus::DRAFT && $this->needsTransitBatch() && $this->batchId === null && $this->batchName === null) {
+            throw EntryOrderDomainException::invalid(
+                'Quedan animales sin destino: van a un lote de tránsito, que necesita un nombre.',
+                'TRANSIT_BATCH_NAME_MISSING',
+                'transit_batch_name'
+            );
+        }
+    }
+
+    /**
+     * Whether a confirmed order still lacks the transit batch its destinations need.
+     */
+    public function lacksTransitBatch(): bool
+    {
+        return $this->status !== EntryOrderStatus::DRAFT && $this->needsTransitBatch() && $this->batchId === null;
+    }
+
+    /**
+     * The transit batch created after the purchase was confirmed, when a redistribution left
+     * animals without a destination.
+     */
+    public function attachTransitBatch(int $batchId): void
+    {
+        $this->batchId = $batchId;
+    }
+
+    /**
+     * A draft may lack anything but its origin. Closing the purchase needs the whole troop, valid
+     * destinations and, when some animal has none, the name of the transit batch it creates.
      *
      * @throws EntryOrderDomainException
      */
@@ -126,8 +257,9 @@ final class EntryOrderEntity
         }
 
         $this->troop->assertComplete();
+        $this->destinations->assertValid($this->troop);
 
-        if ($this->batchName === null) {
+        if ($this->batchName === null && $this->needsTransitBatch()) {
             throw EntryOrderDomainException::invalid(
                 'El lote necesita un nombre. Si la compra es de una subasta, cargá la terminación y se sugiere solo.',
                 'BATCH_NAME_MISSING',
@@ -137,16 +269,20 @@ final class EntryOrderEntity
     }
 
     /**
-     * Draft → awaiting DTE. The purchase is closed and its batch exists, empty, until the animals
-     * of its DTEs arrive.
+     * Draft → awaiting DTE. The purchase is closed. Its transit batch exists, empty, only when some
+     * animal has no destination.
      *
      * @throws EntryOrderDomainException
      */
-    public function confirm(int $batchId): void
+    public function confirm(?int $transitBatchId): void
     {
         $this->assertReadyToConfirm();
 
-        $this->batchId = $batchId;
+        if (($transitBatchId !== null) !== $this->needsTransitBatch()) {
+            throw new \LogicException('A transit batch is created exactly when some animal has no destination.');
+        }
+
+        $this->batchId = $transitBatchId;
         $this->status = EntryOrderStatus::AWAITING_DTE;
         $this->confirmedAt = new DateTimeImmutable();
     }
@@ -268,7 +404,14 @@ final class EntryOrderEntity
      * More animals than the DTE declares, or more of a sex than the order declares, are received
      * anyway and raised as incidents.
      *
+     * The head counted are pending in the batches they went to, as declared at the chute
+     * (`$headsByBatch`); with a single batch possible they all go there. Each caravan takes a
+     * pending head of its own batch; one that takes it from another batch is kept in
+     * pendingCorrections(): the split declared was off.
+     *
      * @param EntryOrderAnimalEntity[] $animals
+     * @param list<int> $caravanBatchIds the batch each animal was created in, in the same order
+     * @param array<int, int> $headsByBatch batch id → head counted that went there
      * @return EntryOrderIncidentEntity[] the incidents this reception raised
      *
      * @throws EntryOrderDomainException
@@ -280,7 +423,10 @@ final class EntryOrderEntity
         ?string $reason,
         ?int $userId,
         ?string $sheetLabel = null,
-        ?int $receivedHeads = null
+        ?int $receivedHeads = null,
+        array $caravanBatchIds = [],
+        array $headsByBatch = [],
+        ?string $receivedAt = null
     ): array {
         if (!in_array($dte, $this->dtes, true)) {
             throw EntryOrderDomainException::invalid('El DTE no pertenece a esta orden.', 'DTE_NOT_IN_ORDER', 'dte_id');
@@ -306,11 +452,15 @@ final class EntryOrderEntity
         ];
 
         if ($receivedHeads !== null) {
-            $dte->countHeads($receivedHeads);
+            $dte->countHeads($receivedHeads, $this->splitOfHeads($receivedHeads, $headsByBatch), $receivedAt ?? (new DateTimeImmutable())->format('Y-m-d'));
         }
 
         // A caravan first identifies a head already received; only the rest is a new head.
-        $dte->identify(count($animals));
+        $batchIds = $caravanBatchIds !== [] ? $caravanBatchIds : array_fill(0, count($animals), (int) $this->batchId);
+        $this->pendingCorrections = array_map(
+            fn (array $c) => [...$c, 'dte_number' => $dte->getDteNumber()],
+            $dte->identify(array_values($batchIds))
+        );
 
         foreach ($animals as $animal) {
             $dte->addAnimal($animal);
@@ -379,6 +529,102 @@ final class EntryOrderEntity
         $this->refreshStatus();
 
         return $raised;
+    }
+
+    /**
+     * The batches the head counted went to: as declared, or all to the only batch possible.
+     *
+     * @param array<int, int> $headsByBatch
+     * @return array<int, int>
+     *
+     * @throws EntryOrderDomainException
+     */
+    private function splitOfHeads(int $receivedHeads, array $headsByBatch): array
+    {
+        $possible = $this->possibleBatchIds();
+        $headsByBatch = array_filter($headsByBatch, fn (int $count) => $count > 0);
+
+        if ($headsByBatch === []) {
+            if ($receivedHeads === 0) {
+                return [];
+            }
+
+            if (count($possible) !== 1) {
+                throw EntryOrderDomainException::invalid(
+                    'La hacienda va a más de un lote: indicá cuántas cabezas fueron a cada uno.',
+                    'PENDING_SPLIT_REQUIRED',
+                    'heads_by_batch'
+                );
+            }
+
+            return [$possible[0] => $receivedHeads];
+        }
+
+        foreach (array_keys($headsByBatch) as $batchId) {
+            if (!in_array($batchId, $possible, true)) {
+                throw EntryOrderDomainException::invalid(
+                    'Una parte de las cabezas va a un lote que no es destino de esta orden.',
+                    'PENDING_SPLIT_UNKNOWN_BATCH',
+                    'heads_by_batch'
+                );
+            }
+        }
+
+        $sum = array_sum($headsByBatch);
+
+        if ($sum !== $receivedHeads) {
+            throw EntryOrderDomainException::invalid(
+                "Las cabezas por lote suman {$sum}, pero se recibieron {$receivedHeads}.",
+                'PENDING_SPLIT_MISMATCH',
+                'heads_by_batch'
+            );
+        }
+
+        return $headsByBatch;
+    }
+
+    /**
+     * Caravans of the last reception that took a head pending in another batch than their own:
+     * the split declared at the chute was off. Told to the user, never blocking.
+     *
+     * @return list<array{batch_id: int, from: int, dte_number: string}>
+     */
+    public function pendingCorrections(): array
+    {
+        return $this->pendingCorrections;
+    }
+
+    /**
+     * Head received without caravan that will never get one: they died or were lost before the
+     * chute wrote their caravan. They stop counting in their batch, stay received, and an incident
+     * keeps the reason. With no head left to identify, the order closes.
+     *
+     * @throws EntryOrderDomainException
+     */
+    public function writeOffPending(int $dteId, int $batchId, int $head, string $reason, ?int $userId): EntryOrderIncidentEntity
+    {
+        $reason = trim($reason);
+
+        if ($reason === '') {
+            throw EntryOrderDomainException::reasonRequired('dar de baja cabezas por identificar en');
+        }
+
+        $dte = $this->findDte($dteId);
+        $dte->writeOff($batchId, $head);
+        $words = $head === 1 ? 'cabeza recibida sin caravana se dio' : 'cabezas recibidas sin caravana se dieron';
+        $where = $dte->batchName($batchId) !== null ? " del lote {$dte->batchName($batchId)}" : '';
+
+        $incident = $this->raiseIncident(
+            EntryOrderIncidentType::HEAD_WRITTEN_OFF,
+            "{$head} {$words} de baja{$where} (DTE {$dte->getDteNumber()}). Motivo: {$reason}",
+            ['count' => $head, 'batch_id' => $batchId, 'reason' => $reason],
+            $dte->getDteNumber(),
+            $userId
+        );
+
+        $this->refreshStatus();
+
+        return $incident;
     }
 
     /**
@@ -726,6 +972,32 @@ final class EntryOrderEntity
         return array_sum(array_map(fn (EntryOrderDteEntity $d) => $d->getMissingHeadCount(), $this->dtes));
     }
 
+    /**
+     * Head received without caravan and written off before getting one.
+     */
+    public function writtenOffCount(): int
+    {
+        return array_sum(array_map(fn (EntryOrderDteEntity $d) => $d->getWrittenOffHeadCount(), $this->dtes));
+    }
+
+    /**
+     * Head pending identification by batch, over all its DTEs.
+     *
+     * @return array<int, int>
+     */
+    public function pendingByBatch(): array
+    {
+        $byBatch = [];
+
+        foreach ($this->dtes as $dte) {
+            foreach ($dte->getPendingByBatch() as $batchId => $count) {
+                $byBatch[$batchId] = ($byBatch[$batchId] ?? 0) + $count;
+            }
+        }
+
+        return $byBatch;
+    }
+
     public function openIncidentsCount(): int
     {
         return count(array_filter($this->incidents, fn (EntryOrderIncidentEntity $i) => $i->isOpen()));
@@ -772,6 +1044,19 @@ final class EntryOrderEntity
         return $this->troopReplaced;
     }
 
+    public function getDestinations(): EntryDestinationPlan
+    {
+        return $this->destinations;
+    }
+
+    /**
+     * Its destinations were declared or changed in this operation: they are stored whole again.
+     */
+    public function isDestinationsReplaced(): bool
+    {
+        return $this->destinationsReplaced;
+    }
+
     /**
      * What the order is waiting for: first the documents, then the animals. Called after a DTE is
      * loaded or corrected and after every reception.
@@ -816,7 +1101,7 @@ final class EntryOrderEntity
             return;
         }
 
-        if ($this->missingCount() > 0 || $this->closingReason !== null) {
+        if ($this->missingCount() > 0 || $this->writtenOffCount() > 0 || $this->closingReason !== null) {
             $this->status = EntryOrderStatus::CLOSED_INCOMPLETE;
             $this->closingReason ??= $this->missingSummary();
         } else {
@@ -833,17 +1118,23 @@ final class EntryOrderEntity
     private function missingSummary(): string
     {
         $count = $this->missingCount();
+        $writtenOff = $this->writtenOffCount();
         $reasons = [];
+        $types = [EntryOrderIncidentType::MISSING_HEAD, EntryOrderIncidentType::HEAD_WRITTEN_OFF];
 
         foreach ($this->incidents as $incident) {
-            $reason = $incident->getType() === EntryOrderIncidentType::MISSING_HEAD ? ($incident->getMetadata()['reason'] ?? null) : null;
+            $reason = in_array($incident->getType(), $types, true) ? ($incident->getMetadata()['reason'] ?? null) : null;
 
             if (is_string($reason) && trim($reason) !== '') {
                 $reasons[trim($reason)] = true;
             }
         }
 
-        $what = $count === 1 ? '1 cabeza no llegó' : "{$count} cabezas no llegaron";
+        $what = array_values(array_filter([
+            $count > 0 ? ($count === 1 ? '1 cabeza no llegó' : "{$count} cabezas no llegaron") : null,
+            $writtenOff > 0 ? ($writtenOff === 1 ? '1 cabeza se dio de baja sin caravana' : "{$writtenOff} cabezas se dieron de baja sin caravana") : null,
+        ]));
+        $what = ucfirst(implode('; ', $what));
         $why = array_keys($reasons);
 
         return $why === [] ? "{$what}." : "{$what}. Motivo: " . implode('; ', $why);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Core\Entities;
 
+use App\Core\Exceptions\EntryOrderDomainException;
 use DateTimeInterface;
 
 /**
@@ -11,8 +12,12 @@ use DateTimeInterface;
  * caravans are only known when the animals arrive, and each one received is recorded against it.
  * A manual reception confirms head, not caravans: head received whose caravan is not written yet
  * are "uncaravaned", and writing a caravan later identifies one of them. Received is caravans plus
- * uncaravaned head; what is in transit is head declared minus received minus declared missing. Its
- * origin is the order's.
+ * uncaravaned head (plus the ones written off before getting a caravan); what is in transit is head
+ * declared minus received minus declared missing. Its origin is the order's.
+ *
+ * The uncaravaned head are kept by the batch they went to ("pending identification"), so each batch
+ * counts the head it already holds; the pending of every batch add up to the uncaravaned head. A
+ * caravan written later takes a pending head of its own batch, and the day the head arrived.
  */
 final class EntryOrderDteEntity
 {
@@ -34,7 +39,13 @@ final class EntryOrderDteEntity
         private readonly ?string $loadedByUserName = null,
         private readonly ?DateTimeInterface $createdAt = null,
         private readonly ?int $storedReceivedCount = null,
-        private int $uncaravanedHeadCount = 0
+        private int $uncaravanedHeadCount = 0,
+        /** @var array<int, int> batch id → head pending identification there */
+        private array $pendingByBatch = [],
+        private ?string $headsReceivedAt = null,
+        private int $writtenOffHeadCount = 0,
+        /** @var array<int, string> batch id → name, for display */
+        private readonly array $batchNames = []
     ) {
     }
 
@@ -82,7 +93,7 @@ final class EntryOrderDteEntity
      */
     public function receivedCount(): int
     {
-        return $this->caravanedCount() + $this->uncaravanedHeadCount;
+        return $this->caravanedCount() + $this->uncaravanedHeadCount + $this->writtenOffHeadCount;
     }
 
     /**
@@ -146,21 +157,156 @@ final class EntryOrderDteEntity
     }
 
     /**
-     * Head confirmed as arrived by count: received, their caravans still to write.
+     * Head confirmed as arrived by count on a day: received, their caravans still to write. They are
+     * pending in the batches they went to, as declared.
+     *
+     * @param array<int, int> $byBatch batch id → head that went there; adds up to $head
      */
-    public function countHeads(int $head): void
+    public function countHeads(int $head, array $byBatch, string $receivedAt): void
     {
         $this->uncaravanedHeadCount += $head;
+        $this->headsReceivedAt = $receivedAt;
+
+        foreach ($byBatch as $batchId => $count) {
+            if ($count > 0) {
+                $this->pendingByBatch[$batchId] = ($this->pendingByBatch[$batchId] ?? 0) + $count;
+            }
+        }
+
         $this->changed = true;
     }
 
     /**
-     * Caravans written for head already counted: they stop being uncaravaned, not received again.
+     * Which of these caravans identify a head already received, and the batch whose pending head
+     * each one takes: its own batch while it has some, else another batch of the DTE that still has
+     * (the split declared at the chute was off), else none — it is a new head. Changes nothing.
+     *
+     * @param list<int> $caravanBatchIds the batch each caravan goes to, in order
+     * @return list<array{identifies: bool, from: ?int}>
      */
-    public function identify(int $head): void
+    public function identificationOf(array $caravanBatchIds): array
     {
-        $this->uncaravanedHeadCount -= min($head, $this->uncaravanedHeadCount);
+        $pending = $this->pendingByBatch;
+        $left = $this->uncaravanedHeadCount;
+        $result = [];
+
+        foreach ($caravanBatchIds as $batchId) {
+            if ($left <= 0) {
+                $result[] = ['identifies' => false, 'from' => null];
+                continue;
+            }
+
+            $from = ($pending[$batchId] ?? 0) > 0 ? $batchId : null;
+
+            foreach ($from === null ? $pending : [] as $other => $count) {
+                if ($count > 0) {
+                    $from = $other;
+                    break;
+                }
+            }
+
+            if ($from !== null) {
+                $pending[$from]--;
+            }
+
+            $left--;
+            $result[] = ['identifies' => true, 'from' => $from];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Caravans written for head already counted: they stop being uncaravaned, not received again,
+     * and each one takes a pending head as identificationOf() tells.
+     *
+     * @param list<int> $caravanBatchIds the batch each caravan goes to, in order
+     * @return list<array{batch_id: int, from: int}> caravans that took a head pending in another batch
+     */
+    public function identify(array $caravanBatchIds): array
+    {
+        $corrections = [];
+
+        foreach ($this->identificationOf($caravanBatchIds) as $index => $step) {
+            if (!$step['identifies']) {
+                continue;
+            }
+
+            $this->uncaravanedHeadCount--;
+
+            if ($step['from'] === null) {
+                continue;
+            }
+
+            $this->takePending($step['from'], 1);
+
+            if ($step['from'] !== $caravanBatchIds[$index]) {
+                $corrections[] = ['batch_id' => $caravanBatchIds[$index], 'from' => $step['from']];
+            }
+        }
+
         $this->changed = true;
+
+        return $corrections;
+    }
+
+    /**
+     * Head received without caravan that will never get one (dead or lost before the chute wrote
+     * it): they stop being pending in their batch, and stay received.
+     *
+     * @throws EntryOrderDomainException
+     */
+    public function writeOff(int $batchId, int $head): void
+    {
+        $pending = $this->pendingByBatch[$batchId] ?? 0;
+
+        if ($head < 1 || $head > $pending) {
+            throw EntryOrderDomainException::invalid(
+                "El DTE {$this->dteNumber} tiene {$pending} cabezas por identificar en ese lote: no se pueden dar de baja {$head}.",
+                'PENDING_WRITE_OFF_EXCEEDS',
+                'head_count'
+            );
+        }
+
+        $this->takePending($batchId, $head);
+        $this->uncaravanedHeadCount -= $head;
+        $this->writtenOffHeadCount += $head;
+        $this->changed = true;
+    }
+
+    private function takePending(int $batchId, int $head): void
+    {
+        $this->pendingByBatch[$batchId] = ($this->pendingByBatch[$batchId] ?? 0) - $head;
+
+        if ($this->pendingByBatch[$batchId] <= 0) {
+            unset($this->pendingByBatch[$batchId]);
+        }
+    }
+
+    /**
+     * @return array<int, int> batch id → head pending identification there
+     */
+    public function getPendingByBatch(): array
+    {
+        return $this->pendingByBatch;
+    }
+
+    public function batchName(int $batchId): ?string
+    {
+        return $this->batchNames[$batchId] ?? null;
+    }
+
+    /**
+     * The day its head were confirmed by count: the entry day of the caravans that identify them.
+     */
+    public function getHeadsReceivedAt(): ?string
+    {
+        return $this->headsReceivedAt;
+    }
+
+    public function getWrittenOffHeadCount(): int
+    {
+        return $this->writtenOffHeadCount;
     }
 
     public function declareMissing(int $head): void

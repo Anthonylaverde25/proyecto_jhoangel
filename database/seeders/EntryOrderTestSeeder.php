@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Models\Activity;
 use App\Models\AnimalCategory;
 use App\Models\Batch;
+use App\Models\BatchType;
 use App\Models\Breed;
 use App\Models\Caravan;
 use App\Models\CaravanMovement;
@@ -13,8 +15,10 @@ use App\Models\Color;
 use App\Models\Company;
 use App\Models\EntryOrder;
 use App\Models\EntryOrderAnimal;
+use App\Models\EntryOrderDestination;
 use App\Models\EntryOrderDte;
 use App\Models\EntryOrderIncident;
+use App\Models\EntryOrderPendingHead;
 use App\Models\EntryOrderReceiptSheet;
 use App\Models\Farm;
 use App\Models\Provider;
@@ -46,6 +50,18 @@ use Illuminate\Support\Facades\DB;
  *  - EN-20260928-0012 (IN_TRANSIT, breed and category written): 8 Novillito + 4 Torito, machos,
  *    Braford Colorado + Brangus Negro, DTE DTE-TEST-ING-010 declares 12, all in transit. Its R1 is
  *    written in words: RAZA, PELAJE and CATEGORÍA columns, so it prints in landscape only.
+ *  - EN-20260928-0014 (IN_TRANSIT, distributed): 6 Terneros of both sexes + 4 Vaquillonas, without
+ *    transit batch: male calves → "Recría Macho (TEST ING)", female calves and heifers →
+ *    "Reposición Vaquillonas (TEST ING)". DTE DTE-TEST-ING-012 declares 10, R1 by code.
+ *  - EN-20260928-0015 (RECEIVED · 8 por identificar): 8 Terneros machos, all to "Recría Macho (TEST
+ *    ING)", received by count on DTE DTE-TEST-ING-013: the batch counts 8 head pending
+ *    identification. R1 issued to identify them.
+ *  - EN-20260928-0016 (IN_TRANSIT, partly distributed): 6 Terneros of both sexes, only the males with
+ *    a destination ("Recría Macho (TEST ING)"); the females go to its transit batch "338-16". DTE
+ *    DTE-TEST-ING-014 declares 6, R1 by code.
+ *  - EN-20260928-0017 (IN_TRANSIT): 4 Terneros machos to "Recría cerrada (TEST ING)", a batch closed
+ *    after the purchase: any reception is refused (DESTINATION_UNAVAILABLE) until the order is
+ *    redistributed. DTE DTE-TEST-ING-015 declares 4, R1 by code.
  *  - EN-20260928-0013 (IN_TRANSIT): 8 Terneros machos, Angus Negro, DTE DTE-TEST-ING-011 declares 8,
  *    all in transit: the sheet whose animals come off the truck with injuries (OJO / OREJA / APLOMO).
  *
@@ -66,6 +82,9 @@ use Illuminate\Support\Facades\DB;
  *    09_razas_escritas (landscape, in words)      EN-20260928-0012   per animal     ING-T-71..80, breed, coat and category written
  *    10_lesiones_al_arribo                        EN-20260928-0013   per animal     ING-T-81..88, some boxes marked
  *    11_categoria_por_renglon (by code)           EN-20260928-0011   per animal     ING-T-51..65, CAT. 1 or 2 on the males
+ *    (no image yet) destinos por sexo             EN-20260928-0014   per animal     ING-T-91..100, each to its own batch
+ *    (no image yet) destino parcial               EN-20260928-0016   per animal     ING-T-111..116, females to the transit batch
+ *    (no image yet) destino cerrado               EN-20260928-0017   per animal     ING-T-121..124, refused until redistributed
  *
  * The first three take numbers 1 to 3; the others take the next free numbers (4, 5… on a fresh base,
  * later ones if orders were created by hand). Their external batches are named after the code
@@ -83,8 +102,10 @@ class EntryOrderTestSeeder extends Seeder
     private const CODES = [
         'EN-20260928-0001', 'EN-20260928-0002', 'EN-20260928-0003', 'EN-20260928-0004', 'EN-20260928-0005', 'EN-20260928-0006',
         'EN-20260928-0007', 'EN-20260928-0008', 'EN-20260928-0009', 'EN-20260928-0010', 'EN-20260928-0011',
-        'EN-20260928-0012', 'EN-20260928-0013',
+        'EN-20260928-0012', 'EN-20260928-0013', 'EN-20260928-0014', 'EN-20260928-0015', 'EN-20260928-0016',
+        'EN-20260928-0017',
     ];
+    private const OWN_BATCHES = ['Recría Macho (TEST ING)', 'Reposición Vaquillonas (TEST ING)', 'Recría cerrada (TEST ING)'];
     private const PURCHASE_DATE = '2026-09-28';
 
     public function run(): void
@@ -296,6 +317,15 @@ class EntryOrderTestSeeder extends Seeder
 
             // 13. Animals that come off the truck injured.
             $this->printableOrder($companyId, $base, $mainFarm, self::CODES[12], 'DTE-TEST-ING-011', 'MALE', ['Angus', 'Negro'], 8, 'INDIVIDUAL');
+
+            // 14 to 17. Purchases whose animals go straight into own batches.
+            $males = $this->ownBatch($companyId, self::OWN_BATCHES[0], 'GROWING_STEERS', true);
+            $females = $this->ownBatch($companyId, self::OWN_BATCHES[1], 'GROWING_REPLACEMENT_FEMALES', true);
+            $closed = $this->ownBatch($companyId, self::OWN_BATCHES[2], 'GROWING_STEERS', false);
+            $this->distributedOrder($companyId, $base, $mainFarm, self::CODES[13], 'DTE-TEST-ING-012', $males, $females);
+            $this->pendingHeadsOrder($companyId, $base, $mainFarm, self::CODES[14], 'DTE-TEST-ING-013', $males);
+            $this->partlyDistributedOrder($companyId, $base, $mainFarm, self::CODES[15], 'DTE-TEST-ING-014', $males);
+            $this->closedDestinationOrder($companyId, $base, $mainFarm, self::CODES[16], 'DTE-TEST-ING-015', $closed);
         });
 
         $this->command?->info('EntryOrderTestSeeder: órdenes ' . implode(', ', self::CODES) . ' listas.');
@@ -318,6 +348,135 @@ class EntryOrderTestSeeder extends Seeder
         Caravan::withoutGlobalScopes()->whereIn('id', $caravanIds)->delete();
         Caravan::withoutGlobalScopes()->where('identification', 'like', 'ING-T-%')->delete();
         Batch::withoutGlobalScopes()->whereIn('id', $batchIds)->delete();
+        // The own destination batches stay, emptied of what the previous run received.
+        Batch::withoutGlobalScopes()->where('company_id', $companyId)->whereIn('name', self::OWN_BATCHES)
+            ->update(['caravans_count' => 0, 'current_weight' => null, 'total_weight' => null, 'weighed_count' => null]);
+    }
+
+    /**
+     * An own batch of the company (on its own RENSPA), classified as a reception batch would be.
+     */
+    private function ownBatch(int $companyId, string $name, string $typeCode, bool $active): Batch
+    {
+        $type = BatchType::where('code', $typeCode)->first();
+
+        return Batch::withoutGlobalScopes()->updateOrCreate(
+            ['company_id' => $companyId, 'name' => $name, 'farm_id' => null],
+            [
+                'activity_id' => Activity::where('code', 'RECRIA')->value('id'),
+                'batch_type_id' => $type?->id,
+                'is_confined' => false,
+                'is_active' => $active,
+                'caravans_count' => 0,
+                'observaciones' => 'Lote propio de destino de las órdenes de ingreso de prueba.',
+            ]
+        );
+    }
+
+    /**
+     * Where the animals of a category line go: the line by its position, a sex or the whole line.
+     */
+    private function destination(EntryOrder $order, int $position, string $sexScope, Batch $batch): void
+    {
+        EntryOrderDestination::withoutGlobalScopes()->create([
+            'company_id' => $order->company_id,
+            'entry_order_id' => $order->id,
+            'entry_order_category_id' => $order->categories()->where('position', $position)->value('id'),
+            'sex_scope' => $sexScope,
+            'destination_batch_id' => $batch->id,
+        ]);
+    }
+
+    /**
+     * An order in transit without transit batch, whose animals go to own batches. Its DTE declares
+     * every head and its R1 is issued by code.
+     *
+     * @param array<string, mixed> $base
+     * @param list<array{0: string, 1: int}> $categories
+     * @param array<string, mixed> $troop
+     */
+    private function destinedOrder(int $companyId, array $base, Farm $farm, string $code, string $dteNumber, array $categories, array $troop, ?Batch $transit = null): array
+    {
+        $head = array_sum(array_column($categories, 1));
+        $order = EntryOrder::withoutGlobalScopes()->create([
+            ...$base,
+            ...$this->calves($troop['sex_composition'] ?? 'MALE', $head),
+            ...$troop,
+            'code' => $code,
+            'number' => $this->nextNumber($companyId),
+            'status' => 'IN_TRANSIT',
+            'auction_number' => '338',
+            'batch_id' => $transit?->id,
+            'batch_name' => $transit?->name ?? $this->batchName($code),
+            'batch_name_mode' => 'AUTO',
+            'first_dte_at' => now(),
+        ]);
+        $this->categories($order, $categories);
+        $breedLine = $this->breeds($order, [['Angus', 'Negro']])[0];
+        $this->history($order, null, 'AWAITING_DTE', 'Compra confirmada: en espera de DTE');
+        $dte = $this->loadDte($order, $breedLine, (int) ($transit?->id ?? 0), $farm, $dteNumber, '2026-10-02', 'M', $head);
+        $this->history($order, 'AWAITING_DTE', 'IN_TRANSIT', null, ['dte_number' => $dteNumber, 'head_count' => $head, 'with_dte_total' => $head, 'pending_dte' => 0]);
+
+        return ['order' => $order, 'dte' => $dte];
+    }
+
+    /**
+     * @param array<string, mixed> $base
+     */
+    private function distributedOrder(int $companyId, array $base, Farm $farm, string $code, string $dteNumber, Batch $males, Batch $females): void
+    {
+        ['order' => $order, 'dte' => $dte] = $this->destinedOrder($companyId, $base, $farm, $code, $dteNumber, [['TERNERO', 6], ['VAQUILLONA', 4]], [
+            'sex_composition' => 'MIXED', 'male_count' => 3, 'female_count' => 7,
+        ]);
+        $this->destination($order, 1, 'M', $males);
+        $this->destination($order, 1, 'H', $females);
+        $this->destination($order, 2, 'ALL', $females);
+        $this->receiptSheet($order, $dte, 'INDIVIDUAL', 'CODE');
+    }
+
+    /**
+     * Received by count, the caravans still to write: the batch counts its head as pending.
+     *
+     * @param array<string, mixed> $base
+     */
+    private function pendingHeadsOrder(int $companyId, array $base, Farm $farm, string $code, string $dteNumber, Batch $males): void
+    {
+        ['order' => $order, 'dte' => $dte] = $this->destinedOrder($companyId, $base, $farm, $code, $dteNumber, [['TERNERO', 8]], ['sex_composition' => 'MALE']);
+        $this->destination($order, 1, 'ALL', $males);
+        $dte->update(['uncaravaned_head_count' => 8, 'heads_received_at' => '2026-10-03']);
+        EntryOrderPendingHead::withoutGlobalScopes()->create([
+            'company_id' => $companyId, 'entry_order_id' => $order->id, 'entry_order_dte_id' => $dte->id, 'batch_id' => $males->id, 'head_count' => 8,
+        ]);
+        $order->update(['status' => 'RECEIVED']);
+        $this->history($order, 'IN_TRANSIT', 'RECEIVED', 'Se recibieron 8 de 8 cabezas en tránsito', ['reception' => true, 'received_head_count' => 8, 'caravans' => 0]);
+        $this->receiptSheet($order, $dte, 'INDIVIDUAL', 'CODE');
+    }
+
+    /**
+     * Only the males have a destination: the females go to the transit batch.
+     *
+     * @param array<string, mixed> $base
+     */
+    private function partlyDistributedOrder(int $companyId, array $base, Farm $farm, string $code, string $dteNumber, Batch $males): void
+    {
+        $transit = $this->externalBatch($companyId, (int) $farm->id, $this->batchName($code), 180, 160, 200, true);
+        ['order' => $order, 'dte' => $dte] = $this->destinedOrder($companyId, $base, $farm, $code, $dteNumber, [['TERNERO', 6]], [
+            'sex_composition' => 'MIXED', 'male_count' => 3, 'female_count' => 3,
+        ], $transit);
+        $this->destination($order, 1, 'M', $males);
+        $this->receiptSheet($order, $dte, 'INDIVIDUAL', 'CODE');
+    }
+
+    /**
+     * Its destination was closed after the purchase: receptions are refused until redistributed.
+     *
+     * @param array<string, mixed> $base
+     */
+    private function closedDestinationOrder(int $companyId, array $base, Farm $farm, string $code, string $dteNumber, Batch $closed): void
+    {
+        ['order' => $order, 'dte' => $dte] = $this->destinedOrder($companyId, $base, $farm, $code, $dteNumber, [['TERNERO', 4]], ['sex_composition' => 'MALE']);
+        $this->destination($order, 1, 'ALL', $closed);
+        $this->receiptSheet($order, $dte, 'INDIVIDUAL', 'CODE');
     }
 
     private function farm(int $companyId, int $providerId, string $name, string $renspa): Farm

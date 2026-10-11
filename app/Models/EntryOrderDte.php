@@ -24,6 +24,8 @@ class EntryOrderDte extends Model
         'head_count',
         'missing_head_count',
         'uncaravaned_head_count',
+        'heads_received_at',
+        'written_off_head_count',
         'loaded_by_user_id',
         'observations',
     ];
@@ -38,6 +40,8 @@ class EntryOrderDte extends Model
         'head_count' => 'integer',
         'missing_head_count' => 'integer',
         'uncaravaned_head_count' => 'integer',
+        'heads_received_at' => 'date:Y-m-d',
+        'written_off_head_count' => 'integer',
         'loaded_by_user_id' => 'integer',
     ];
 
@@ -54,5 +58,13 @@ class EntryOrderDte extends Model
     public function animals(): HasMany
     {
         return $this->hasMany(EntryOrderAnimal::class)->orderBy('id');
+    }
+
+    /**
+     * Its head received without caravan, by the batch they went to.
+     */
+    public function pendingHeads(): HasMany
+    {
+        return $this->hasMany(EntryOrderPendingHead::class)->orderBy('id');
     }
 }

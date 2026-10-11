@@ -61,6 +61,24 @@ final class StoreEntryOrderRequest extends FormRequest
             'breeds' => [self::WHEN_CONFIRMED, 'array', 'max:10'],
             'breeds.*.breed_id' => 'required|integer|exists:breeds,id',
             'breeds.*.color_id' => 'nullable|integer|exists:colors,id',
+            ...self::destinationRules(),
+        ];
+    }
+
+    /**
+     * Where the animals go, by category line (its position, 1, 2, 3…) and sex (ALL for the whole
+     * line, M or H). Whether the batch is own and active, and whether the line can be split by sex,
+     * is checked by the domain.
+     *
+     * @return array<string, mixed>
+     */
+    public static function destinationRules(): array
+    {
+        return [
+            'destinations' => 'nullable|array|max:20',
+            'destinations.*.category_position' => 'required|integer|min:1|max:10',
+            'destinations.*.sex_scope' => 'required|string|in:ALL,M,H',
+            'destinations.*.destination_batch_id' => 'required|integer|exists:batches,id',
         ];
     }
 
@@ -97,6 +115,8 @@ final class StoreEntryOrderRequest extends FormRequest
             'tick_vaccinated.required_if_accepted' => 'Indicá si la tropa está vacunada contra la garrapata.',
             'estimated_weight.required_if_accepted' => 'Indicá el peso aproximado.',
             'breeds.required_if_accepted' => 'Declará al menos una raza.',
+            'destinations.*.destination_batch_id.exists' => 'El lote de destino no existe.',
+            'destinations.*.sex_scope.in' => 'El destino es para toda la categoría (ALL), los machos (M) o las hembras (H).',
         ];
     }
 }

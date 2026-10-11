@@ -29,8 +29,23 @@ final class EntryOrderAnimalEntity
         private readonly ?int $categoryPosition = null,
         /** @var list<ArrivalFinding> */
         private readonly array $arrivalFindings = [],
-        private readonly ?int $receiptSheetId = null
+        private readonly ?int $receiptSheetId = null,
+        private readonly ?int $currentBatchId = null,
+        private readonly ?string $currentBatchName = null
     ) {
+    }
+
+    /**
+     * The batch the caravan is in today: where it entered, or wherever it was moved since.
+     */
+    public function getCurrentBatchId(): ?int
+    {
+        return $this->currentBatchId;
+    }
+
+    public function getCurrentBatchName(): ?string
+    {
+        return $this->currentBatchName;
     }
 
     public function getId(): ?int

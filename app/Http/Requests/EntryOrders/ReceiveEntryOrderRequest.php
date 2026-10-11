@@ -31,6 +31,10 @@ final class ReceiveEntryOrderRequest extends FormRequest
             'missing_head_count' => 'nullable|integer|min:0|max:5000',
             // Manual reception: the head that arrived, confirmed against the DTE. Closes it.
             'received_head_count' => 'nullable|integer|min:0|max:5000',
+            // The head counted that went to each batch, when they went to more than one.
+            'heads_by_batch' => 'nullable|array|max:20',
+            'heads_by_batch.*.batch_id' => 'required|integer',
+            'heads_by_batch.*.head_count' => 'required|integer|min:0|max:5000',
             // The SENASA TRI its caravans were read from, if one was attached.
             'tri_number' => 'nullable|string|max:40',
             'reason' => 'nullable|string|max:1000',

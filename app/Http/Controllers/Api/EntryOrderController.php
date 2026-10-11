@@ -6,7 +6,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Application\DTOs\EntryOrders\LoadDteDTO;
 use App\Application\DTOs\EntryOrders\ReceiveDTO;
+use App\Application\DTOs\EntryOrders\RedistributeEntryOrderDTO;
 use App\Application\DTOs\EntryOrders\StoreEntryOrderDTO;
+use App\Application\DTOs\EntryOrders\WriteOffPendingHeadsDTO;
 use App\Application\UseCases\EntryOrders\EntryOrderUseCases;
 use App\Core\Entities\EntryOrderEntity;
 use App\Core\Enums\EntryOrderStatus;
@@ -20,9 +22,11 @@ use App\Http\Requests\EntryOrders\CorrectEntryOrderDteHeadCountRequest;
 use App\Http\Requests\EntryOrders\LoadEntryOrderDteRequest;
 use App\Http\Requests\EntryOrders\ReadTriRequest;
 use App\Http\Requests\EntryOrders\ReceiveEntryOrderRequest;
+use App\Http\Requests\EntryOrders\RedistributeEntryOrderRequest;
 use App\Http\Requests\EntryOrders\RegisterEntryRequest;
 use App\Http\Requests\EntryOrders\ResolveEntryOrderIncidentRequest;
 use App\Http\Requests\EntryOrders\StoreEntryOrderRequest;
+use App\Http\Requests\EntryOrders\WriteOffPendingHeadsRequest;
 use App\Http\Requests\TransferOrders\CancelTransferOrderRequest;
 use App\Http\Requests\TransferOrders\TransferOrderReasonRequest;
 use App\Http\Resources\EntryOrderResource;
@@ -182,6 +186,44 @@ final class EntryOrderController extends Controller
         }
 
         return $this->withWarnings($request, $result);
+    }
+
+    /**
+     * "Editar distribución": where the animals go from now on, by category line and sex.
+     */
+    public function redistribute(RedistributeEntryOrderRequest $request, int $id): JsonResponse
+    {
+        try {
+            $result = ($this->useCases->redistribute)(
+                $id,
+                $this->companyId(),
+                $request->user()?->id,
+                RedistributeEntryOrderDTO::fromArray($request->validated())
+            );
+        } catch (EntryOrderDomainException $e) {
+            return $this->domainError($e);
+        }
+
+        return $this->withWarnings($request, $result);
+    }
+
+    /**
+     * "Dar de baja pendientes": head received without caravan that will never get one.
+     */
+    public function writeOffPending(WriteOffPendingHeadsRequest $request, int $id): JsonResponse
+    {
+        try {
+            $order = ($this->useCases->writeOffPending)(
+                $id,
+                $this->companyId(),
+                $request->user()?->id,
+                WriteOffPendingHeadsDTO::fromArray($request->validated())
+            );
+        } catch (EntryOrderDomainException $e) {
+            return $this->domainError($e);
+        }
+
+        return response()->json(new EntryOrderResource($order));
     }
 
     /**

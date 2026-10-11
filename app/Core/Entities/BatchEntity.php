@@ -34,8 +34,36 @@ final class BatchEntity
         private ?float $minWeight = null,
         private ?float $maxWeight = null,
         private ?ServiceBatchDetailEntity $serviceDetail = null,
-        private bool $wasEmptied = false
+        private bool $wasEmptied = false,
+        private ?int $pendingIdentificationCount = null
     ) {
+    }
+
+    /**
+     * Head of entry orders received by count on this batch whose caravans are still to write: they
+     * are in the batch, but no caravan of the batch stands for them yet. Null when not read.
+     */
+    public function getPendingIdentificationCount(): ?int
+    {
+        return $this->pendingIdentificationCount;
+    }
+
+    public function setPendingIdentificationCount(?int $count): void
+    {
+        $this->pendingIdentificationCount = $count;
+    }
+
+    /**
+     * The head the batch holds: its caravans plus the head pending identification. What the stock
+     * views count; operations on animals count caravans.
+     */
+    public function getHeadCount(): ?int
+    {
+        if ($this->caravansCount === null && $this->pendingIdentificationCount === null) {
+            return null;
+        }
+
+        return (int) $this->caravansCount + (int) $this->pendingIdentificationCount;
     }
 
     public function getServiceDetail(): ?ServiceBatchDetailEntity

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Models\Traits\BelongsToCompany;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -82,6 +83,29 @@ class Batch extends Model
     public function serviceDetail(): HasOne
     {
         return $this->hasOne(ServiceBatchDetail::class, 'batch_id');
+    }
+
+    /**
+     * Head of entry orders received by count on this batch and still waiting for their caravan:
+     * they are in the batch, but caravans_count does not see them because their caravans do not
+     * exist yet. Adds `pending_identification_count` without dropping the columns already selected.
+     */
+    public function scopeWithPendingIdentification(Builder $query): Builder
+    {
+        if ($query->getQuery()->columns === null) {
+            $query->select($this->getTable() . '.*');
+        }
+
+        return $query->addSelect([
+            'pending_identification_count' => EntryOrderPendingHead::query()
+                ->selectRaw('COALESCE(SUM(head_count), 0)')
+                ->whereColumn('entry_order_pending_heads.batch_id', $this->getTable() . '.id'),
+        ]);
+    }
+
+    public function pendingHeads(): HasMany
+    {
+        return $this->hasMany(EntryOrderPendingHead::class);
     }
 
     public function scopeOperational($query)

@@ -100,6 +100,14 @@ class EntryOrder extends Model
         return $this->hasMany(EntryOrderCategory::class)->orderBy('position');
     }
 
+    /**
+     * Where the animals of each category line go, by sex or for the whole line.
+     */
+    public function destinations(): HasMany
+    {
+        return $this->hasMany(EntryOrderDestination::class)->orderBy('id');
+    }
+
     public function requestedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'requested_by_user_id');

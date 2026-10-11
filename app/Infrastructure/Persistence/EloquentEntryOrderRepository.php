@@ -14,6 +14,7 @@ use App\Core\Interfaces\IEntryOrderRepository;
 use App\Models\EntryOrder;
 use App\Models\EntryOrderDte;
 use App\Models\EntryOrderIncident;
+use App\Models\EntryOrderPendingHead;
 use App\Models\EntryOrderReceiptSheet;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -30,13 +31,15 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
         'breeds.color',
         'incidents',
         'receiptSheets',
+        'destinations.batch',
     ];
 
     private const DETAIL_RELATIONS = [
         ...self::SUMMARY_RELATIONS,
         'dtes',
         'dtes.loadedByUser',
-        'dtes.animals.caravan',
+        'dtes.animals.caravan.batch',
+        'dtes.pendingHeads.batch',
         'dtes.animals.breedLine',
         'dtes.animals.categoryLine',
         'dtes.animals.arrivalFindings',
@@ -120,6 +123,11 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
                 }
             }
 
+            // Rewritten categories took their destinations with them (cascade): stored again whole.
+            if ($isNew || $order->isTroopReplaced() || $order->isDestinationsReplaced()) {
+                $this->saveDestinations($model, $order);
+            }
+
             $this->insertNewDtes($model, $order);
             $this->saveDteChanges($model, $order);
             $this->insertNewIncidents($model, $order);
@@ -168,7 +176,7 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
         return EntryOrder::with([
             ...self::SUMMARY_RELATIONS,
             // The list shows how far each DTE got without loading its caravans.
-            'dtes' => fn ($query) => $query->withCount('animals as received_count'),
+            'dtes' => fn ($query) => $query->withCount('animals as received_count')->with('pendingHeads.batch'),
         ])
             ->where('company_id', $companyId)
             ->when($status !== null, fn (Builder $query) => $query->where('status', $status))
@@ -218,25 +226,7 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
             return [];
         }
 
-        $receivedByDte = DB::table('entry_order_animals')
-            ->select('entry_order_dte_id', DB::raw('COUNT(*) as received'))
-            ->where('company_id', $companyId)
-            ->groupBy('entry_order_dte_id');
-
-        // Received is the caravans plus the head counted without caravan. In transit is counted per
-        // DTE: declared minus received minus declared missing, never below zero.
-        $pending = 'd.head_count - COALESCE(r.received, 0) - d.uncaravaned_head_count - d.missing_head_count';
-        $animals = DB::table('entry_order_dtes as d')
-            ->leftJoinSub($receivedByDte, 'r', 'r.entry_order_dte_id', '=', 'd.id')
-            ->select(
-                'd.entry_order_id',
-                DB::raw('SUM(d.head_count) as with_dte'),
-                DB::raw('SUM(COALESCE(r.received, 0) + d.uncaravaned_head_count) as received'),
-                DB::raw('SUM(d.uncaravaned_head_count) as uncaravaned'),
-                DB::raw("SUM(CASE WHEN {$pending} > 0 THEN {$pending} ELSE 0 END) as in_transit")
-            )
-            ->where('d.company_id', $companyId)
-            ->groupBy('d.entry_order_id');
+        $animals = $this->dteTotals($companyId);
 
         $incidents = DB::table('entry_order_incidents')
             ->select('entry_order_id', DB::raw('COUNT(*) as open_incidents'))
@@ -276,6 +266,125 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
         return $summaries;
     }
 
+    public function incomingSummariesByBatch(array $batchIds, int $companyId): array
+    {
+        if ($batchIds === []) {
+            return [];
+        }
+
+        $open = [EntryOrderStatus::AWAITING_DTE->value, EntryOrderStatus::IN_TRANSIT->value, EntryOrderStatus::RECEIVED->value];
+
+        $rules = DB::table('entry_order_destinations as d')
+            ->join('entry_order_categories as c', 'c.id', '=', 'd.entry_order_category_id')
+            ->join('animal_categories as ac', 'ac.id', '=', 'c.category_id')
+            ->join('entry_orders as o', 'o.id', '=', 'd.entry_order_id')
+            ->where('d.company_id', $companyId)
+            ->whereIn('d.destination_batch_id', $batchIds)
+            ->whereIn('o.status', $open)
+            ->orderBy('c.position')
+            ->get(['d.entry_order_id', 'd.destination_batch_id', 'd.sex_scope', 'c.position', 'ac.name']);
+
+        $pending = DB::table('entry_order_pending_heads as p')
+            ->join('entry_orders as o', 'o.id', '=', 'p.entry_order_id')
+            ->where('p.company_id', $companyId)
+            ->whereIn('p.batch_id', $batchIds)
+            ->where('o.status', '!=', EntryOrderStatus::CANCELLED->value)
+            ->groupBy('p.entry_order_id', 'p.batch_id')
+            ->get(['p.entry_order_id', 'p.batch_id', DB::raw('SUM(p.head_count) as head_count')]);
+
+        $orderIds = array_values(array_unique([
+            ...$rules->pluck('entry_order_id')->map(fn ($id) => (int) $id)->all(),
+            ...$pending->pluck('entry_order_id')->map(fn ($id) => (int) $id)->all(),
+        ]));
+
+        if ($orderIds === []) {
+            return [];
+        }
+
+        // How many batches each order sends animals to: its destinations, and its transit batch.
+        $destinationCount = DB::table('entry_order_destinations')
+            ->whereIn('entry_order_id', $orderIds)
+            ->groupBy('entry_order_id')
+            ->pluck(DB::raw('COUNT(DISTINCT destination_batch_id)'), 'entry_order_id');
+
+        $orders = DB::table('entry_orders')
+            ->leftJoinSub($this->dteTotals($companyId), 'animals', 'animals.entry_order_id', '=', 'entry_orders.id')
+            ->whereIn('entry_orders.id', $orderIds)
+            ->get(['entry_orders.id', 'entry_orders.code', 'entry_orders.status', 'entry_orders.batch_id', 'animals.in_transit'])
+            ->keyBy('id');
+
+        $scopeWord = ['ALL' => null, 'M' => 'machos', 'H' => 'hembras'];
+        $summaries = [];
+        $entry = function (int $batchId, int $orderId) use (&$summaries, $orders, $destinationCount): ?array {
+            $order = $orders->get($orderId);
+
+            if ($order === null) {
+                return null;
+            }
+
+            $status = EntryOrderStatus::from($order->status);
+            $batches = (int) ($destinationCount[$orderId] ?? 0) + ($order->batch_id !== null ? 1 : 0);
+
+            return $summaries[$batchId][$orderId] ??= [
+                'id' => (int) $order->id,
+                'code' => (string) $order->code,
+                'status' => $status->value,
+                'status_label' => $status->label(),
+                'rules' => [],
+                'in_transit_count' => (int) ($order->in_transit ?? 0),
+                'pending_count' => 0,
+                'single_destination' => $batches <= 1,
+            ];
+        };
+
+        foreach ($rules as $rule) {
+            $batchId = (int) $rule->destination_batch_id;
+
+            if ($entry($batchId, (int) $rule->entry_order_id) !== null) {
+                $word = $scopeWord[$rule->sex_scope] ?? null;
+                $summaries[$batchId][(int) $rule->entry_order_id]['rules'][] = $word !== null ? "{$rule->name} · {$word}" : (string) $rule->name;
+            }
+        }
+
+        foreach ($pending as $row) {
+            $batchId = (int) $row->batch_id;
+
+            if ($entry($batchId, (int) $row->entry_order_id) !== null) {
+                $summaries[$batchId][(int) $row->entry_order_id]['pending_count'] += (int) $row->head_count;
+            }
+        }
+
+        return array_map(fn (array $byOrder) => array_values($byOrder), $summaries);
+    }
+
+    /**
+     * Per order, over its DTEs: head declared, received, received without caravan and in transit.
+     * Received is the caravans plus the head counted without caravan (and the ones written off
+     * before getting one). In transit is counted per DTE: declared minus received minus declared
+     * missing, never below zero.
+     */
+    private function dteTotals(int $companyId): \Illuminate\Database\Query\Builder
+    {
+        $receivedByDte = DB::table('entry_order_animals')
+            ->select('entry_order_dte_id', DB::raw('COUNT(*) as received'))
+            ->where('company_id', $companyId)
+            ->groupBy('entry_order_dte_id');
+
+        $pending = 'd.head_count - COALESCE(r.received, 0) - d.uncaravaned_head_count - d.written_off_head_count - d.missing_head_count';
+
+        return DB::table('entry_order_dtes as d')
+            ->leftJoinSub($receivedByDte, 'r', 'r.entry_order_dte_id', '=', 'd.id')
+            ->select(
+                'd.entry_order_id',
+                DB::raw('SUM(d.head_count) as with_dte'),
+                DB::raw('SUM(COALESCE(r.received, 0) + d.uncaravaned_head_count + d.written_off_head_count) as received'),
+                DB::raw('SUM(d.uncaravaned_head_count) as uncaravaned'),
+                DB::raw("SUM(CASE WHEN {$pending} > 0 THEN {$pending} ELSE 0 END) as in_transit")
+            )
+            ->where('d.company_id', $companyId)
+            ->groupBy('d.entry_order_id');
+    }
+
     /**
      * A DTE is written once; later only its declared and missing head change (saveDteChanges).
      */
@@ -290,12 +399,15 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
                 'head_count' => $dte->getHeadCount(),
                 'missing_head_count' => $dte->getMissingHeadCount(),
                 'uncaravaned_head_count' => $dte->getUncaravanedHeadCount(),
+                'heads_received_at' => $dte->getHeadsReceivedAt(),
+                'written_off_head_count' => $dte->getWrittenOffHeadCount(),
                 'loaded_by_user_id' => $dte->getLoadedByUserId(),
                 'observations' => $dte->getObservations(),
             ]);
 
             // "Registrar ingreso" receives the DTE in the same operation.
             $this->insertAnimals($model, (int) $row->id, $dte);
+            $this->savePendingHeads($model, (int) $row->id, $dte);
         }
     }
 
@@ -310,13 +422,62 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
                 'head_count' => $dte->getHeadCount(),
                 'missing_head_count' => $dte->getMissingHeadCount(),
                 'uncaravaned_head_count' => $dte->getUncaravanedHeadCount(),
+                'heads_received_at' => $dte->getHeadsReceivedAt(),
+                'written_off_head_count' => $dte->getWrittenOffHeadCount(),
             ]);
+            $this->savePendingHeads($model, (int) $dte->getId(), $dte);
         }
 
         foreach ($order->getDtes() as $dte) {
             if ($dte->getId() !== null) {
                 $this->insertAnimals($model, $dte->getId(), $dte);
             }
+        }
+    }
+
+    /**
+     * The destination rules of the order, replaced whole: each one points to its category line by
+     * position.
+     */
+    private function saveDestinations(EntryOrder $model, EntryOrderEntity $order): void
+    {
+        $model->destinations()->delete();
+        $lineIdByPosition = $model->categories()->pluck('id', 'position')->all();
+
+        foreach ($order->getDestinations()->rules() as $rule) {
+            $lineId = $lineIdByPosition[$rule->getCategoryPosition()] ?? null;
+
+            if ($lineId === null) {
+                continue;
+            }
+
+            $model->destinations()->create([
+                'company_id' => $model->company_id,
+                'entry_order_category_id' => $lineId,
+                'sex_scope' => $rule->getSexScope()->value,
+                'destination_batch_id' => $rule->getBatchId(),
+            ]);
+        }
+    }
+
+    /**
+     * The head of a DTE pending identification, by batch, as the entity holds them now: a batch
+     * with none left has no row.
+     */
+    private function savePendingHeads(EntryOrder $model, int $dteId, EntryOrderDteEntity $dte): void
+    {
+        $pending = $dte->getPendingByBatch();
+
+        EntryOrderPendingHead::withoutGlobalScopes()
+            ->where('entry_order_dte_id', $dteId)
+            ->when($pending !== [], fn (Builder $q) => $q->whereNotIn('batch_id', array_keys($pending)))
+            ->delete();
+
+        foreach ($pending as $batchId => $headCount) {
+            EntryOrderPendingHead::withoutGlobalScopes()->updateOrCreate(
+                ['entry_order_dte_id' => $dteId, 'batch_id' => $batchId],
+                ['company_id' => $model->company_id, 'entry_order_id' => $model->id, 'head_count' => $headCount]
+            );
         }
     }
 
