@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\WorkTemplates;
 
+use App\Core\Enums\WeighingTypeCode;
+use App\Models\WeighingType;
 use Tests\Feature\DryRun\AssertsDryRun;
 use App\Models\AnimalCategory;
 use App\Models\Batch;
@@ -137,6 +139,7 @@ class Dest01TemplateProcessingTest extends VeterinaryTestCase
     {
         $calf = $this->nursingCalf('DEST-T-20', 'DEST-V-20', 'M');
         CaravanWeight::create([
+            'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
             'caravan_id' => $calf->id,
             'weight' => 35,
             'current' => true,

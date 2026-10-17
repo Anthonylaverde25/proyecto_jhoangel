@@ -26,9 +26,10 @@ class BulkRecordWeightRequest extends FormRequest
         return [
             'weights' => 'required|array|min:1',
             'weights.*.caravan_id'    => 'required|integer|exists:caravans,id',
-            'weights.*.weight'        => 'required|numeric|min:0',
+            'weights.*.weight'        => 'required|numeric|gt:0|max:2000',
             'weights.*.weighing_date' => 'required|date',
             'weights.*.notes'         => 'nullable|string',
+            ...WeighingFieldRules::rules('weights.*.'),
         ];
     }
 }

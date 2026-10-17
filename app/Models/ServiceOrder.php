@@ -20,8 +20,7 @@ class ServiceOrder extends Model
     protected $fillable = [
         'company_id',
         'batch_id',
-        'origin_batch_id',
-        'service_batch_id',
+        'parent_service_order_id',
         'code',
         'status',
         'requested_by_user_id',
@@ -34,6 +33,7 @@ class ServiceOrder extends Model
         'planned_end_date',
         'actual_start_date',
         'actual_end_date',
+        'diagnosis_completed_at',
         'target_bull_ratio',
         'final_pregnancy_rate',
         'observations',
@@ -48,8 +48,6 @@ class ServiceOrder extends Model
     protected $casts = [
         'company_id' => 'integer',
         'batch_id' => 'integer',
-        'origin_batch_id' => 'integer',
-        'service_batch_id' => 'integer',
         'requested_by_user_id' => 'integer',
         'reviewed_by_user_id' => 'integer',
         'approved_by_user_id' => 'integer',
@@ -60,24 +58,19 @@ class ServiceOrder extends Model
         'planned_end_date' => 'date:Y-m-d',
         'actual_start_date' => 'date:Y-m-d',
         'actual_end_date' => 'date:Y-m-d',
+        'diagnosis_completed_at' => 'date:Y-m-d',
+        'parent_service_order_id' => 'integer',
         'target_bull_ratio' => 'float',
         'final_pregnancy_rate' => 'float',
         'is_controlled_service' => 'boolean',
     ];
 
+    /**
+     * The perennial operational batch the service runs on.
+     */
     public function batch(): BelongsTo
     {
         return $this->belongsTo(Batch::class);
-    }
-
-    public function originBatch(): BelongsTo
-    {
-        return $this->belongsTo(Batch::class, 'origin_batch_id');
-    }
-
-    public function serviceBatch(): BelongsTo
-    {
-        return $this->belongsTo(Batch::class, 'service_batch_id');
     }
 
     public function requestedByUser(): BelongsTo
@@ -116,8 +109,26 @@ class ServiceOrder extends Model
     public function females(): BelongsToMany
     {
         return $this->belongsToMany(Caravan::class, 'service_order_females', 'service_order_id', 'female_caravan_id')
-            ->withPivot('assigned_male_caravan_id')
+            ->withPivot([
+                'assigned_male_caravan_id',
+                'exposed_from',
+                'exposed_until',
+                'exit_reason',
+                'joined_after_start',
+                'reproductive_status',
+                'diagnosed_at',
+            ])
             ->withTimestamps();
+    }
+
+    public function diagnosisRounds(): HasMany
+    {
+        return $this->hasMany(ServiceOrderDiagnosisRound::class)->orderBy('round_date');
+    }
+
+    public function incidents(): HasMany
+    {
+        return $this->hasMany(ServiceOrderIncident::class)->orderByDesc('id');
     }
 
     public function history(): HasMany

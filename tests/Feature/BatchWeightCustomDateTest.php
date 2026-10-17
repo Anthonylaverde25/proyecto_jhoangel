@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Core\Enums\WeighingTypeCode;
+use App\Models\WeighingType;
 use App\Models\Activity;
 use App\Models\Batch;
 use App\Models\BatchType;
@@ -101,6 +103,7 @@ class BatchWeightCustomDateTest extends TestCase
         ]);
 
         $caravan->weights()->create([
+            'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
             'weight' => 210.0,
             'weighing_date' => '2026-02-01',
             'current' => true,

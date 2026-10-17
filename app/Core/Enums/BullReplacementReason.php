@@ -11,6 +11,7 @@ enum BullReplacementReason: string
     case LOW_LIBIDO_RINCONERO = 'LOW_LIBIDO_RINCONERO';
     case AGGRESSION = 'AGGRESSION';
     case DEATH = 'DEATH';
+    case SANITARY_REJECTION = 'SANITARY_REJECTION';
     case OTHER = 'OTHER';
 
     public function label(): string
@@ -21,6 +22,7 @@ enum BullReplacementReason: string
             self::LOW_LIBIDO_RINCONERO => 'Toro Rinconero / Baja Libido',
             self::AGGRESSION => 'Agresividad Extrema / Peleas',
             self::DEATH => 'Muerte en Potrero',
+            self::SANITARY_REJECTION => 'Rechazo Sanitario (enfermedad contagiosa)',
             self::OTHER => 'Otra Causa Veterinaria',
         };
     }

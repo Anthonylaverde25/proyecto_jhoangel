@@ -18,7 +18,9 @@ class ServiceOrderMale extends Model
         'company_id',
         'service_order_id',
         'male_caravan_id',
+        'joined_at',
         'snapshot_scrotal_circumference',
+        'sanitary_status_at_entry',
         'service_capacity',
         'status',
         'retired_at',
@@ -29,6 +31,7 @@ class ServiceOrderMale extends Model
         'service_order_id' => 'integer',
         'male_caravan_id' => 'integer',
         'snapshot_scrotal_circumference' => 'float',
+        'joined_at' => 'date:Y-m-d',
         'retired_at' => 'datetime',
     ];
 

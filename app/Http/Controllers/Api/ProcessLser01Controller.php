@@ -30,7 +30,10 @@ final class ProcessLser01Controller extends Controller
         }
 
         try {
-            $dto = Lser01SubmissionDTO::fromArray($request->validated(), $companyId);
+            // The route is not behind auth:sanctum, so the token is read explicitly; the last
+            // resort is the same one BatchController::startService uses.
+            $userId = (int) (auth('sanctum')->id() ?? auth()->id() ?? 1);
+            $dto = Lser01SubmissionDTO::fromArray($request->validated(), $companyId, $userId);
             $result = ($this->useCases->processLser01)($dto);
         } catch (Lser01ValidationException $e) {
             return response()->json([
@@ -52,13 +55,14 @@ final class ProcessLser01Controller extends Controller
 
         return response()->json([
             'status' => 'success',
-            'message' => "Lote de servicio '{$batch->getName()}' creado con su orden {$result['service_order_code']}.",
+            'message' => "Servicio {$result['service_order_code']} iniciado sobre el lote '{$batch->getName()}'.",
             'data' => [
                 'batch_id' => $batch->getId(),
                 'batch_name' => $batch->getName(),
                 'service_order_id' => $result['service_order_id'],
                 'service_order_code' => $result['service_order_code'],
                 'females_count' => $result['females_count'],
+                'warnings' => $result['warnings'],
             ],
         ], 201);
     }

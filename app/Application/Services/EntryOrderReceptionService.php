@@ -15,11 +15,16 @@ use App\Core\Enums\AnimalSex;
 use App\Core\Enums\BatchWeightCause;
 use App\Core\Enums\EntryOrderIncidentType;
 use App\Core\Enums\ReceiptSheetStatus;
+use App\Core\Enums\WeighingMethod;
 use App\Core\Enums\WeighingMode;
+use App\Core\Enums\WeighingSource;
+use App\Core\Enums\WeighingTypeCode;
 use App\Core\Exceptions\EntryDteValidationException;
 use App\Core\Exceptions\EntryOrderDomainException;
 use App\Core\Interfaces\IBreedRepository;
 use App\Core\Services\BatchWeightService;
+use App\Core\Services\CaravanWeighingRecorder;
+use App\Core\ValueObjects\WeighingReading;
 use App\Core\Services\TroopLineResolver;
 use App\Core\ValueObjects\CaravanProvenance;
 use App\Core\ValueObjects\EntryTroop;
@@ -27,7 +32,6 @@ use App\Core\ValueObjects\TroopLineMatch;
 use App\Models\Caravan;
 use App\Models\CaravanBodyCondition;
 use App\Models\CaravanMovement;
-use App\Models\CaravanWeight;
 use App\Models\Farm;
 
 /**
@@ -60,7 +64,8 @@ final class EntryOrderReceptionService
     public function __construct(
         private readonly BatchWeightService $batchWeightService,
         private readonly IBreedRepository $breedRepository,
-        private readonly EntryOrderDestinationValidator $destinationValidator
+        private readonly EntryOrderDestinationValidator $destinationValidator,
+        private readonly CaravanWeighingRecorder $weighingRecorder
     ) {
     }
 
@@ -658,14 +663,15 @@ final class EntryOrderReceptionService
         if ($weight !== null) {
             $average = $sheet?->getWeighingMode() === WeighingMode::AVERAGE;
 
-            CaravanWeight::create([
-                'caravan_id' => $caravan->id,
-                'weight' => $weight,
-                'current' => true,
-                'weighing_date' => $receivedAt,
-                'method' => $average ? WeighingMode::AVERAGE->value : WeighingMode::INDIVIDUAL->value,
-                'notes' => ($average ? 'Peso promedio de ingreso' : 'Pesaje de ingreso') . " ({$where})",
-            ]);
+            // The caravan is new, so this weight is its first and the current one.
+            $this->weighingRecorder->record((int) $caravan->id, WeighingReading::typical(
+                (float) $weight,
+                new \DateTimeImmutable($receivedAt),
+                WeighingTypeCode::ENTRY,
+                WeighingSource::ENTRY,
+                ($average ? 'Peso promedio de ingreso' : 'Pesaje de ingreso') . " ({$where})",
+                $average ? WeighingMethod::AVERAGE : WeighingMethod::INDIVIDUAL
+            ));
         }
 
         if ($row['body_condition'] !== null) {

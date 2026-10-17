@@ -66,6 +66,13 @@ interface ICaravanRepository
     public function findAll(?string $scope = 'own'): array;
 
     /**
+     * A page of the light caravan list (inventory tables), with the same meaning of "own" as findAll.
+     *
+     * @return \App\Core\ValueObjects\PaginatedResult<\App\Core\ValueObjects\CaravanSummaryRow>
+     */
+    public function paginateSummary(\App\Core\ValueObjects\CaravanSummaryCriteria $criteria): \App\Core\ValueObjects\PaginatedResult;
+
+    /**
      * Head count of the active company's own herd, with the same meaning of "own" as findAll:
      * animals in third-party farms (still the provider's) are left out.
      */
@@ -89,6 +96,13 @@ interface ICaravanRepository
      * @param int $batchId
      * @return int
      */
+    /**
+     * The animals the company holds in a batch right now: those that count for its weight.
+     *
+     * @return int[]
+     */
+    public function findIdsInPossessionByBatch(int $batchId): array;
+
     public function countByBatch(int $batchId): int;
 
     /**
@@ -179,4 +193,35 @@ interface ICaravanRepository
      * @return CaravanEntity[]
      */
     public function findGestatingByBatch(int $batchId): array;
+
+    /**
+     * IDs of the females physically in a batch right now that can be serviced: those
+     * already carrying an active gestation, and those of a category that does not breed (a
+     * calf at foot), are left out. With $onlyBreedingEligible the
+     * females the owner excluded from breeding are left out too (controlled service / AI);
+     * natural service exposes them anyway, since they share the paddock with the bulls.
+     *
+     * @return int[]
+     */
+    public function findServiceableFemaleIdsInBatch(int $batchId, bool $onlyBreedingEligible = false): array;
+
+    /**
+     * Empty females in the batch that the owner excluded from breeding.
+     *
+     * @return int[]
+     */
+    public function findBreedingExcludedFemaleIdsInBatch(int $batchId): array;
+
+    /**
+     * The owner's breeding decision for one animal; null when the caravan does not exist.
+     */
+    public function findBreedingEligibility(int $caravanId): ?\App\Core\ValueObjects\BreedingEligibility;
+
+    /**
+     * The category of one animal as breeding sees it: its name and whether the catalog says it
+     * breeds. Null when the caravan does not exist or has no category.
+     *
+     * @return array{name: string, is_reproductive: bool}|null
+     */
+    public function findCategoryBreedingProfile(int $caravanId): ?array;
 }

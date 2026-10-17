@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Core\Enums\AnimalCategory as AnimalCategoryEnum;
+use App\Core\Enums\WeighingTypeCode;
 use App\Models\Activity;
 use App\Models\AnimalCategory;
 use App\Models\AnimalSubcategory;
@@ -18,533 +19,220 @@ use App\Models\Color;
 use App\Models\Company;
 use App\Models\Farm;
 use App\Models\FemaleCaravanDetail;
+use App\Models\Provider;
+use App\Models\WeighingType;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 
 /**
- * Seeder to populate secondary company (Hacienda Secundaria) with complete livestock hierarchy:
- * 1 own farm, 2 batches per activity (Cría, Recría, Invernada) typed with canonical batch types,
- * including replacement types, and 5 tagged animals per batch (30 animals total).
+ * "Hacienda Secundaria" as a clean company to walk the breeding flow from the start:
+ *
+ *  - "Lote Cría Inicial": five empty cows (cría, operational).
+ *  - "Lote Cría 2": three more empty cows (cría, operational), a second herd to service apart.
+ *  - "Toros": three bulls of the same company (cría), with no sanitary history of their own.
+ *  - One provider with its two origin farms, for purchases into this company.
+ *
+ * Own batches have no farm (the company is the farm); `farms` only holds providers' origin fields.
+ *
+ * Re-runnable without undoing the flow: a batch or an animal that already exists is left as the
+ * app left it (its batch, its reproductive state, its weights). Only what is missing is created.
  */
 class SecondaryCompanyLivestockSeeder extends Seeder
 {
     private const COMPANY_NAME = 'Hacienda Secundaria';
-    private const FARM_NAME = 'Establecimiento El Porvenir';
-    private const RENSPA = '09.08.07.0002/01';
+    private const RENSPA = '09.08.07.0002';
+
+    private const PROVIDER = [
+        'cuit' => '30-71888222-4',
+        'name' => 'Ganadera Los Algarrobos S.A.',
+        'commercial_name' => 'Los Algarrobos',
+        'location' => 'Ruta Nacional 35, Km 610 (Córdoba)',
+        'phone' => '+54 358 400-1122',
+    ];
+
+    /** name => [renspa, location] */
+    private const PROVIDER_FARMS = [
+        'Estancia Los Algarrobos' => ['14.035.0.00777/00', 'Vicuña Mackenna, Córdoba'],
+        'Campo La Aguada' => ['14.035.0.00777/01', 'Sampacho, Córdoba'],
+    ];
+
+    /**
+     * Each batch: activity, type, notes and its animals (tag => [category, subcategory, sex, teeth, weight]).
+     */
+    private const BATCHES = [
+        'Lote Cría Inicial' => [
+            'activity' => 'CRIA',
+            'type' => 'OPERATIONAL',
+            'notes' => 'Vientres de cría vacíos, listos para entorar.',
+            'animals' => [
+                'SEC-VAC-001' => ['VACA', 'RODEO_GENERAL', 'H', 4, 430.0],
+                'SEC-VAC-002' => ['VACA', 'RODEO_GENERAL', 'H', 6, 445.0],
+                'SEC-VAC-003' => ['VACA', 'RODEO_GENERAL', 'H', 4, 422.0],
+                'SEC-VAC-004' => ['VACA', 'RODEO_GENERAL', 'H', 6, 450.0],
+                'SEC-VAC-005' => ['VACA', 'RODEO_GENERAL', 'H', 4, 438.0],
+            ],
+        ],
+        'Lote Cría 2' => [
+            'activity' => 'CRIA',
+            'type' => 'OPERATIONAL',
+            'notes' => 'Segundo rodeo de vientres de cría vacíos.',
+            'animals' => [
+                'SEC-VAC-006' => ['VACA', 'RODEO_GENERAL', 'H', 4, 428.0],
+                'SEC-VAC-007' => ['VACA', 'RODEO_GENERAL', 'H', 6, 441.0],
+                'SEC-VAC-008' => ['VACA', 'RODEO_GENERAL', 'H', 4, 433.0],
+            ],
+        ],
+        'Toros' => [
+            'activity' => 'CRIA',
+            'type' => 'OPERATIONAL',
+            'notes' => 'Toros reproductores del rodeo de cría.',
+            'animals' => [
+                'SEC-TORO-001' => ['TORO', null, 'M', 6, 720.0],
+                'SEC-TORO-002' => ['TORO', null, 'M', 6, 745.0],
+                'SEC-TORO-003' => ['TORO', null, 'M', 8, 760.0],
+            ],
+        ],
+    ];
 
     public function run(): void
     {
         $company = Company::where('name', self::COMPANY_NAME)->first();
 
         if (!$company) {
-            $this->command?->warn(sprintf(
-                'SecondaryCompanyLivestockSeeder: "%s" was not found. Skipping.',
-                self::COMPANY_NAME
-            ));
+            $this->command?->warn(sprintf('SecondaryCompanyLivestockSeeder: "%s" was not found. Skipping.', self::COMPANY_NAME));
 
             return;
         }
 
         $companyId = (int) $company->id;
 
-        // 1. Create or resolve own farm for Hacienda Secundaria
-        $farm = Farm::withoutGlobalScopes()->updateOrCreate(
-            [
-                'company_id' => $companyId,
-                'name' => self::FARM_NAME,
-            ],
-            [
-                'location' => 'Ruta Provincial 10, Km 45',
-                'renspa' => self::RENSPA,
-                'provider_id' => null,
-                'is_active' => true,
-            ]
-        );
+        $this->seedProvider($companyId);
 
-        // 2. Resolve Master Catalogues
-        $activities = Activity::withoutGlobalScopes()
-            ->whereIn('code', ['CRIA', 'RECRIA', 'INVERNADA'])
-            ->get()
-            ->keyBy('code');
-
-        $batchTypes = BatchType::withoutGlobalScopes()
-            ->whereIn('code', [
-                'SERVICE',
-                'WEANING',
-                'GROWING_REPLACEMENT_FEMALES',
-                'GROWING_REPLACEMENT_BULLS',
-                'OPERATIONAL',
-            ])
-            ->get()
-            ->keyBy('code');
-
-        $categories = AnimalCategory::withoutGlobalScopes()
-            ->whereIn('code', ['VACA', 'VAQUILLONA', 'TERNERO', 'TORITO', 'NOVILLO'])
-            ->get()
-            ->keyBy('code');
-
-        $subcategories = AnimalSubcategory::withoutGlobalScopes()
-            ->whereIn('code', ['RODEO_GENERAL', 'REPOSICION'])
-            ->get()
-            ->keyBy('code');
-
+        $now = Carbon::now();
         $breedIds = Breed::withoutGlobalScopes()->pluck('id')->all();
         $colorIds = Color::withoutGlobalScopes()->pluck('id')->all();
+        $index = 0;
 
-        // 3. Batch Specifications (2 per activity)
-        $batchDefinitions = [
-            // --- Cría ---
-            [
-                'name' => 'Rodeo de Servicio 1 (Secundaria)',
-                'activity_code' => 'CRIA',
-                'batch_type_code' => 'SERVICE',
-                'is_confined' => false,
-                'observaciones' => 'Lote reproductivo homogéneo de vientres de cría para servicio.',
-                'animals' => [
-                    [
-                        'tag' => 'SEC-CRI-001',
-                        'cat' => 'VACA',
-                        'sub' => 'RODEO_GENERAL',
-                        'sex' => 'H',
-                        'teeth' => 4,
-                        'weight' => 430.0,
-                        'arrival_cat' => AnimalCategoryEnum::VACA,
-                    ],
-                    [
-                        'tag' => 'SEC-CRI-002',
-                        'cat' => 'VACA',
-                        'sub' => 'RODEO_GENERAL',
-                        'sex' => 'H',
-                        'teeth' => 6,
-                        'weight' => 445.0,
-                        'arrival_cat' => AnimalCategoryEnum::VACA,
-                    ],
-                    [
-                        'tag' => 'SEC-CRI-003',
-                        'cat' => 'VACA',
-                        'sub' => 'RODEO_GENERAL',
-                        'sex' => 'H',
-                        'teeth' => 4,
-                        'weight' => 422.0,
-                        'arrival_cat' => AnimalCategoryEnum::VACA,
-                    ],
-                    [
-                        'tag' => 'SEC-CRI-004',
-                        'cat' => 'VACA',
-                        'sub' => 'RODEO_GENERAL',
-                        'sex' => 'H',
-                        'teeth' => 6,
-                        'weight' => 450.0,
-                        'arrival_cat' => AnimalCategoryEnum::VACA,
-                    ],
-                    [
-                        'tag' => 'SEC-CRI-005',
-                        'cat' => 'VACA',
-                        'sub' => 'RODEO_GENERAL',
-                        'sex' => 'H',
-                        'teeth' => 4,
-                        'weight' => 438.0,
-                        'arrival_cat' => AnimalCategoryEnum::VACA,
-                    ],
-                ],
-            ],
-            [
-                'name' => 'Lote de Destete 1 (Secundaria)',
-                'activity_code' => 'CRIA',
-                'batch_type_code' => 'WEANING',
-                'is_confined' => true,
-                'observaciones' => 'Lote transitorio de terneros desmadrados en corral de acostumbramiento.',
-                'animals' => [
-                    [
-                        'tag' => 'SEC-CRI-006',
-                        'cat' => 'TERNERO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 0,
-                        'weight' => 165.0,
-                        'arrival_cat' => null,
-                    ],
-                    [
-                        'tag' => 'SEC-CRI-007',
-                        'cat' => 'TERNERO',
-                        'sub' => null,
-                        'sex' => 'H',
-                        'teeth' => 0,
-                        'weight' => 158.0,
-                        'arrival_cat' => AnimalCategoryEnum::TERNERA,
-                    ],
-                    [
-                        'tag' => 'SEC-CRI-008',
-                        'cat' => 'TERNERO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 0,
-                        'weight' => 172.0,
-                        'arrival_cat' => null,
-                    ],
-                    [
-                        'tag' => 'SEC-CRI-009',
-                        'cat' => 'TERNERO',
-                        'sub' => null,
-                        'sex' => 'H',
-                        'teeth' => 0,
-                        'weight' => 160.0,
-                        'arrival_cat' => AnimalCategoryEnum::TERNERA,
-                    ],
-                    [
-                        'tag' => 'SEC-CRI-010',
-                        'cat' => 'TERNERO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 0,
-                        'weight' => 168.0,
-                        'arrival_cat' => null,
-                    ],
-                ],
-            ],
-
-            // --- Recría (Lotes de Reposición) ---
-            [
-                'name' => 'Vientres de Reposición (Secundaria)',
-                'activity_code' => 'RECRIA',
-                'batch_type_code' => 'GROWING_REPLACEMENT_FEMALES',
-                'is_confined' => false,
-                'observaciones' => 'Hembras retenidas para reemplazar vientres de descarte del rodeo.',
-                'animals' => [
-                    [
-                        'tag' => 'SEC-REC-001',
-                        'cat' => 'VAQUILLONA',
-                        'sub' => 'REPOSICION',
-                        'sex' => 'H',
-                        'teeth' => 2,
-                        'weight' => 280.0,
-                        'arrival_cat' => AnimalCategoryEnum::VAQUILLONA,
-                    ],
-                    [
-                        'tag' => 'SEC-REC-002',
-                        'cat' => 'VAQUILLONA',
-                        'sub' => 'REPOSICION',
-                        'sex' => 'H',
-                        'teeth' => 2,
-                        'weight' => 295.0,
-                        'arrival_cat' => AnimalCategoryEnum::VAQUILLONA,
-                    ],
-                    [
-                        'tag' => 'SEC-REC-003',
-                        'cat' => 'VAQUILLONA',
-                        'sub' => 'REPOSICION',
-                        'sex' => 'H',
-                        'teeth' => 2,
-                        'weight' => 285.0,
-                        'arrival_cat' => AnimalCategoryEnum::VAQUILLONA,
-                    ],
-                    [
-                        'tag' => 'SEC-REC-004',
-                        'cat' => 'VAQUILLONA',
-                        'sub' => 'REPOSICION',
-                        'sex' => 'H',
-                        'teeth' => 2,
-                        'weight' => 302.0,
-                        'arrival_cat' => AnimalCategoryEnum::VAQUILLONA,
-                    ],
-                    [
-                        'tag' => 'SEC-REC-005',
-                        'cat' => 'VAQUILLONA',
-                        'sub' => 'REPOSICION',
-                        'sex' => 'H',
-                        'teeth' => 2,
-                        'weight' => 290.0,
-                        'arrival_cat' => AnimalCategoryEnum::VAQUILLONA,
-                    ],
-                ],
-            ],
-            [
-                'name' => 'Toritos de Reposición (Secundaria)',
-                'activity_code' => 'RECRIA',
-                'batch_type_code' => 'GROWING_REPLACEMENT_BULLS',
-                'is_confined' => false,
-                'observaciones' => 'Machos enteros de alto mérito genético destinados a futuros toros padres.',
-                'animals' => [
-                    [
-                        'tag' => 'SEC-REC-006',
-                        'cat' => 'TORITO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 2,
-                        'weight' => 315.0,
-                        'arrival_cat' => null,
-                    ],
-                    [
-                        'tag' => 'SEC-REC-007',
-                        'cat' => 'TORITO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 2,
-                        'weight' => 330.0,
-                        'arrival_cat' => null,
-                    ],
-                    [
-                        'tag' => 'SEC-REC-008',
-                        'cat' => 'TORITO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 2,
-                        'weight' => 322.0,
-                        'arrival_cat' => null,
-                    ],
-                    [
-                        'tag' => 'SEC-REC-009',
-                        'cat' => 'TORITO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 2,
-                        'weight' => 342.0,
-                        'arrival_cat' => null,
-                    ],
-                    [
-                        'tag' => 'SEC-REC-010',
-                        'cat' => 'TORITO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 2,
-                        'weight' => 326.0,
-                        'arrival_cat' => null,
-                    ],
-                ],
-            ],
-
-            // --- Invernada ---
-            [
-                'name' => 'Corral Invernada 1 (Secundaria)',
-                'activity_code' => 'INVERNADA',
-                'batch_type_code' => 'OPERATIONAL',
-                'is_confined' => true,
-                'observaciones' => 'Lote de novillos en engorde intensivo a corral (feedlot).',
-                'animals' => [
-                    [
-                        'tag' => 'SEC-INV-001',
-                        'cat' => 'NOVILLO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 2,
-                        'weight' => 355.0,
-                        'arrival_cat' => null,
-                    ],
-                    [
-                        'tag' => 'SEC-INV-002',
-                        'cat' => 'NOVILLO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 4,
-                        'weight' => 368.0,
-                        'arrival_cat' => null,
-                    ],
-                    [
-                        'tag' => 'SEC-INV-003',
-                        'cat' => 'NOVILLO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 2,
-                        'weight' => 360.0,
-                        'arrival_cat' => null,
-                    ],
-                    [
-                        'tag' => 'SEC-INV-004',
-                        'cat' => 'NOVILLO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 4,
-                        'weight' => 376.0,
-                        'arrival_cat' => null,
-                    ],
-                    [
-                        'tag' => 'SEC-INV-005',
-                        'cat' => 'NOVILLO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 2,
-                        'weight' => 364.0,
-                        'arrival_cat' => null,
-                    ],
-                ],
-            ],
-            [
-                'name' => 'Terminación Pastura (Secundaria)',
-                'activity_code' => 'INVERNADA',
-                'batch_type_code' => 'OPERATIONAL',
-                'is_confined' => false,
-                'observaciones' => 'Lote de novillos pesados en terminación pastoril.',
-                'animals' => [
-                    [
-                        'tag' => 'SEC-INV-006',
-                        'cat' => 'NOVILLO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 4,
-                        'weight' => 415.0,
-                        'arrival_cat' => null,
-                    ],
-                    [
-                        'tag' => 'SEC-INV-007',
-                        'cat' => 'NOVILLO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 4,
-                        'weight' => 428.0,
-                        'arrival_cat' => null,
-                    ],
-                    [
-                        'tag' => 'SEC-INV-008',
-                        'cat' => 'NOVILLO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 4,
-                        'weight' => 420.0,
-                        'arrival_cat' => null,
-                    ],
-                    [
-                        'tag' => 'SEC-INV-009',
-                        'cat' => 'NOVILLO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 4,
-                        'weight' => 438.0,
-                        'arrival_cat' => null,
-                    ],
-                    [
-                        'tag' => 'SEC-INV-010',
-                        'cat' => 'NOVILLO',
-                        'sub' => null,
-                        'sex' => 'M',
-                        'teeth' => 4,
-                        'weight' => 424.0,
-                        'arrival_cat' => null,
-                    ],
-                ],
-            ],
-        ];
-
-        // 4. Seed Batches and Animals
-        $now = Carbon::now();
-        $breedCount = count($breedIds);
-        $colorCount = count($colorIds);
-        $animalIndex = 0;
-
-        foreach ($batchDefinitions as $batchDef) {
-            $activity = $activities->get($batchDef['activity_code']);
-            $batchType = $batchTypes->get($batchDef['batch_type_code']);
-
-            $batch = Batch::withoutGlobalScopes()->updateOrCreate(
+        foreach (self::BATCHES as $name => $definition) {
+            $activity = Activity::withoutGlobalScopes()->where('code', $definition['activity'])->first();
+            $batch = Batch::withoutGlobalScopes()->firstOrCreate(
+                ['company_id' => $companyId, 'name' => $name],
                 [
-                    'company_id' => $companyId,
-                    'name' => $batchDef['name'],
-                ],
-                [
-                    'farm_id' => $farm->id,
+                    'farm_id' => null,
                     'activity_id' => $activity?->id,
-                    'batch_type_id' => $batchType?->id,
-                    'is_confined' => $batchDef['is_confined'],
-                    'observaciones' => $batchDef['observaciones'],
+                    'batch_type_id' => BatchType::withoutGlobalScopes()->where('code', $definition['type'])->value('id'),
+                    'is_confined' => false,
+                    'observaciones' => $definition['notes'],
                     'is_active' => true,
                     'is_system' => false,
                 ]
             );
 
-            $batchWeightsList = [];
-            $batchId = (int) $batch->id;
+            $weights = [];
 
-            foreach ($batchDef['animals'] as $animalData) {
-                $category = $categories->get($animalData['cat']);
-                $subcategory = $animalData['sub'] ? $subcategories->get($animalData['sub']) : null;
+            foreach ($definition['animals'] as $tag => [$categoryCode, $subcategoryCode, $sex, $teeth, $weight]) {
+                if (Caravan::withoutGlobalScopes()->where('identification', $tag)->exists()) {
+                    $index++;
+                    continue;
+                }
 
-                $breedId = $breedCount > 0 ? $breedIds[$animalIndex % $breedCount] : null;
-                $colorId = $colorCount > 0 ? $colorIds[$animalIndex % $colorCount] : null;
-                $animalIndex++;
-
-                $weightVal = (float) $animalData['weight'];
-                $batchWeightsList[] = $weightVal;
-
-                $caravan = Caravan::withoutGlobalScopes()->updateOrCreate(
+                $caravan = Caravan::withoutGlobalScopes()->create(
                     [
-                        'identification' => $animalData['tag'],
-                    ],
-                    [
+                        'identification' => $tag,
                         'company_id' => $companyId,
-                        'batch_id' => $batchId,
-                        'category_id' => $category?->id,
-                        'subcategory_id' => $subcategory?->id,
-                        'breed_id' => $breedId,
-                        'color_id' => $colorId,
-                        'sex' => $animalData['sex'],
-                        'teeth' => $animalData['teeth'],
-                        'entry_weight' => $weightVal,
+                        'batch_id' => $batch->id,
+                        'category_id' => AnimalCategory::withoutGlobalScopes()->where('code', $categoryCode)->value('id'),
+                        'subcategory_id' => $subcategoryCode
+                            ? AnimalSubcategory::withoutGlobalScopes()->where('code', $subcategoryCode)->value('id')
+                            : null,
+                        'breed_id' => $breedIds === [] ? null : $breedIds[$index % count($breedIds)],
+                        'color_id' => $colorIds === [] ? null : $colorIds[$index % count($colorIds)],
+                        'sex' => $sex,
+                        'teeth' => $teeth,
+                        'entry_weight' => $weight,
                         'renspa' => self::RENSPA,
                         'provider_id' => null,
-                        'entry_date' => $now->copy()->subDays(rand(45, 90))->toDateString(),
+                        'entry_date' => $now->copy()->subDays(60 + $index)->toDateString(),
                     ]
                 );
+                $index++;
+                $weights[] = $weight;
 
-                // Caravan individual weight record
-                CaravanWeight::updateOrCreate(
+                CaravanWeight::create(
                     [
                         'caravan_id' => $caravan->id,
                         'current' => true,
-                    ],
-                    [
-                        'weight' => $weightVal,
+                        'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
+                        'weight' => $weight,
                         'weighing_date' => $now->copy()->subDays(15)->toDateString(),
                         'notes' => 'Pesaje de control inicial Hacienda Secundaria',
                     ]
                 );
 
-                // Female details if female
-                if ($animalData['sex'] === 'H' && $animalData['arrival_cat']) {
-                    FemaleCaravanDetail::updateOrCreate(
-                        [
-                            'caravan_id' => $caravan->id,
-                        ],
-                        [
-                            'is_empty' => true,
-                            'arrival_category' => $animalData['arrival_cat'],
-                        ]
-                    );
+                if ($sex === 'H') {
+                    FemaleCaravanDetail::create(['caravan_id' => $caravan->id, 'is_empty' => true, 'arrival_category' => AnimalCategoryEnum::VACA]);
                 }
             }
 
-            // 5. Update batch totals and compute metrics
-            $caravansCount = count($batchWeightsList);
-            $totalWeight = array_sum($batchWeightsList);
-            $avgWeight = $caravansCount > 0 ? round($totalWeight / $caravansCount, 2) : 0.0;
-            $minWeight = $caravansCount > 0 ? min($batchWeightsList) : 0.0;
-            $maxWeight = $caravansCount > 0 ? max($batchWeightsList) : 0.0;
-
-            $batch->update([
-                'current_weight' => $avgWeight,
-                'total_weight' => $totalWeight,
-                'caravans_count' => $caravansCount,
-                'weighed_count' => $caravansCount,
-                'min_weight' => $minWeight,
-                'max_weight' => $maxWeight,
-            ]);
-
-            // Historical weight entry for charts and curves
-            BatchWeight::updateOrCreate(
-                [
-                    'batch_id' => $batchId,
-                    'type' => 'INITIAL',
-                ],
-                [
-                    'activity_id' => $activity?->id ?? 1,
-                    'weight' => $avgWeight,
-                    'weighing_date' => $now->copy()->subDays(15)->toDateString(),
-                ]
-            );
+            // Only when this run put animals in: an existing batch keeps the metrics the app computed.
+            if ($weights !== []) {
+                $this->updateBatchMetrics($batch, (int) ($activity?->id ?? 1), $now);
+            }
         }
 
         $this->command?->info(sprintf(
-            'SecondaryCompanyLivestockSeeder: Seeded 6 batches and 30 caravans for "%s" in "%s".',
+            'SecondaryCompanyLivestockSeeder: "%s" con %s y el proveedor %s (%d campos).',
             self::COMPANY_NAME,
-            self::FARM_NAME
+            implode(', ', array_map(fn (string $name) => sprintf('"%s" (%d)', $name, count(self::BATCHES[$name]['animals'])), array_keys(self::BATCHES))),
+            self::PROVIDER['name'],
+            count(self::PROVIDER_FARMS)
         ));
+    }
+
+    private function seedProvider(int $companyId): void
+    {
+        $provider = Provider::updateOrCreate(
+            ['cuit' => self::PROVIDER['cuit']],
+            [
+                'name' => self::PROVIDER['name'],
+                'commercial_name' => self::PROVIDER['commercial_name'],
+                'location' => self::PROVIDER['location'],
+                'phone' => self::PROVIDER['phone'],
+                'is_active' => true,
+            ]
+        );
+
+        foreach (self::PROVIDER_FARMS as $name => [$renspa, $location]) {
+            Farm::withoutGlobalScopes()->updateOrCreate(
+                ['company_id' => $companyId, 'provider_id' => $provider->id, 'name' => $name],
+                ['renspa' => $renspa, 'location' => $location, 'is_active' => true]
+            );
+        }
+    }
+
+    /**
+     * The batch totals from the current weight of every animal in it now.
+     */
+    private function updateBatchMetrics(Batch $batch, int $activityId, Carbon $now): void
+    {
+        $caravanIds = Caravan::withoutGlobalScopes()->where('batch_id', $batch->id)->pluck('id');
+        $weights = CaravanWeight::whereIn('caravan_id', $caravanIds)->where('current', true)->pluck('weight')->map(fn ($w) => (float) $w);
+        $weighed = $weights->count();
+        $average = $weighed > 0 ? round($weights->avg(), 2) : 0.0;
+
+        $batch->update([
+            'current_weight' => $average,
+            'total_weight' => $weights->sum(),
+            'caravans_count' => $caravanIds->count(),
+            'weighed_count' => $weighed,
+            'min_weight' => $weighed > 0 ? $weights->min() : 0.0,
+            'max_weight' => $weighed > 0 ? $weights->max() : 0.0,
+        ]);
+
+        // Historical entry for the weight charts and curves, once per batch.
+        BatchWeight::firstOrCreate(
+            ['batch_id' => $batch->id, 'type' => 'INITIAL'],
+            ['activity_id' => $activityId, 'weight' => $average, 'weighing_date' => $now->copy()->subDays(15)->toDateString()]
+        );
     }
 }

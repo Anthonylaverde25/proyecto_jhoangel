@@ -22,8 +22,10 @@ class GestationEntity
         private ?string $lossNotes,
         private ?string $endDate,
         private ?string $notes,
-        private GestationStage $gestationStage,
-        private float $gestationMonths,
+        /** Declared at the diagnosis, or derived from the months; null when only "pregnant" was declared. */
+        private ?GestationStage $gestationStage,
+        /** Declared at the diagnosis (scan); null when not declared. Never defaulted. */
+        private ?float $gestationMonths,
         private array $sires = [],
         private ?int $serviceOrderId = null,
         /** The day an N reported she passed her due date without calving. The alert is open while the gestation is current. */
@@ -50,10 +52,13 @@ class GestationEntity
 
     public function getEstimatedDueDate(): ?string
     {
-        if ($this->estimatedDueDate === null && $this->startDate !== null) {
+        // Estimated from the declared months, or from the stage's reference months: a planning
+        // figure, never stored as a declared fact. Nothing to estimate from without either.
+        $monthsForEstimate = $this->gestationMonths ?? $this->gestationStage?->toDefaultMonths();
+        if ($this->estimatedDueDate === null && $this->startDate !== null && $monthsForEstimate !== null) {
             try {
                 $startDateObj = new \DateTime($this->startDate);
-                $daysRemaining = (int) round((9.0 - $this->gestationMonths) * 30.4375);
+                $daysRemaining = (int) round((9.0 - $monthsForEstimate) * 30.4375);
                 if ($daysRemaining < 0) {
                     $daysRemaining = 0;
                 }
@@ -134,14 +139,24 @@ class GestationEntity
         return $this->notes;
     }
 
-    public function getGestationStage(): GestationStage
+    public function getGestationStage(): ?GestationStage
     {
         return $this->gestationStage;
     }
 
-    public function getGestationMonths(): float
+    public function getGestationMonths(): ?float
     {
         return $this->gestationMonths;
+    }
+
+    /**
+     * A re-check of the same gestation that states (or corrects) its stage and months.
+     */
+    public function restage(?GestationStage $gestationStage, ?float $gestationMonths): void
+    {
+        $this->gestationStage = $gestationStage;
+        $this->gestationMonths = $gestationMonths;
+        $this->estimatedDueDate = null;
     }
 
     /**

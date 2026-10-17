@@ -8,7 +8,6 @@ use App\Core\Enums\AnimalSex;
 use App\Core\Enums\GestationStage;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
-use Illuminate\Validation\Rule;
 
 class UpsertCaravanRequest extends FormRequest
 {
@@ -42,13 +41,12 @@ class UpsertCaravanRequest extends FormRequest
             'farm_id'        => 'nullable|integer|exists:farms,id',
             'is_empty'       => 'nullable|boolean',
             'entry_date'     => 'nullable|date',
+            // Stage and months are optional: many producers only declare "pregnant".
             'gestation_stage' => [
-                Rule::requiredIf(fn() => $this->input('is_empty') === false && !$this->filled('gestation_months')),
                 'nullable',
                 new Enum(GestationStage::class)
             ],
             'gestation_months' => [
-                Rule::requiredIf(fn() => $this->input('is_empty') === false && !$this->filled('gestation_stage')),
                 'nullable',
                 'numeric',
                 'min:0',

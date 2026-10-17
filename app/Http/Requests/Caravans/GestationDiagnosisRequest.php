@@ -30,6 +30,7 @@ class GestationDiagnosisRequest extends FormRequest
             'gestation_months'  => 'nullable|numeric|min:0|max:9.5',
             'confirmed_sire_id' => 'nullable|integer|exists:caravans,id',
             'diagnosis_date'    => 'required|date_format:Y-m-d',
+            'empty_destination_batch_id' => 'nullable|integer|exists:batches,id',
         ];
     }
 }

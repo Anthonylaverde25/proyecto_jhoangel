@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\TransferOrders;
 
+use App\Core\Enums\WeighingTypeCode;
+use App\Models\WeighingType;
 use App\Models\Activity;
 use App\Models\AnimalCategory;
 use App\Models\AnimalSubcategory;
@@ -226,6 +228,7 @@ class RegisterTransferTest extends VeterinaryTestCase
         $target = $this->existingBatch('Recría Peso Tardío REG');
 
         CaravanWeight::create([
+            'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
             'caravan_id' => $animals[0]->id,
             'weight' => 300,
             'current' => true,

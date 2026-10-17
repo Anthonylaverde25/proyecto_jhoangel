@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Application\Services;
 
+use App\Core\Enums\WeighingSource;
+use App\Core\Enums\WeighingTypeCode;
+use App\Core\Services\CaravanWeighingRecorder;
+use App\Core\ValueObjects\WeighingReading;
 use App\Application\DTOs\Ing01\Ing01SubmissionDTO;
 use App\Models\Batch;
 use App\Models\BatchType;
 use App\Models\Caravan;
 use App\Models\CaravanMovement;
-use App\Models\CaravanWeight;
 use App\Models\Company;
 use App\Models\Farm;
 use App\Models\Provider;
@@ -21,7 +24,8 @@ final class Ing01TemplateProcessor
     public function __construct(
         private readonly AnimalCategoryResolver $categoryResolver,
         private readonly BreedAndColorResolver $breedAndColorResolver,
-        private readonly ActivityResolver $activityResolver
+        private readonly ActivityResolver $activityResolver,
+        private readonly CaravanWeighingRecorder $weighingRecorder
     ) {
     }
 
@@ -128,15 +132,13 @@ final class Ing01TemplateProcessor
 
                 // 7. Record Initial Weight in caravan_weights
                 if ($item->entryWeight !== null && $item->entryWeight > 0) {
-                    CaravanWeight::where('caravan_id', $caravan->id)->update(['current' => false]);
-
-                    CaravanWeight::create([
-                        'caravan_id' => $caravan->id,
-                        'weight' => $item->entryWeight,
-                        'current' => true,
-                        'weighing_date' => $dto->entryDate,
-                        'notes' => 'Pesaje inicial de ingreso (ING-01)',
-                    ]);
+                    $this->weighingRecorder->record((int) $caravan->id, WeighingReading::typical(
+                        (float) $item->entryWeight,
+                        new \DateTimeImmutable((string) $dto->entryDate),
+                        WeighingTypeCode::ENTRY,
+                        WeighingSource::ENTRY,
+                        'Pesaje inicial de ingreso (ING-01)'
+                    ));
                 }
 
                 // 8. Record Movement in caravan_movements

@@ -208,7 +208,9 @@ final class RegisterBirthUseCase
                     $savedCalf->getId(),
                     $dto->calfWeight,
                     $dto->birthDate,
-                    "Initial birth weight"
+                    "Initial birth weight",
+                    \App\Core\Enums\WeighingTypeCode::BIRTH,
+                    source: \App\Core\Enums\WeighingSource::BIRTH
                 ));
                 $weightRecorded = true;
             }

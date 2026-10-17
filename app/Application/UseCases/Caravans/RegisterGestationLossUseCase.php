@@ -10,6 +10,7 @@ use App\Core\Exceptions\DomainException;
 use App\Core\Interfaces\IAnimalCategoryRepository;
 use App\Core\Interfaces\IBirthOrderRepository;
 use App\Core\Interfaces\ICaravanRepository;
+use App\Core\Interfaces\IServiceOrderRepository;
 use App\Core\ValueObjects\FemaleReproductiveDetails;
 use Illuminate\Support\Facades\DB;
 
@@ -29,7 +30,8 @@ final class RegisterGestationLossUseCase
     public function __construct(
         private readonly ICaravanRepository $caravanRepository,
         private readonly IAnimalCategoryRepository $animalCategoryRepository,
-        private readonly IBirthOrderRepository $birthOrderRepository
+        private readonly IBirthOrderRepository $birthOrderRepository,
+        private readonly IServiceOrderRepository $serviceOrderRepository
     ) {
     }
 
@@ -86,6 +88,11 @@ final class RegisterGestationLossUseCase
             }
 
             $saved = $this->caravanRepository->save($caravan);
+
+            // Lost before its service order was closed: the female needs a new verdict there.
+            if ($gestationId !== null) {
+                $this->serviceOrderRepository->reopenLostPregnancy($gestationId);
+            }
 
             if (!$fromBirthOrder && $gestationId !== null && $caravan->getCompanyId() !== null) {
                 $this->closeOpenBirthOrderLine($caravanId, $gestationId, (int) $caravan->getCompanyId(), $lossReasonId, $lossDate, $actionUserId);

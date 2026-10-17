@@ -11,7 +11,6 @@ use App\Application\UseCases\Batches\CreateBatchUseCase;
 use App\Core\Entities\BatchEntity;
 use App\Core\Entities\CaravanEntity;
 use App\Core\Entities\CaravanMovementEntity;
-use App\Core\Entities\CaravanWeightEntity;
 use App\Core\Entities\TransferOrderEntity;
 use App\Core\Enums\AnimalDentition;
 use App\Core\Enums\BatchWeightCause;
@@ -25,13 +24,16 @@ use App\Core\Interfaces\IAnimalCategoryRepository;
 use App\Core\Interfaces\IBatchRepository;
 use App\Core\Interfaces\ICaravanMovementRepository;
 use App\Core\Interfaces\ICaravanRepository;
-use App\Core\Interfaces\ICaravanWeightRepository;
 use App\Core\Interfaces\ICompanyRepository;
 use App\Core\Interfaces\IFarmRepository;
 use App\Core\Services\AnimalCategoryResolution;
 use App\Core\Services\AnimalCategoryTextResolver;
 use App\Core\Services\BatchWeightService;
 use App\Core\Services\CaravanValueParser;
+use App\Core\Services\CaravanWeighingRecorder;
+use App\Core\Enums\WeighingSource;
+use App\Core\Enums\WeighingTypeCode;
+use App\Core\ValueObjects\WeighingReading;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -65,7 +67,7 @@ final class ProcessCact01SubmissionUseCase
         private readonly IBatchRepository $batchRepository,
         private readonly IActivityRepository $activityRepository,
         private readonly ICaravanMovementRepository $movementRepository,
-        private readonly ICaravanWeightRepository $caravanWeightRepository,
+        private readonly CaravanWeighingRecorder $weighingRecorder,
         private readonly IFarmRepository $farmRepository,
         private readonly ICompanyRepository $companyRepository,
         private readonly BatchWeightService $batchWeightService,
@@ -415,18 +417,11 @@ final class ProcessCact01SubmissionUseCase
                 if ($row['peso_actual'] !== null) {
                     // A weighing loaded late (a registered transfer, a sheet scanned days after)
                     // joins the history without displacing a later one as the current weight.
-                    $isCurrent = !$this->caravanWeightRepository->hasWeighingAfter($caravanId, $date);
-
-                    if ($isCurrent) {
-                        $this->caravanWeightRepository->markAllNonCurrentForCaravan($caravanId);
-                    }
-
-                    $this->caravanWeightRepository->save(new CaravanWeightEntity(
-                        null,
-                        $caravanId,
+                    $this->weighingRecorder->record($caravanId, WeighingReading::typical(
                         $row['peso_actual'],
-                        $isCurrent,
                         $date,
+                        WeighingTypeCode::CONTROL,
+                        WeighingSource::ACTIVITY_CHANGE,
                         $headerNotes
                     ));
                     $weighedCount++;
@@ -445,7 +440,7 @@ final class ProcessCact01SubmissionUseCase
             // so an unweighed sheet would write a CONTROL identical to the closing point
             // above: a second dot that looks like a weighing and is not one.
             if ($weighedCount > 0) {
-                $this->batchWeightService->recalculateBatchWeight($sourceBatchId, BatchWeightCause::CONTROL, $date);
+                $this->batchWeightService->recalculateBatchWeight($sourceBatchId, BatchWeightCause::CONTROL, $date, WeighingTypeCode::CONTROL);
             }
 
             // STEP 4. Create the new batches, resolve each destination's RENSPA and move

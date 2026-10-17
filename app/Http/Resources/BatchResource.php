@@ -52,6 +52,8 @@ class BatchResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $activeService = $this->activeService();
+
         return [
             'id'            => $this->resource->getId(),
             'name'          => $this->resource->getName(),
@@ -82,31 +84,43 @@ class BatchResource extends JsonResource
             'batch_type_id'   => $this->resource->getBatchTypeId(),
             'batch_type_name' => $this->resource->getBatchTypeName(),
             'batch_type_code' => $this->resource->getBatchTypeCode(),
-            'is_service_batch'=> $this->resource->isServiceBatch(),
             'is_weaning_batch'=> $this->resource->isWeaningBatch(),
-            'service_detail'  => $this->resource->getServiceDetail() ? [
-                'id'                      => $this->resource->getServiceDetail()->getId(),
-                'female_category_id'      => $this->resource->getServiceDetail()->getFemaleCategoryId(),
-                'female_category_name'    => $this->resource->getServiceDetail()->getFemaleCategoryName(),
-                'female_category_code'    => $this->resource->getServiceDetail()->getFemaleCategoryCode(),
-                'female_subcategory_id'   => $this->resource->getServiceDetail()->getFemaleSubcategoryId(),
-                'female_subcategory_name' => $this->resource->getServiceDetail()->getFemaleSubcategoryName(),
-                'female_subcategory_code' => $this->resource->getServiceDetail()->getFemaleSubcategoryCode(),
-                'male_category_id'        => $this->resource->getServiceDetail()->getMaleCategoryId(),
-                'male_category_name'      => $this->resource->getServiceDetail()->getMaleCategoryName(),
-                'male_category_code'      => $this->resource->getServiceDetail()->getMaleCategoryCode(),
-                'target_bull_ratio'       => $this->resource->getServiceDetail()->getTargetBullRatio(),
-                'planned_start_date'      => $this->resource->getServiceDetail()->getPlannedStartDate(),
-                'planned_end_date'        => $this->resource->getServiceDetail()->getPlannedEndDate(),
-                'notes'                   => $this->resource->getServiceDetail()->getNotes(),
-            ] : null,
-            'is_in_service'   => $this->resource->getId() ? \App\Models\ServiceOrder::where('origin_batch_id', $this->resource->getId())->where('status', 'APPROVED')->exists() : false,
-            'active_service_order' => $this->resource->getId() ? \App\Models\ServiceOrder::where('origin_batch_id', $this->resource->getId())->where('status', 'APPROVED')->select('id', 'code', 'status', 'planned_start_date', 'service_batch_id')->first() : null,
-            'service_order_origin_batch_id' => $this->resource->getId() ? \App\Models\ServiceOrder::where('service_batch_id', $this->resource->getId())->value('origin_batch_id') : null,
+            'is_in_service'   => $activeService !== null && $activeService['status'] === 'APPROVED',
+            'active_service_order' => $activeService,
             'entry_order'   => $this->entryOrder,
             'incoming_entry_orders' => $this->incomingEntryOrders,
             'created_at'    => $this->resource->getCreatedAt()?->format('Y-m-d H:i:s'),
         ];
 
+    }
+
+    /**
+     * The service running on the batch (DRAFT or APPROVED). Read from the entity when the
+     * repository eager loaded it, so a batch list does not query once per row.
+     *
+     * @return array{id: int, code: string, status: string, planned_start_date: ?string, is_controlled_service: bool}|null
+     */
+    private function activeService(): ?array
+    {
+        if ($this->resource->isActiveServiceOrderLoaded()) {
+            return $this->resource->getActiveServiceOrder();
+        }
+
+        $batchId = $this->resource->getId();
+        if ($batchId === null) {
+            return null;
+        }
+
+        $order = \App\Models\ServiceOrder::where('batch_id', $batchId)
+            ->whereIn('status', ['DRAFT', 'APPROVED'])
+            ->first(['id', 'code', 'status', 'planned_start_date', 'is_controlled_service']);
+
+        return $order === null ? null : [
+            'id' => (int) $order->id,
+            'code' => (string) $order->code,
+            'status' => (string) $order->status,
+            'planned_start_date' => $order->planned_start_date?->format('Y-m-d'),
+            'is_controlled_service' => (bool) $order->is_controlled_service,
+        ];
     }
 }

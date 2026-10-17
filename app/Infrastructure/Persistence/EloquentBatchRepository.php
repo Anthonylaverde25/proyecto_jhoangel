@@ -15,9 +15,7 @@ class EloquentBatchRepository implements IBatchRepository
         'farm.provider',
         'batchType',
         'activity',
-        'serviceDetail.femaleCategory',
-        'serviceDetail.femaleSubcategory',
-        'serviceDetail.maleCategory',
+        'activeServiceOrder',
     ];
 
     public function findAll(?string $batchType = null, ?string $scope = null): array
@@ -121,7 +119,9 @@ class EloquentBatchRepository implements IBatchRepository
         ?float $totalWeight = null,
         ?int $caravansCount = null,
         ?int $weighedCount = null,
-        ?\DateTimeInterface $weightsAsOf = null
+        ?\DateTimeInterface $weightsAsOf = null,
+        ?\App\Core\Enums\WeighingTypeCode $weighingType = null,
+        ?int $weighingOrderId = null
     ): void {
         \App\Models\BatchWeight::create([
             'batch_id' => $batchId,
@@ -133,6 +133,10 @@ class EloquentBatchRepository implements IBatchRepository
             'weights_as_of' => $weightsAsOf?->format('Y-m-d'),
             'type' => $type,
             'weighing_date' => $date->format('Y-m-d'),
+            'weighing_type_id' => $weighingType !== null
+                ? \App\Models\WeighingType::where('code', $weighingType->value)->value('id')
+                : null,
+            'weighing_order_id' => $weighingOrderId,
         ]);
 
         // Sync the derived snapshot on the batch. A null average is propagated as null:

@@ -183,19 +183,22 @@ class PreServiceBullHealthApiTest extends TestCase
     public function test_cannot_create_service_order_with_unfit_bull(): void
     {
         $unfitBull = Caravan::where('identification', 'TR-016')->firstOrFail(); // TR-016 has Tritrichomonas foetus
-        $female = Caravan::create([
-            'company_id' => $this->company->id,
-            'identification' => 'VACA-999',
-            'sex' => \App\Core\Enums\AnimalSex::FEMALE,
-            'teeth' => 4,
-            'entry_weight' => 480.0,
-        ]);
 
         $batch = \App\Models\Batch::create([
             'company_id' => $this->company->id,
             'name' => 'Lote Cría General',
             'activity_id' => \App\Models\Activity::firstOrCreate(['code' => 'CRIA'], ['name' => 'Cría'])->id,
             'is_active' => true,
+        ]);
+
+        // The service runs on the batch, so the female has to be in it.
+        $female = Caravan::create([
+            'company_id' => $this->company->id,
+            'batch_id' => $batch->id,
+            'identification' => 'VACA-999',
+            'sex' => \App\Core\Enums\AnimalSex::FEMALE,
+            'teeth' => 4,
+            'entry_weight' => 480.0,
         ]);
 
         $payload = [

@@ -11,14 +11,21 @@ use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Exceptions\ServiceOrderDomainException;
 use App\Core\Interfaces\IBatchRepository;
 use App\Core\Interfaces\IServiceOrderRepository;
+use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Services\BullServiceFitnessPolicy;
+use App\Core\Services\ServiceOrderCodeGenerator;
+use App\Core\Services\ServiceStartPolicy;
+use Illuminate\Support\Facades\DB;
 
 final class CreateServiceOrderUseCase
 {
     public function __construct(
         private readonly IServiceOrderRepository $repository,
         private readonly IBatchRepository $batchRepository,
-        private readonly BullServiceFitnessPolicy $fitnessPolicy
+        private readonly BullServiceFitnessPolicy $fitnessPolicy,
+        private readonly ServiceStartPolicy $startPolicy,
+        private readonly ServiceOrderCodeGenerator $codeGenerator,
+        private readonly ICaravanRepository $caravanRepository
     ) {
     }
 
@@ -27,32 +34,26 @@ final class CreateServiceOrderUseCase
      */
     public function __invoke(CreateServiceOrderDTO $dto): ServiceOrderEntity
     {
-        $allCaravans = array_merge($dto->maleCaravanIds, $dto->femaleCaravanIds);
-        
-        if (empty($dto->maleCaravanIds)) {
-            throw ServiceOrderDomainException::domainError("Cannot create a service order without bulls");
-        }
-
-        if (empty($dto->femaleCaravanIds)) {
-            throw ServiceOrderDomainException::domainError("Cannot create a service order without females");
-        }
-
-        // 0. Validate Target Batch Activity (Must be 'CRIA') and Ownership (Must be internal/own batch)
+        // 0. The batch must be an own Cría batch without another active service, and the
+        // females must already be in it: approving the order only brings the bulls in.
         $targetBatch = $this->batchRepository->findById($dto->batchId);
         if ($targetBatch === null) {
             throw ServiceOrderDomainException::domainError("Target batch with ID {$dto->batchId} not found");
         }
 
-        if ($targetBatch->getFarmId() !== null) {
-            throw ServiceOrderDomainException::domainError("The selected target batch must be an internal (own) batch.");
-        }
+        $this->startPolicy->assertBatchCanStartService(
+            $targetBatch,
+            $this->repository->findActiveServiceOnBatch($dto->batchId) !== null
+        );
+        $this->startPolicy->assertHasBulls($dto->maleCaravanIds);
 
-        $activityCode = strtoupper((string) ($targetBatch->getActivityCode() ?? ''));
-        $activityName = mb_strtolower((string) ($targetBatch->getActivityName() ?? ''));
-
-        if ($activityCode !== 'CRIA' && !str_contains($activityName, 'cría') && !str_contains($activityName, 'cria')) {
-            throw ServiceOrderDomainException::domainError("The selected target batch must belong to the 'CRIA' (Breeding) activity.");
-        }
+        $femaleCaravanIds = $this->startPolicy->resolveExposedFemales(
+            $dto->isControlledService,
+            $this->caravanRepository->findServiceableFemaleIdsInBatch($dto->batchId, $dto->isControlledService),
+            $dto->femaleCaravanIds,
+            $this->caravanRepository->findBreedingExcludedFemaleIdsInBatch($dto->batchId)
+        );
+        $allCaravans = array_merge($dto->maleCaravanIds, $femaleCaravanIds);
 
         // 1. Check if any caravan is already active in another service order
         $conflicts = $this->repository->findActiveOrdersByCaravans($allCaravans, $dto->companyId);
@@ -63,6 +64,7 @@ final class CreateServiceOrderUseCase
         // 2. Verify existence, ownership, and sex of animals
         $sexes = $this->repository->verifyAnimalsSexAndOwnership($allCaravans, $dto->companyId);
 
+        $sanitaryStatusByBull = [];
         foreach ($dto->maleCaravanIds as $maleId) {
             if (!isset($sexes[$maleId])) {
                 throw ServiceOrderDomainException::domainError("Bull with ID {$maleId} not found or does not belong to the company");
@@ -71,11 +73,11 @@ final class CreateServiceOrderUseCase
                 throw ServiceOrderDomainException::invalidAnimalSex($maleId, 'male', $sexes[$maleId]);
             }
 
-            // Andrological & Clinical Health Guard (F5 / ADR-5).
-            $this->fitnessPolicy->assertFit($maleId, $dto->companyId);
+            // Admission guard: owner decision + veterinary verdict (F5 / ADR-5).
+            $sanitaryStatusByBull[$maleId] = $this->fitnessPolicy->assertFit($maleId, $dto->companyId);
         }
 
-        foreach ($dto->femaleCaravanIds as $femaleId) {
+        foreach ($femaleCaravanIds as $femaleId) {
             if (!isset($sexes[$femaleId])) {
                 throw ServiceOrderDomainException::domainError("Female with ID {$femaleId} not found or does not belong to the company");
             }
@@ -116,7 +118,7 @@ final class CreateServiceOrderUseCase
                     throw ServiceOrderDomainException::domainError("Invalid structure for female-sire assignments");
                 }
 
-                if (!in_array($femaleId, $dto->femaleCaravanIds, true)) {
+                if (!in_array($femaleId, $femaleCaravanIds, true)) {
                     throw ServiceOrderDomainException::domainError("Assigned female with ID {$femaleId} is not in the list of females of this order");
                 }
 
@@ -128,29 +130,36 @@ final class CreateServiceOrderUseCase
             }
 
             $uniqueAssignedFemales = array_unique($assignedFemales);
-            if (count($uniqueAssignedFemales) !== count($dto->femaleCaravanIds)) {
+            if (count($uniqueAssignedFemales) !== count($femaleCaravanIds)) {
                 throw ServiceOrderDomainException::domainError("All females must be assigned a sire in a controlled service");
             }
         }
 
-        // 4. Instantiate Entity in DRAFT state
-        $entity = new ServiceOrderEntity(
-            id: null,
-            companyId: $dto->companyId,
-            batchId: $dto->batchId,
-            code: $dto->code,
-            status: ServiceOrderStatus::DRAFT,
-            requestedByUserId: $dto->requestedByUserId,
-            plannedStartDate: $dto->plannedStartDate,
-            observations: $dto->observations,
-            maleCaravanIds: $dto->maleCaravanIds,
-            femaleCaravanIds: $dto->femaleCaravanIds,
-            serviceType: $dto->serviceType,
-            isControlledService: $dto->isControlledService,
-            femaleSireAssignments: $dto->femaleSireAssignments
-        );
+        // 4-5. Instantiate the DRAFT entity and persist it; the code is taken inside the
+        // transaction so the sequence lock covers the insert.
+        return DB::transaction(function () use ($dto, $femaleCaravanIds, $sanitaryStatusByBull): ServiceOrderEntity {
+            $entity = new ServiceOrderEntity(
+                id: null,
+                companyId: $dto->companyId,
+                batchId: $dto->batchId,
+                code: $this->codeGenerator->next($dto->companyId, $dto->plannedStartDate),
+                status: ServiceOrderStatus::DRAFT,
+                requestedByUserId: $dto->requestedByUserId,
+                plannedStartDate: $dto->plannedStartDate,
+                observations: $dto->observations,
+                maleCaravanIds: $dto->maleCaravanIds,
+                femaleCaravanIds: $femaleCaravanIds,
+                serviceType: $dto->serviceType,
+                isControlledService: $dto->isControlledService,
+                femaleSireAssignments: $dto->femaleSireAssignments
+            );
 
-        // 5. Persist
-        return $this->repository->save($entity, $dto->requestedByUserId);
+            $saved = $this->repository->save($entity, $dto->requestedByUserId);
+            foreach ($sanitaryStatusByBull as $maleId => $status) {
+                $this->repository->recordBullSanitaryStatusAtEntry((int) $saved->getId(), (int) $maleId, $status);
+            }
+
+            return $saved;
+        });
     }
 }

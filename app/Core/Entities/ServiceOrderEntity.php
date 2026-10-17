@@ -6,15 +6,20 @@ namespace App\Core\Entities;
 
 use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Exceptions\ServiceOrderDomainException;
+use App\Core\ValueObjects\ServiceOrderDiagnosisSummary;
 use DateTimeImmutable;
 use DateTimeInterface;
 
 final class ServiceOrderEntity
 {
+    /** Days after the bull withdrawal from which a pregnancy is reliably detected at the chute. */
+    public const SUGGESTED_DIAGNOSIS_DELAY_DAYS = 45;
+
     /**
      * @param int[] $maleCaravanIds
      * @param int[] $femaleCaravanIds
      * @param ServiceOrderHistoryEntity[] $history
+     * @param array<int, array{female_caravan_id: int, exposed_from: ?string, exposed_until: ?string, exit_reason: ?string, joined_after_start: bool, reproductive_status?: ?string, diagnosed_at?: ?string}> $femaleExposures
      */
     public function __construct(
         private readonly ?int $id,
@@ -41,14 +46,16 @@ final class ServiceOrderEntity
         private string $serviceType = 'single',
         private bool $isControlledService = false,
         private array $femaleSireAssignments = [],
-        private ?int $originBatchId = null,
-        private ?int $serviceBatchId = null,
         private ?float $targetBullRatio = 3.0,
         private ?string $plannedEndDate = null,
         private ?float $finalPregnancyRate = null,
         private array $maleDetails = [],
         private array $bullReplacements = [],
-        private array $allMaleCaravanIds = []
+        private array $allMaleCaravanIds = [],
+        private array $femaleExposures = [],
+        private ?string $batchName = null,
+        private ?string $diagnosisCompletedAt = null,
+        private ?int $parentServiceOrderId = null
     ) {
         if (empty($this->allMaleCaravanIds)) {
             $this->allMaleCaravanIds = $this->maleCaravanIds;
@@ -65,14 +72,53 @@ final class ServiceOrderEntity
         return $this->bullReplacements;
     }
 
-    public function getOriginBatchId(): ?int
+    /**
+     * Exposure window of every female of the order, keyed in list order.
+     *
+     * @return array<int, array{female_caravan_id: int, exposed_from: ?string, exposed_until: ?string, exit_reason: ?string, joined_after_start: bool}>
+     */
+    public function getFemaleExposures(): array
     {
-        return $this->originBatchId;
+        return $this->femaleExposures;
     }
 
-    public function getServiceBatchId(): ?int
+    /**
+     * Where the pregnancy diagnosis stands, from the current verdict of every female.
+     *
+     * @param string|null $exposureEndsOn the day the open exposures are about to end (closing day)
+     */
+    public function getDiagnosisSummary(?string $exposureEndsOn = null): ServiceOrderDiagnosisSummary
     {
-        return $this->serviceBatchId;
+        return ServiceOrderDiagnosisSummary::fromFemales($this->femaleExposures, $exposureEndsOn);
+    }
+
+    public function getDiagnosisCompletedAt(): ?string
+    {
+        return $this->diagnosisCompletedAt;
+    }
+
+    public function getParentServiceOrderId(): ?int
+    {
+        return $this->parentServiceOrderId;
+    }
+
+    public function acceptsDiagnosis(): bool
+    {
+        return $this->status->acceptsDiagnosis();
+    }
+
+    /**
+     * Suggested first day for the diagnosis: 45 days after the bulls left. Informative only.
+     */
+    public function getSuggestedDiagnosisDate(): ?string
+    {
+        if ($this->actualEndDate === null || $this->status === ServiceOrderStatus::APPROVED) {
+            return null;
+        }
+
+        return (new DateTimeImmutable(substr($this->actualEndDate, 0, 10)))
+            ->modify('+' . self::SUGGESTED_DIAGNOSIS_DELAY_DAYS . ' days')
+            ->format('Y-m-d');
     }
 
     public function getTargetBullRatio(): ?float
@@ -121,6 +167,11 @@ final class ServiceOrderEntity
     public function getBatchId(): int
     {
         return $this->batchId;
+    }
+
+    public function getBatchName(): ?string
+    {
+        return $this->batchName;
     }
 
     public function getCode(): string
@@ -310,21 +361,58 @@ final class ServiceOrderEntity
     }
 
     /**
-     * Transition to SUCCESS (Complete)
+     * The bulls left the batch before the closing: the service ended, the diagnosis goes on (APPROVED -> BULLS_WITHDRAWN).
      *
      * @throws ServiceOrderDomainException
      */
-    public function complete(?string $observations = null, ?string $actualEndDate = null): void
+    public function withdrawBulls(string $withdrawalDate, ?string $observations = null): void
     {
         if ($this->status !== ServiceOrderStatus::APPROVED) {
+            throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::BULLS_WITHDRAWN->value);
+        }
+
+        $this->status = ServiceOrderStatus::BULLS_WITHDRAWN;
+        $this->actualEndDate = substr($withdrawalDate, 0, 10);
+        $this->appendObservations($observations);
+    }
+
+    /**
+     * Closes the order by its diagnosis (-> SUCCESS): every female has a final verdict, and the
+     * pregnancy rate is fixed once, here. An order still in service ends its service the same day.
+     *
+     * @throws ServiceOrderDomainException
+     */
+    public function closeDiagnosis(string $closingDate, ?string $observations = null): void
+    {
+        if (!$this->status->acceptsDiagnosis()) {
             throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::SUCCESS->value);
         }
 
-        $this->status = ServiceOrderStatus::SUCCESS;
-        $this->actualEndDate = $actualEndDate ?? (new DateTimeImmutable())->format('Y-m-d');
-        if ($observations !== null) {
-            $this->observations = $observations;
+        $closingDate = substr($closingDate, 0, 10);
+        $summary = $this->getDiagnosisSummary($closingDate);
+        if ($summary->pendingCount() > 0) {
+            throw ServiceOrderDomainException::pendingDiagnoses($summary->getPendingFemaleIds());
         }
+
+        if ($this->status === ServiceOrderStatus::APPROVED) {
+            $this->actualEndDate = $closingDate;
+        }
+
+        $this->status = ServiceOrderStatus::SUCCESS;
+        $this->diagnosisCompletedAt = $closingDate;
+        $this->finalPregnancyRate = $summary->pregnancyRate();
+        $this->appendObservations($observations);
+    }
+
+    private function appendObservations(?string $observations): void
+    {
+        if ($observations === null || trim($observations) === '') {
+            return;
+        }
+
+        $this->observations = $this->observations !== null && $this->observations !== ''
+            ? "{$this->observations} | {$observations}"
+            : $observations;
     }
 
     /**
@@ -363,9 +451,14 @@ final class ServiceOrderEntity
             return;
         }
 
-        if ($newStatus === ServiceOrderStatus::SUCCESS) {
-            $this->complete();
-            return;
+        // Closing goes through the diagnosis, and the end of the service through the bull withdrawal:
+        // an administrative patch cannot skip either.
+        if ($newStatus === ServiceOrderStatus::SUCCESS || $newStatus === ServiceOrderStatus::BULLS_WITHDRAWN) {
+            throw ServiceOrderDomainException::domainError(
+                $newStatus === ServiceOrderStatus::SUCCESS
+                    ? 'Una orden de servicio se cierra con su diagnóstico de gestación ("Cerrar orden").'
+                    : 'La torada se retira con "Retirar torada", que mueve los toros y cierra la exposición.'
+            );
         }
 
         if ($newStatus === ServiceOrderStatus::REJECTED) {
@@ -379,6 +472,11 @@ final class ServiceOrderEntity
         }
 
         if ($newStatus === ServiceOrderStatus::DRAFT) {
+            // Once the bulls left, the service happened: its exposures and verdicts stay.
+            if (in_array($this->status, [ServiceOrderStatus::BULLS_WITHDRAWN, ServiceOrderStatus::SUCCESS], true)) {
+                throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::DRAFT->value);
+            }
+
             $this->status = ServiceOrderStatus::DRAFT;
             $this->approvedByUserId = null;
             $this->approvedAt = null;

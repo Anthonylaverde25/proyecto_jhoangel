@@ -55,7 +55,9 @@ interface IBatchRepository
         ?float $totalWeight = null,
         ?int $caravansCount = null,
         ?int $weighedCount = null,
-        ?\DateTimeInterface $weightsAsOf = null
+        ?\DateTimeInterface $weightsAsOf = null,
+        ?\App\Core\Enums\WeighingTypeCode $weighingType = null,
+        ?int $weighingOrderId = null
     ): void;
 
     /** Most recent point of the weight series of a batch, by date and then by insertion. */

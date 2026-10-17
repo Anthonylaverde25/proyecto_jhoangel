@@ -12,10 +12,9 @@ final class StartBatchServiceOrderDTO
      * @param array<int, array{female_caravan_id: int, assigned_male_caravan_id: int}> $femaleSireAssignments
      */
     public function __construct(
-        public readonly int $originBatchId,
+        public readonly int $batchId,
         public readonly int $companyId,
         public readonly int $userId,
-        public readonly ?string $serviceBatchName,
         public readonly array $maleCaravanIds,
         public readonly ?array $selectedFemaleCaravanIds = null,
         public readonly float $targetBullRatio = 3.0,
@@ -24,7 +23,9 @@ final class StartBatchServiceOrderDTO
         public readonly string $serviceType = 'multi',
         public readonly bool $isControlledService = false,
         public readonly array $femaleSireAssignments = [],
-        public readonly ?string $observations = null
+        public readonly ?string $observations = null,
+        /** The order this one continues: the bulls stayed with the empty females of a closed one. */
+        public readonly ?int $parentServiceOrderId = null
     ) {
     }
 
@@ -34,12 +35,9 @@ final class StartBatchServiceOrderDTO
     public static function fromArray(array $data): self
     {
         return new self(
-            originBatchId: (int) ($data['origin_batch_id'] ?? $data['batch_id']),
+            batchId: (int) $data['batch_id'],
             companyId: (int) $data['company_id'],
             userId: (int) $data['user_id'],
-            serviceBatchName: isset($data['service_batch_name']) && trim((string)$data['service_batch_name']) !== ''
-                ? trim((string)$data['service_batch_name'])
-                : null,
             maleCaravanIds: array_map('intval', (array) ($data['male_caravan_ids'] ?? [])),
             selectedFemaleCaravanIds: isset($data['selected_female_caravan_ids']) && is_array($data['selected_female_caravan_ids'])
                 ? array_map('intval', $data['selected_female_caravan_ids'])

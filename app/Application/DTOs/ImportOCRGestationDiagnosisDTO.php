@@ -13,7 +13,7 @@ namespace App\Application\DTOs;
 final readonly class ImportOCRGestationDiagnosisDTO
 {
     /**
-     * @param array<int, array{identification: string, diagnostico: string, gestation_stage?: string|null, observations?: string|null}> $rows
+     * @param array<int, array{identification: string, diagnostico?: string|null, gestation_stage?: string|null, gestation_months?: float|string|null, observations?: string|null}> $rows
      * @param int $serviceOrderId Required for traceability
      * @param string|null $diagnosisDate Defaults to today if not provided
      * @param int|null $emptyDestinationBatchId Destination batch ID for empty cows
@@ -23,6 +23,7 @@ final readonly class ImportOCRGestationDiagnosisDTO
         public int    $serviceOrderId,
         public ?string $diagnosisDate = null,
         public ?int   $emptyDestinationBatchId = null,
+        public ?int   $userId = null,
     ) {
     }
 }

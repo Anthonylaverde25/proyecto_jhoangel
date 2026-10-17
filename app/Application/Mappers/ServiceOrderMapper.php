@@ -29,9 +29,20 @@ class ServiceOrderMapper
 
         $femaleIds = [];
         $femaleSireAssignments = [];
+        $femaleExposures = [];
         if ($model->relationLoaded('females') && $model->females !== null) {
             $femaleIds = $model->females->pluck('id')->map(fn($id) => (int)$id)->toArray();
             foreach ($model->females as $female) {
+                $femaleExposures[] = [
+                    'female_caravan_id' => (int) $female->id,
+                    'exposed_from' => self::dateOrNull($female->pivot->exposed_from ?? null),
+                    'exposed_until' => self::dateOrNull($female->pivot->exposed_until ?? null),
+                    'exit_reason' => $female->pivot->exit_reason ?? null,
+                    'joined_after_start' => (bool) ($female->pivot->joined_after_start ?? false),
+                    'reproductive_status' => $female->pivot->reproductive_status ?? 'UNCHECKED',
+                    'diagnosed_at' => self::dateOrNull($female->pivot->diagnosed_at ?? null),
+                ];
+
                 if (isset($female->pivot) && $female->pivot->assigned_male_caravan_id !== null) {
                     $femaleSireAssignments[] = [
                         'female_caravan_id' => (int) $female->id,
@@ -128,8 +139,6 @@ class ServiceOrderMapper
             serviceType: $model->service_type ?? 'single',
             isControlledService: (bool) ($model->is_controlled_service ?? false),
             femaleSireAssignments: $femaleSireAssignments,
-            originBatchId: $model->origin_batch_id ? (int) $model->origin_batch_id : null,
-            serviceBatchId: $model->service_batch_id ? (int) $model->service_batch_id : null,
             targetBullRatio: $model->target_bull_ratio !== null ? (float) $model->target_bull_ratio : 3.0,
             plannedEndDate: $model->planned_end_date instanceof \DateTimeInterface
                 ? $model->planned_end_date->format('Y-m-d')
@@ -137,7 +146,11 @@ class ServiceOrderMapper
             finalPregnancyRate: $model->final_pregnancy_rate !== null ? (float) $model->final_pregnancy_rate : null,
             maleDetails: $maleDetails,
             bullReplacements: $bullReplacements,
-            allMaleCaravanIds: $allMaleIds
+            allMaleCaravanIds: $allMaleIds,
+            femaleExposures: $femaleExposures,
+            batchName: $model->relationLoaded('batch') ? $model->batch?->name : null,
+            diagnosisCompletedAt: self::dateOrNull($model->diagnosis_completed_at),
+            parentServiceOrderId: $model->parent_service_order_id !== null ? (int) $model->parent_service_order_id : null
         );
 
     }
@@ -150,8 +163,6 @@ class ServiceOrderMapper
 
         $model->company_id = $entity->getCompanyId();
         $model->batch_id = $entity->getBatchId();
-        $model->origin_batch_id = $entity->getOriginBatchId();
-        $model->service_batch_id = $entity->getServiceBatchId();
         $model->code = $entity->getCode();
         $model->status = $entity->getStatus()->value;
         $model->requested_by_user_id = $entity->getRequestedByUserId();
@@ -164,6 +175,8 @@ class ServiceOrderMapper
         $model->planned_end_date = $entity->getPlannedEndDate();
         $model->actual_start_date = $entity->getActualStartDate();
         $model->actual_end_date = $entity->getActualEndDate();
+        $model->diagnosis_completed_at = $entity->getDiagnosisCompletedAt();
+        $model->parent_service_order_id = $entity->getParentServiceOrderId();
         $model->target_bull_ratio = $entity->getTargetBullRatio();
         $model->final_pregnancy_rate = $entity->getFinalPregnancyRate();
         $model->observations = $entity->getObservations();
@@ -172,5 +185,14 @@ class ServiceOrderMapper
         $model->is_controlled_service = $entity->isControlledService();
 
         return $model;
+    }
+
+    private static function dateOrNull(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return $value instanceof \DateTimeInterface ? $value->format('Y-m-d') : substr((string) $value, 0, 10);
     }
 }

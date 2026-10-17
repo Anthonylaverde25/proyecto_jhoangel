@@ -28,9 +28,17 @@ use App\Core\Interfaces\IActivityRepository;
 use App\Infrastructure\Persistence\EloquentActivityRepository;
 use App\Core\Interfaces\ICaravanWeightRepository;
 use App\Infrastructure\Persistence\EloquentCaravanWeightRepository;
+use App\Core\Interfaces\IWeighingTypeRepository;
+use App\Core\Interfaces\IWeighingOrderRepository;
+use App\Infrastructure\Persistence\EloquentWeighingOrderRepository;
+use App\Infrastructure\Persistence\EloquentWeighingTypeRepository;
 use App\Core\Interfaces\IWorkTemplateRepository;
 use App\Infrastructure\Persistence\EloquentWorkTemplateRepository;
 use App\Core\Interfaces\IServiceOrderRepository;
+use App\Infrastructure\Observers\CaravanBatchAssignmentObserver;
+use App\Infrastructure\Observers\CaravanMovementServiceExposureObserver;
+use App\Models\Caravan;
+use App\Models\CaravanMovement;
 use App\Infrastructure\Persistence\EloquentServiceOrderRepository;
 use Illuminate\Support\ServiceProvider;
 
@@ -42,18 +50,23 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(ICompanyContext::class, \App\Core\Contexts\CompanyContext::class);
+        $this->app->bind(\App\Core\Interfaces\IAssistantGateway::class, \App\Infrastructure\Assistant\AiAgentAssistantGateway::class);
         $this->app->bind(ICaravanRepository::class, EloquentCaravanRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IBreedingEligibilityRepository::class, \App\Infrastructure\Persistence\EloquentBreedingEligibilityRepository::class);
         $this->app->bind(
             \App\Core\Interfaces\ICaravanRegistrationSubmissionRepository::class,
             \App\Infrastructure\Persistence\EloquentCaravanRegistrationSubmissionRepository::class
         );
         $this->app->bind(ICaravanLineageRepository::class, EloquentCaravanLineageRepository::class);
         $this->app->bind(ICaravanWeightRepository::class, EloquentCaravanWeightRepository::class);
+        $this->app->bind(IWeighingTypeRepository::class, EloquentWeighingTypeRepository::class);
+        $this->app->bind(IWeighingOrderRepository::class, EloquentWeighingOrderRepository::class);
         $this->app->bind(IFieldMappingResolver::class, EloquentFieldMappingResolver::class);
         $this->app->bind(IWorkdayRepository::class, EloquentWorkdayRepository::class);
         $this->app->bind(IProviderRepository::class, EloquentProviderRepository::class);
         $this->app->bind(IFarmRepository::class, EloquentFarmRepository::class);
         $this->app->bind(IBatchRepository::class, EloquentBatchRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IBatchOverviewRepository::class, \App\Infrastructure\Persistence\EloquentBatchOverviewRepository::class);
         $this->app->bind(ICompanyRepository::class, \App\Infrastructure\Persistence\EloquentCompanyRepository::class);
         $this->app->bind(IBreedRepository::class, \App\Infrastructure\Persistence\EloquentBreedRepository::class);
         $this->app->bind(ICaravanMovementRepository::class, EloquentCaravanMovementRepository::class);
@@ -61,6 +74,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(IWorkTemplateRepository::class, EloquentWorkTemplateRepository::class);
         $this->app->bind(IBatchTypeRepository::class, \App\Infrastructure\Persistence\EloquentBatchTypeRepository::class);
         $this->app->bind(IServiceOrderRepository::class, EloquentServiceOrderRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IServiceOrderIncidentRepository::class, \App\Infrastructure\Persistence\EloquentServiceOrderIncidentRepository::class);
         $this->app->bind(\App\Core\Interfaces\ITransferOrderRepository::class, \App\Infrastructure\Persistence\EloquentTransferOrderRepository::class);
         $this->app->bind(\App\Core\Interfaces\IWeaningOrderRepository::class, \App\Infrastructure\Persistence\EloquentWeaningOrderRepository::class);
         $this->app->bind(\App\Core\Interfaces\IEntryOrderRepository::class, \App\Infrastructure\Persistence\EloquentEntryOrderRepository::class);
@@ -95,6 +109,18 @@ class AppServiceProvider extends ServiceProvider
             \App\Core\Services\BullHealthEvaluationEngine::class,
             static fn (): \App\Core\Services\BullHealthEvaluationEngine => \App\Core\Services\BullHealthEvaluationEngine::fromConfig()
         );
+
+        // The exposure risk window reaches back as far as a negative venereal result is valid.
+        $this->app->bind(
+            \App\Core\Services\SanitaryExposureResolver::class,
+            static fn (): \App\Core\Services\SanitaryExposureResolver => new \App\Core\Services\SanitaryExposureResolver(
+                (int) config('livestock.venereal.validity_days', 365)
+            )
+        );
+        $this->app->bind(
+            \App\Core\Interfaces\ISanitaryExposureRepository::class,
+            \App\Infrastructure\Persistence\EloquentSanitaryExposureRepository::class
+        );
     }
 
     /**
@@ -102,7 +128,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
-     }
+        CaravanMovement::observe(CaravanMovementServiceExposureObserver::class);
+        Caravan::observe(CaravanBatchAssignmentObserver::class);
+    }
 }
 

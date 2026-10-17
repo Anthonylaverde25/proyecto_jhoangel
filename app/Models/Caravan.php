@@ -22,6 +22,7 @@ class Caravan extends Model
     protected $fillable = [
         'company_id',
         'batch_id',
+        'batch_assigned_at',
         'provider_id',
         'renspa',
         'provenance_metadata',
@@ -34,6 +35,8 @@ class Caravan extends Model
         'entry_weight',
         'exit_weight',
         'sex',
+        'is_breeding_eligible',
+        'breeding_exclusion_reason',
         'entry_date',
     ];
 
@@ -49,12 +52,14 @@ class Caravan extends Model
         'exit_weight' => 'decimal:2',
         'entry_date' => 'date:Y-m-d',
         'batch_id' => 'integer',
+        'batch_assigned_at' => 'datetime',
         'provider_id' => 'integer',
         'renspa' => 'string',
         'provenance_metadata' => 'array',
         'breed_id' => 'integer',
         'color_id' => 'integer',
         'sex' => AnimalSex::class,
+        'is_breeding_eligible' => 'boolean',
     ];
 
     /**
@@ -124,6 +129,17 @@ class Caravan extends Model
     /**
      * Get the female details associated with the caravan.
      */
+    /**
+     * Exposure of this female to a running (APPROVED) service: she shares the paddock with the bulls.
+     */
+    public function openServiceExposures(): HasMany
+    {
+        return $this->hasMany(ServiceOrderFemale::class, 'female_caravan_id')
+            ->whereNotNull('exposed_from')
+            ->whereNull('exposed_until')
+            ->whereHas('serviceOrder', fn (Builder $q) => $q->where('status', 'APPROVED'));
+    }
+
     public function femaleDetail(): HasOne
     {
         return $this->hasOne(FemaleCaravanDetail::class);

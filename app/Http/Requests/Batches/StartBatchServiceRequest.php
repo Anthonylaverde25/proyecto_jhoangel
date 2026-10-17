@@ -19,7 +19,6 @@ class StartBatchServiceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'service_batch_name'            => 'nullable|string|max:255',
             'male_caravan_ids'              => 'required|array|min:1',
             'male_caravan_ids.*'            => 'required|integer|exists:caravans,id',
             'selected_female_caravan_ids'   => 'nullable|array|min:1',

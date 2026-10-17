@@ -85,7 +85,7 @@ class UnevaluatedTestBullsSeederTest extends VeterinaryTestCase
         }
     }
 
-    public function test_the_service_order_lock_reports_them_as_never_evaluated(): void
+    public function test_they_enter_service_on_the_owners_decision_without_an_evaluation(): void
     {
         $bull = $this->testBull(self::TAGS[0]);
         $batchId = (int) $bull->batch_id;
@@ -97,21 +97,14 @@ class UnevaluatedTestBullsSeederTest extends VeterinaryTestCase
             'batch_id' => $batchId,
         ]);
 
-        $response = $this->apiAs('POST', '/service-orders', [
+        // The veterinary module is optional: a bull nobody evaluated is the owner's call.
+        $this->apiAs('POST', '/service-orders', [
             'batch_id' => $batchId,
             'code' => 'QA-SO-CRUDO',
             'planned_start_date' => now()->addDays(10)->toDateString(),
             'male_caravan_ids' => [$bull->id],
             'female_caravan_ids' => [$cow->id],
-        ]);
-
-        $response->assertStatus(422);
-
-        $message = mb_strtolower((string) $response->json('message'));
-
-        // Distinto del rechazo por "no apto": acá falta cargar el protocolo, no descartar el animal.
-        $this->assertStringContainsString('no tiene evaluación sanitaria registrada', $message);
-        $this->assertStringNotContainsString('no está apto', $message);
+        ])->assertStatus(201);
     }
 
     private function testBull(string $tag): Caravan

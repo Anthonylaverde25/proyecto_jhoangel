@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\TransferOrders;
 
+use App\Core\Enums\WeighingTypeCode;
+use App\Models\WeighingType;
 use App\Models\Activity;
 use App\Models\AnimalCategory;
 use App\Models\AnimalSubcategory;
@@ -292,7 +294,7 @@ class TransferOrderExecutionDeclarationTest extends VeterinaryTestCase
         ]);
 
         if ($weight !== null) {
-            CaravanWeight::create(['caravan_id' => $caravan->id, 'weight' => $weight, 'current' => true, 'weighing_date' => now()->subMonth()->toDateString()]);
+            CaravanWeight::create(['weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL), 'caravan_id' => $caravan->id, 'weight' => $weight, 'current' => true, 'weighing_date' => now()->subMonth()->toDateString()]);
         }
 
         return $caravan;

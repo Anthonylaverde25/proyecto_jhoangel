@@ -26,6 +26,8 @@ class TenantDatabaseSeeder extends Seeder
             AnimalCategorySeeder::class,
             LivestockHierarchySeeder::class,
             ActivitySeeder::class,
+            // Catalog of weighing purposes; every seeder below that weighs depends on it.
+            WeighingTypeSeeder::class,
             BatchWeightSeeder::class,
             WorkTemplateSeeder::class,
             BatchTypeSeeder::class,
@@ -69,6 +71,9 @@ class TenantDatabaseSeeder extends Seeder
             // Órdenes de ingreso de hacienda externa (ING-02): una en espera de DTE, una parcial con
             // su DTE cargado (ING-T-01..06) y un borrador, para probar /batches/external.
             EntryOrderTestSeeder::class,
+            // Servicio sobre lote operacional: un rodeo en servicio con ingresos y salidas, uno con
+            // tacto cargado (3 vacías) y uno listo para "Iniciar servicio" con toros aptos libres.
+            ServiceOnOperationalBatchTestSeeder::class,
         ]);
     }
 }

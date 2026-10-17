@@ -21,6 +21,23 @@ class CaravanMapper
      */
     public static function toEntity(Caravan $model): CaravanEntity
     {
+        $entity = self::buildEntity($model);
+        if ($model->relationLoaded('categoryRelation') && $model->categoryRelation !== null) {
+            $entity->setReproductiveCategory((bool) $model->categoryRelation->is_reproductive);
+        }
+        $attributes = $model->getAttributes();
+        if (array_key_exists('is_breeding_eligible', $attributes)) {
+            $entity->setBreedingEligibility(new \App\Core\ValueObjects\BreedingEligibility(
+                (bool) $attributes['is_breeding_eligible'],
+                \App\Core\Enums\BreedingExclusionReason::tryFrom((string) ($attributes['breeding_exclusion_reason'] ?? ''))
+            ));
+        }
+
+        return $entity;
+    }
+
+    private static function buildEntity(Caravan $model): CaravanEntity
+    {
         $breedName = $model->relationLoaded('breedRelation') && $model->breedRelation ? $model->breedRelation->name : null;
         $colorName = $model->relationLoaded('colorRelation') && $model->colorRelation ? $model->colorRelation->name : null;
 
@@ -64,8 +81,10 @@ class CaravanMapper
                     $g->loss_notes,
                     $g->end_date ? (is_string($g->end_date) ? $g->end_date : $g->end_date->format('Y-m-d')) : null,
                     $g->notes,
-                    $g->gestation_stage ?? GestationStage::HEAD,
-                    (float) ($g->gestation_months ?? 3.0),
+                    $g->gestation_stage instanceof GestationStage
+                        ? $g->gestation_stage
+                        : ($g->gestation_stage !== null ? GestationStage::tryFrom((string) $g->gestation_stage) : null),
+                    $g->gestation_months !== null ? (float) $g->gestation_months : null,
                     $sires,
                     $g->service_order_id ? (int) $g->service_order_id : null,
                     $g->calving_overdue_reported_at ? (is_string($g->calving_overdue_reported_at) ? substr($g->calving_overdue_reported_at, 0, 10) : $g->calving_overdue_reported_at->format('Y-m-d')) : null,
@@ -83,7 +102,8 @@ class CaravanMapper
             $model->subcategory_id ? (int) $model->subcategory_id : null,
             $model->relationLoaded('subcategoryRelation') && $model->subcategoryRelation ? $model->subcategoryRelation->code : null,
             $model->relationLoaded('subcategoryRelation') && $model->subcategoryRelation ? $model->subcategoryRelation->name : null,
-            false,
+            // Read with withExists('openServiceExposures as is_in_service') by the repository.
+            (bool) ($model->getAttributes()['is_in_service'] ?? false),
             $model->relationLoaded('batch') && $model->batch && $model->batch->relationLoaded('farm') && $model->batch->farm ? $model->batch->farm->name : null
         );
     }

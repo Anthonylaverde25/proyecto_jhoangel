@@ -139,6 +139,41 @@ final class VenerealSamplingStatus
         return $breakdown;
     }
 
+    /**
+     * Pathogens with a positive result no later negative superseded, with the date of that
+     * last positive.
+     *
+     * @return array<string, DateTimeImmutable>
+     */
+    public function standingPositives(): array
+    {
+        $standing = [];
+        foreach (array_keys($this->byPathogenCode) as $pathogenCode) {
+            $lastPositiveDate = $this->lastPositiveDate((string) $pathogenCode);
+            if ($lastPositiveDate !== null && !$this->hasNegativeAfter((string) $pathogenCode, $lastPositiveDate)) {
+                $standing[(string) $pathogenCode] = $lastPositiveDate;
+            }
+        }
+
+        return $standing;
+    }
+
+    /**
+     * Last negative result for the pathogen taken before the given date: the start of the
+     * period in which the bull may have been infected.
+     */
+    public function lastNegativeBefore(string $pathogenCode, DateTimeImmutable $date): ?DateTimeImmutable
+    {
+        $last = null;
+        foreach ($this->byPathogenCode[$pathogenCode] ?? [] as $sample) {
+            if ($sample->isNegative() && $sample->sampleDate < $date && ($last === null || $sample->sampleDate > $last)) {
+                $last = $sample->sampleDate;
+            }
+        }
+
+        return $last;
+    }
+
     private function lastPositiveDate(string $pathogenCode): ?DateTimeImmutable
     {
         $last = null;

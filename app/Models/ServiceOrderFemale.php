@@ -22,6 +22,15 @@ class ServiceOrderFemale extends Model
         'snapshot_entry_weight',
         'snapshot_body_condition',
         'reproductive_status',
+        'diagnosed_at',
+        'diagnosed_by_user_id',
+        'gestation_id',
+        'not_diagnosed_reason',
+        'not_diagnosed_notes',
+        'exposed_from',
+        'exposed_until',
+        'exit_reason',
+        'joined_after_start',
     ];
 
     protected $casts = [
@@ -31,6 +40,12 @@ class ServiceOrderFemale extends Model
         'assigned_male_caravan_id' => 'integer',
         'snapshot_entry_weight' => 'float',
         'snapshot_body_condition' => 'float',
+        'diagnosed_at' => 'date:Y-m-d',
+        'diagnosed_by_user_id' => 'integer',
+        'gestation_id' => 'integer',
+        'exposed_from' => 'date:Y-m-d',
+        'exposed_until' => 'date:Y-m-d',
+        'joined_after_start' => 'boolean',
     ];
 
     public function serviceOrder(): BelongsTo

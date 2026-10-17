@@ -5,20 +5,19 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Application\DTOs\CreateBatchDTO;
-use App\Application\DTOs\CreateServiceBatchDTO;
 use App\Application\DTOs\ServiceOrders\StartBatchServiceOrderDTO;
 use App\Application\DTOs\Batches\AssignExternalCaravansToOwnBatchDTO;
 use App\Application\UseCases\Batches\BatchUseCases;
 use App\Core\Interfaces\ICompanyContext;
 use App\Core\Interfaces\IEntryOrderRepository;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\BatchOverviewResource;
 use App\Http\Resources\BatchResource;
 use App\Http\Resources\BatchWeightResource;
 use App\Http\Resources\ServiceOrderResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Http\Requests\Batches\CreateBatchRequest;
-use App\Http\Requests\Batches\CreateServiceBatchRequest;
 use App\Http\Requests\Batches\StartBatchServiceRequest;
 use App\Http\Requests\Batches\ChangeBatchActivityRequest;
 use App\Http\Requests\Batches\ChangeBatchManagementRequest;
@@ -130,6 +129,20 @@ class BatchController extends Controller
             ->withIncomingEntryOrders($incoming[$entity->getId()] ?? []));
     }
 
+    /**
+     * Composition, reproductive state and alerts of a batch, for its detail page.
+     */
+    public function overview(int $id): JsonResponse
+    {
+        $overview = ($this->batch->overview)($id);
+
+        if ($overview === null) {
+            return response()->json(['message' => 'Lote no encontrado'], 404);
+        }
+
+        return response()->json((new BatchOverviewResource($overview))->resolve());
+    }
+
     public function changeActivity(ChangeBatchActivityRequest $request, int $id): JsonResponse
     {
         $validated = $request->validated();
@@ -189,25 +202,18 @@ class BatchController extends Controller
     }
 
     /**
-     * Crea un Lote de Servicio (Entore) con configuración homogénea y transferencias atómicas.
+     * Service history of a batch (every service it went through, newest first).
      */
-    public function storeService(CreateServiceBatchRequest $request): JsonResponse
+    public function serviceOrders(Request $request, int $id): JsonResponse
     {
-        $validated = $request->validated();
-        $dto = CreateServiceBatchDTO::fromArray($validated);
-
-        try {
-            $entity = ($this->batch->createService)($dto);
-        } catch (\App\Core\Exceptions\DomainException $e) {
-            return response()->json([
-                'message' => $e->getMessage(),
-            ], 422);
+        $companyId = (int) $request->header('X-Company-ID');
+        if ($companyId === 0) {
+            $companyId = (int) (auth()->user()?->company_id ?? 1);
         }
 
-        return response()->json(
-            new BatchResource($entity),
-            201
-        );
+        $orders = ($this->batch->listServiceOrders)($id, $companyId);
+
+        return response()->json(ServiceOrderResource::collection($orders));
     }
 
     /**
@@ -219,10 +225,10 @@ class BatchController extends Controller
         if ($companyId === 0) {
             $companyId = (int) (auth()->user()?->company_id ?? 1);
         }
-        $userId = (int) (auth()->id() ?? 1);
+        $userId = (int) (auth('sanctum')->id() ?? auth()->id() ?? 1);
 
         $validated = $request->validated();
-        $validated['origin_batch_id'] = $id;
+        $validated['batch_id'] = $id;
         $validated['company_id'] = $companyId;
         $validated['user_id'] = $userId;
 

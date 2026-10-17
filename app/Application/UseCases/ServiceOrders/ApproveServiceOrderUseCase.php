@@ -7,11 +7,15 @@ namespace App\Application\UseCases\ServiceOrders;
 use App\Core\Entities\ServiceOrderEntity;
 use App\Core\Exceptions\ServiceOrderDomainException;
 use App\Core\Interfaces\IServiceOrderRepository;
+use App\Core\Enums\BatchWeightCause;
+use App\Core\Services\BatchWeightService;
+use Illuminate\Support\Facades\DB;
 
 final class ApproveServiceOrderUseCase
 {
     public function __construct(
-        private readonly IServiceOrderRepository $repository
+        private readonly IServiceOrderRepository $repository,
+        private readonly BatchWeightService $batchWeightService
     ) {
     }
 
@@ -26,16 +30,27 @@ final class ApproveServiceOrderUseCase
         }
 
         if ($approve) {
-            $entity->approve($userId);
-            $savedEntity = $this->repository->save($entity, $userId, $reason);
+            return DB::transaction(function () use ($entity, $companyId, $userId, $reason): ServiceOrderEntity {
+                $entity->approve($userId);
+                $savedEntity = $this->repository->save($entity, $userId, $reason);
 
-            // Move all males and females to the destination batch physically
-            $allCaravans = array_merge($entity->getMaleCaravanIds(), $entity->getFemaleCaravanIds());
-            if (!empty($allCaravans)) {
-                $this->repository->moveAnimalsToBatch($allCaravans, $entity->getBatchId(), $companyId, $userId);
-            }
+                // Only the bulls enter the serviced batch: the females already are there.
+                $donorBatchIds = $this->repository->moveBullsToBatch(
+                    $entity->getMaleCaravanIds(),
+                    $entity->getBatchId(),
+                    $companyId,
+                    (string) $entity->getActualStartDate(),
+                    $entity->getCode()
+                );
+                foreach ($donorBatchIds as $donorBatchId) {
+                    $this->batchWeightService->recalculateBatchWeight($donorBatchId, BatchWeightCause::MOVEMENT_OUT);
+                }
+                if ($donorBatchIds !== []) {
+                    $this->batchWeightService->recalculateBatchWeight($entity->getBatchId(), BatchWeightCause::MOVEMENT_IN);
+                }
 
-            return $savedEntity;
+                return $savedEntity;
+            });
         } else {
             $entity->reject($userId, $reason ?? "Rejected during approval");
             return $this->repository->save($entity, $userId, $reason);

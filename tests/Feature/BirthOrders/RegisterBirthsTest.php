@@ -51,6 +51,67 @@ class RegisterBirthsTest extends BirthOrderTestCase
         $this->assertSame($before, BirthOrder::count());
     }
 
+    public function test_a_female_held_by_an_open_order_is_registered_in_that_order(): void
+    {
+        $held = $this->pregnantFemale('BO-H1');
+        $other = $this->pregnantFemale('BO-H2');
+        $free = $this->pregnantFemale('BO-H3');
+        $openId = (int) $this->emit([$held, $other])->json('id');
+        $before = BirthOrder::count();
+
+        $response = $this->apiAs('POST', '/birth-orders/register', [
+            'animals' => [
+                ['caravan_id' => $free->id, 'outcome' => 'STILLBORN', 'birth_date' => now()->toDateString()],
+                ['caravan_id' => $held->id, 'outcome' => 'LIVE', 'calf_identification' => 'BO-HC1', 'calf_sex' => 'H', 'birth_date' => now()->toDateString()],
+            ],
+        ])->assertStatus(201);
+
+        // One new order, with only the free female; the held one advanced her own order.
+        $this->assertSame($before + 1, BirthOrder::count());
+        $this->assertCount(2, $response->json('orders'));
+        $this->assertTrue($response->json('orders.0.created'));
+        $this->assertSame([$free->id], collect($response->json('order.animals'))->pluck('caravan_id')->all());
+        $this->assertSame($openId, $response->json('orders.1.id'));
+        $this->assertFalse($response->json('orders.1.created'));
+        $this->assertSame('PARTIAL', $response->json('orders.1.status'));
+        $this->assertSame($this->breedingA->id, (int) Caravan::where('identification', 'BO-HC1')->value('batch_id'));
+    }
+
+    public function test_only_held_females_create_no_order(): void
+    {
+        $held = $this->pregnantFemale('BO-J1');
+        $openId = (int) $this->emit([$held])->json('id');
+        $before = BirthOrder::count();
+
+        $response = $this->apiAs('POST', '/birth-orders/register', [
+            'animals' => [['caravan_id' => $held->id, 'outcome' => 'PERINATAL_DEATH', 'calf_sex' => 'M', 'birth_date' => now()->toDateString()]],
+        ])->assertStatus(201);
+
+        $this->assertSame($before, BirthOrder::count());
+        $this->assertSame($openId, $response->json('order.id'));
+        $this->assertSame('EXECUTED', $response->json('order.status'));
+    }
+
+    public function test_a_failure_in_one_order_rolls_back_the_others(): void
+    {
+        $held = $this->pregnantFemale('BO-K1');
+        $free = $this->pregnantFemale('BO-K2');
+        $openId = (int) $this->emit([$held])->json('id');
+        $before = BirthOrder::count();
+
+        // The free female registers fine; the held one lacks her calf tag.
+        $this->apiAs('POST', '/birth-orders/register', [
+            'animals' => [
+                ['caravan_id' => $free->id, 'outcome' => 'STILLBORN', 'birth_date' => now()->toDateString()],
+                ['caravan_id' => $held->id, 'outcome' => 'LIVE', 'calf_sex' => 'M', 'birth_date' => now()->toDateString()],
+            ],
+        ])->assertStatus(422)->assertJsonPath('row_errors.0.caravana_madre', 'BO-K1');
+
+        $this->assertSame($before, BirthOrder::count());
+        $this->assertSame('ISSUED', BirthOrder::find($openId)->status);
+        $this->assertNotNull($this->currentGestation($free->fresh()));
+    }
+
     public function test_an_order_is_executed_from_the_screen(): void
     {
         $a = $this->pregnantFemale('BO-O1');

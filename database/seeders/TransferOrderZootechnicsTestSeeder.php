@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Core\Enums\WeighingTypeCode;
+use App\Models\WeighingType;
 use App\Models\Activity;
 use App\Models\AnimalCategory;
 use App\Models\AnimalSubcategory;
@@ -61,11 +63,11 @@ class TransferOrderZootechnicsTestSeeder extends Seeder
             'destete' => $this->batch($companyId, 'Zoo Cría Destete', 'CRIA', 'WEANING', false),
             'novillitos' => $this->batch($companyId, 'Zoo Recría Novillitos', 'RECRIA', 'GROWING_STEERS', false),
             'vaquillonas' => $this->batch($companyId, 'Zoo Recría Vaquillonas', 'RECRIA', 'GROWING_REPLACEMENT_FEMALES', false),
-            'rodeo' => $this->batch($companyId, 'Zoo Cría Rodeo', 'CRIA', 'SERVICE', false),
+            'rodeo' => $this->batch($companyId, 'Zoo Cría Rodeo', 'CRIA', 'OPERATIONAL', false),
             'machos' => $this->batch($companyId, 'Zoo Recría Machos', 'RECRIA', 'GROWING_STEERS', false),
             'hembras' => $this->batch($companyId, 'Zoo Recría Hembras', 'RECRIA', 'GROWING_REPLACEMENT_FEMALES', false),
             'invernada' => $this->batch($companyId, 'Zoo Invernada Terminación', 'INVERNADA', 'OPERATIONAL', true),
-            'servicio' => $this->batch($companyId, 'Zoo Cría Servicio', 'CRIA', 'SERVICE', false),
+            'servicio' => $this->batch($companyId, 'Zoo Cría Servicio', 'CRIA', 'OPERATIONAL', false),
         ];
         $batchIds = array_map(fn (Batch $b) => (int) $b->id, $batches);
 
@@ -149,6 +151,7 @@ class TransferOrderZootechnicsTestSeeder extends Seeder
 
         CaravanWeight::where('caravan_id', $caravan->id)->delete();
         CaravanWeight::create([
+            'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
             'caravan_id' => $caravan->id,
             'weight' => $weight,
             'current' => true,

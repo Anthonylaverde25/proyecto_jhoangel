@@ -163,20 +163,20 @@ class BulkGestationDiagnosisTest extends TestCase
                     'gestation_stage'  => 'head',
                     'gestation_months' => 3.5,
                     'confirmed_sire_id'=> $this->bull->id,
-                    'diagnosis_date'   => '2026-08-20',
+                    'diagnosis_date'   => now()->toDateString(),
                 ],
                 [
                     'caravan_id'                 => $this->emptyCowToMove->id,
                     'service_order_id'           => $this->serviceOrder->id,
                     'is_pregnant'                => false,
-                    'diagnosis_date'             => '2026-08-20',
+                    'diagnosis_date'             => now()->toDateString(),
                     'empty_destination_batch_id' => $this->invernadaBatch->id,
                 ],
                 [
                     'caravan_id'                 => $this->emptyCowToKeep->id,
                     'service_order_id'           => $this->serviceOrder->id,
                     'is_pregnant'                => false,
-                    'diagnosis_date'             => '2026-08-20',
+                    'diagnosis_date'             => now()->toDateString(),
                     'empty_destination_batch_id' => null,
                 ],
             ]

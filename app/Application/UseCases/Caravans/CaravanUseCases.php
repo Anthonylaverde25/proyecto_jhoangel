@@ -17,6 +17,7 @@ final class CaravanUseCases
         public readonly ListCaravanWeightsUseCase $listWeights,
         public readonly BulkRecordCaravanWeightUseCase $bulkRecordWeights,
         public readonly ListGestatingCaravansByBatchUseCase $listGestatingByBatch,
+        public readonly UpdateBreedingEligibilityUseCase $updateBreedingEligibility,
     ) {
     }
 }

@@ -231,7 +231,9 @@ final class UpsertCaravanUseCase
                 $savedEntity->getId(),
                 $newWeight,
                 $weighingDateStr,
-                'Weight on transfer'
+                'Weight on transfer',
+                \App\Core\Enums\WeighingTypeCode::ENTRY,
+                source: \App\Core\Enums\WeighingSource::ENTRY
             ));
             $weightRecorded = true;
         }
@@ -312,7 +314,9 @@ final class UpsertCaravanUseCase
                 $savedEntity->getId(),
                 $newWeight,
                 $weighingDateStr,
-                'Initial weight on arrival'
+                'Initial weight on arrival',
+                \App\Core\Enums\WeighingTypeCode::ENTRY,
+                source: \App\Core\Enums\WeighingSource::ENTRY
             ));
             $weightRecorded = true;
         }
@@ -366,9 +370,9 @@ final class UpsertCaravanUseCase
     }
 
     /**
-     * Resolve gestation stage and months bidirectionally.
+     * Resolve gestation stage and months: months determine the stage, a stage alone keeps no months.
      *
-     * @return array{0: GestationStage, 1: float}
+     * @return array{0: ?GestationStage, 1: ?float}
      */
     private function resolveGestationDetails(?string $stageStr, ?float $months): array
     {
@@ -377,12 +381,11 @@ final class UpsertCaravanUseCase
             return [$stage, $months];
         }
 
-        if ($stageStr !== null) {
-            $stage = GestationStage::from($stageStr);
-            return [$stage, $stage->toDefaultMonths()];
+        if ($stageStr !== null && $stageStr !== '') {
+            return [GestationStage::from($stageStr), null];
         }
 
-        // Fallback defaults
-        return [GestationStage::HEAD, 3.0];
+        // Only "pregnant" was declared: no stage and no months are invented.
+        return [null, null];
     }
 }

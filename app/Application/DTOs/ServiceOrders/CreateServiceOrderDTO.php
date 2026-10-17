@@ -14,7 +14,7 @@ final readonly class CreateServiceOrderDTO
     public function __construct(
         public int $companyId,
         public int $batchId,
-        public string $code,
+        public ?string $code,
         public string $plannedStartDate,
         public int $requestedByUserId,
         public ?string $observations = null,
@@ -31,7 +31,7 @@ final readonly class CreateServiceOrderDTO
         return new self(
             (int) $data['company_id'],
             (int) $data['batch_id'],
-            (string) $data['code'],
+            isset($data['code']) ? (string) $data['code'] : null,
             (string) $data['planned_start_date'],
             (int) $data['requested_by_user_id'],
             isset($data['observations']) ? (string) $data['observations'] : null,

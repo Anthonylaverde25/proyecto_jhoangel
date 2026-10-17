@@ -22,8 +22,7 @@ class ServiceOrderResource extends JsonResource
             'id'                   => $this->resource->getId(),
             'company_id'           => $this->resource->getCompanyId(),
             'batch_id'             => $this->resource->getBatchId(),
-            'origin_batch_id'      => $this->resource->getOriginBatchId(),
-            'service_batch_id'     => $this->resource->getServiceBatchId(),
+            'batch_name'           => $this->resource->getBatchName(),
             'code'                 => $this->resource->getCode(),
             'status'               => $this->resource->getStatus()->value,
             'requested_by_user_id' => $this->resource->getRequestedByUserId(),
@@ -36,6 +35,13 @@ class ServiceOrderResource extends JsonResource
             'planned_end_date'     => $this->resource->getPlannedEndDate(),
             'actual_start_date'    => $this->resource->getActualStartDate(),
             'actual_end_date'      => $this->resource->getActualEndDate(),
+            'diagnosis_completed_at' => $this->resource->getDiagnosisCompletedAt(),
+            'suggested_diagnosis_date' => $this->resource->getSuggestedDiagnosisDate(),
+            'parent_service_order_id' => $this->resource->getParentServiceOrderId(),
+            // Computed from the current verdict of every female; provisional empties count as pending.
+            'diagnosis_summary'    => $this->resource->getDiagnosisSummary()->toArray(),
+            // What would still be missing to close the order today.
+            'pending_if_closed_today' => $this->resource->getDiagnosisSummary(date('Y-m-d'))->pendingCount(),
             'target_bull_ratio'    => $this->resource->getTargetBullRatio(),
             'final_pregnancy_rate' => $this->resource->getFinalPregnancyRate(),
             'observations'         => $this->resource->getObservations(),
@@ -44,6 +50,8 @@ class ServiceOrderResource extends JsonResource
             'active_male_caravan_ids' => $this->resource->getActiveMaleCaravanIds(),
             'all_male_caravan_ids'    => $this->resource->getAllMaleCaravanIds(),
             'female_caravan_ids'      => $this->resource->getFemaleCaravanIds(),
+            // Exposure window of each female: entries and exits while the service ran.
+            'female_exposures'        => $this->resource->getFemaleExposures(),
             'male_details'            => $this->resource->getMaleDetails(),
             'bull_replacements'       => $this->resource->getBullReplacements(),
             'service_type'              => $this->resource->getServiceType(),

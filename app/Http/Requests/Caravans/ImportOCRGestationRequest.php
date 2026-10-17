@@ -21,8 +21,11 @@ class ImportOCRGestationRequest extends FormRequest
         return [
             'rows'                          => 'required|array|min:1',
             'rows.*.identification'         => 'required|string|max:50',
-            'rows.*.diagnostico'            => 'required|string|in:PREGNANT,EMPTY,Preñada,Vacía,prenada,vacia',
-            'rows.*.gestation_stage'        => 'nullable|string|in:head,body,tail,cabeza,cuerpo,cola',
+            // Read row by row by the use case: a blank cell leaves the female pending and an
+            // unreadable one is reported on its row, without rejecting the whole sheet.
+            'rows.*.diagnostico'            => 'nullable|string|max:20',
+            'rows.*.gestation_stage'        => 'nullable|string|max:20',
+            'rows.*.gestation_months'       => 'nullable|numeric|min:0|max:9.5',
             'rows.*.observations'           => 'nullable|string|max:500',
             'service_order_id'              => 'required|integer|exists:service_orders,id',
             'diagnosis_date'                => 'nullable|date_format:Y-m-d',
@@ -38,9 +41,6 @@ class ImportOCRGestationRequest extends FormRequest
         return [
             'rows.required'                       => 'At least one row is required.',
             'rows.*.identification.required'       => 'Each row must have a caravan identification.',
-            'rows.*.diagnostico.required'          => 'Each row must have a diagnosis value.',
-            'rows.*.diagnostico.in'                => 'Diagnosis must be PREGNANT or EMPTY.',
-            'rows.*.gestation_stage.in'            => 'Gestation stage must be one of: head, body, tail.',
             'service_order_id.required'            => 'A service order is required for traceability.',
             'service_order_id.exists'              => 'The specified service order does not exist.',
         ];

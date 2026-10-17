@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Core\ValueObjects\CaravanSummaryRow;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * High-performance, lightweight Resource for paginated list and grid views.
  * Avoids deep lineage/gestation tree hydration for fast inventory display.
+ *
+ * @property CaravanSummaryRow $resource
  */
 class CaravanSummaryResource extends JsonResource
 {
@@ -20,30 +23,34 @@ class CaravanSummaryResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $categoryName = $this->categoryRelation?->name ?? ($this->category_id ? (string) $this->category_id : null);
-        $subcategoryName = $this->subcategoryRelation?->name ?? null;
-        $breedName = $this->breedRelation?->name ?? null;
-        $batch = $this->batch;
-        $currentWeight = $this->currentWeight?->weight ?? $this->entry_weight;
+        $row = $this->resource;
+        $categoryName = $row->categoryName ?? ($row->categoryId !== null ? (string) $row->categoryId : null);
 
         return [
-            'id'               => $this->id,
-            'identification'   => (string) $this->identification,
-            'category'         => $categoryName,
-            'category_id'      => $this->category_id,
-            'category_name'    => $categoryName,
-            'subcategory_id'   => $this->subcategory_id,
-            'subcategory_name' => $subcategoryName,
-            'teeth'            => $this->teeth,
-            'entry_weight'     => $this->entry_weight !== null ? (float) $this->entry_weight : null,
-            'current_weight'   => $currentWeight !== null ? (float) $currentWeight : null,
-            'breed'            => $breedName,
-            'breed_id'         => $this->breed_id,
-            'sex'              => $this->sex instanceof \BackedEnum ? $this->sex->value : (string) $this->sex,
-            'entry_date'       => $this->entry_date ? $this->entry_date->format('m/Y') : ($this->created_at ? $this->created_at->format('m/Y') : null),
-            'batch_id'         => $this->batch_id,
-            'batch_name'       => $batch?->name,
-            'farm_name'        => $batch?->farm?->name,
+            'id'                => $row->id,
+            'identification'    => $row->identification,
+            'category'          => $categoryName,
+            'category_id'       => $row->categoryId,
+            'category_name'     => $categoryName,
+            'subcategory_id'    => $row->subcategoryId,
+            'subcategory_name'  => $row->subcategoryName,
+            'teeth'             => $row->teeth,
+            'entry_weight'      => $row->entryWeight,
+            'current_weight'    => $row->currentWeight,
+            'breed'             => $row->breedName,
+            'breed_id'          => $row->breedId,
+            'sex'               => $row->sex,
+            'entry_date'        => $row->entryDate,
+            'batch_id'          => $row->batchId,
+            'batch_name'        => $row->batchName,
+            'farm_name'         => $row->farmName,
+            'batch_assigned_at' => $row->batchAssignedAt?->format('Y-m-d'),
+            'gestation_status'  => $row->gestationStatus,
+            'is_breeding_eligible' => $row->isBreedingEligible,
+            'breeding_exclusion_reason' => $row->breedingExclusionReason,
+            'breeding_exclusion_reason_label' => \App\Core\Enums\BreedingExclusionReason::tryFrom((string) $row->breedingExclusionReason)?->label(),
+            'is_reproductive_category' => $row->isReproductiveCategory,
+            'reproductive_status' => \App\Core\Enums\ReproductiveStatus::of($row->isReproductiveCategory, $row->isBreedingEligible)->value,
         ];
     }
 }

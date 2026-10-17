@@ -79,7 +79,6 @@ class CloseServiceOrderTest extends VeterinaryTestCase
         $order = ServiceOrder::create([
             'company_id'           => $this->company->id,
             'batch_id'             => $this->serviceBatch->id,
-            'service_batch_id'     => $this->serviceBatch->id,
             'code'                 => 'SO-TEST-' . uniqid(),
             'status'               => ServiceOrderStatus::APPROVED->value,
             'planned_start_date'   => '2026-10-01',
@@ -96,6 +95,7 @@ class CloseServiceOrderTest extends VeterinaryTestCase
             'service_order_id'    => $order->id,
             'female_caravan_id'   => $this->cow1->id,
             'reproductive_status' => 'UNCHECKED',
+            'exposed_from'        => '2026-10-01',
         ]);
 
         ServiceOrderMale::create([
@@ -126,13 +126,15 @@ class CloseServiceOrderTest extends VeterinaryTestCase
             'observations'                 => 'Toros retirados en excelente estado a descanso.',
         ]);
 
+        // The bull withdrawal ends the service, not the order: it waits for its diagnosis.
         $response->assertStatus(200);
-        $response->assertJsonPath('order.status', ServiceOrderStatus::SUCCESS->value);
+        $response->assertJsonPath('order.status', ServiceOrderStatus::BULLS_WITHDRAWN->value);
         $response->assertJsonPath('order.actual_end_date', $withdrawalDate);
 
         // Verify order persisted in DB
         $freshOrder = $order->fresh();
-        $this->assertEquals(ServiceOrderStatus::SUCCESS->value, $freshOrder->status);
+        $this->assertEquals(ServiceOrderStatus::BULLS_WITHDRAWN->value, $freshOrder->status);
+        $this->assertNull($freshOrder->final_pregnancy_rate);
         $this->assertEquals($withdrawalDate, $freshOrder->actual_end_date?->format('Y-m-d'));
         $this->assertStringContainsString('Toros retirados en excelente estado', (string) $freshOrder->observations);
 
@@ -163,6 +165,13 @@ class CloseServiceOrderTest extends VeterinaryTestCase
             $this->assertEquals($this->serviceBatch->id, $mov->from_batch_id);
             $this->assertEquals($this->restingBatch1->id, $mov->to_batch_id);
         }
+
+        // Without bulls there is no exposure: the cow's window ends on the withdrawal date.
+        $exposure = ServiceOrderFemale::where('service_order_id', $order->id)
+            ->where('female_caravan_id', $this->cow1->id)
+            ->first();
+        $this->assertSame($withdrawalDate, $exposure->exposed_until?->format('Y-m-d'));
+        $this->assertSame('BULLS_WITHDRAWN', $exposure->exit_reason);
     }
 
     public function test_close_service_order_with_individual_bull_destinations(): void
@@ -205,6 +214,6 @@ class CloseServiceOrderTest extends VeterinaryTestCase
         ]);
 
         $response->assertStatus(422);
-        $this->assertStringContainsString('Solo se pueden finalizar órdenes de servicio aprobadas', (string) $response->json('message'));
+        $this->assertStringContainsString('Solo se puede retirar la torada de una orden en servicio', (string) $response->json('message'));
     }
 }

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Core\Enums\WeighingTypeCode;
+use App\Models\WeighingType;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -382,6 +384,7 @@ class LivestockHierarchySeeder extends Seeder
                 ]);
 
                 DB::table('caravan_weights')->insert([
+                    'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
                     'caravan_id' => $cId,
                     'weight' => $ownB['weight'] + ($k * 5.5),
                     'weighing_date' => now()->subDays(60)->format('Y-m-d'),
@@ -448,6 +451,7 @@ class LivestockHierarchySeeder extends Seeder
             ]);
 
             DB::table('caravan_weights')->insert([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
                 'caravan_id' => $caravanId,
                 'weight' => $tf['weight'],
                 'weighing_date' => now()->subDays(rand(10, 30))->format('Y-m-d'),
@@ -497,6 +501,7 @@ class LivestockHierarchySeeder extends Seeder
             ]);
 
             DB::table('caravan_weights')->insert([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
                 'caravan_id' => $caravanId,
                 'weight' => $tb['weight'],
                 'weighing_date' => now()->subDays(rand(10, 30))->format('Y-m-d'),
@@ -752,12 +757,13 @@ class LivestockHierarchySeeder extends Seeder
             $serviceOrderId = DB::table('service_orders')->insertGetId([
                 'company_id' => $serviceOrderData['company_id'],
                 'batch_id' => $serviceOrderData['batch_id'],
-                'code' => 'SO-20260605-105950-7238',
+                'code' => 'SO-' . now()->subDays(30)->format('Y') . '-001',
                 'status' => 'APPROVED',
                 'service_type' => 'single',
                 'is_controlled_service' => false,
                 'requested_by_user_id' => $userId,
                 'planned_start_date' => now()->subDays(30)->format('Y-m-d'),
+                'actual_start_date' => now()->subDays(30)->format('Y-m-d'),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -769,6 +775,7 @@ class LivestockHierarchySeeder extends Seeder
                     'service_order_id' => $serviceOrderId,
                     'female_caravan_id' => $femaleId,
                     'assigned_male_caravan_id' => $bullId,
+                    'exposed_from' => now()->subDays(30)->format('Y-m-d'),
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);

@@ -66,15 +66,16 @@ class BatchClassificationTest extends TestCase
         return (int) BatchType::where('code', $code)->firstOrFail()->id;
     }
 
-    public function test_catalogue_has_twelve_types_with_their_activities(): void
+    public function test_catalogue_has_eleven_types_with_their_activities(): void
     {
-        $this->assertSame(12, BatchType::count());
+        // No SERVICE type: a service is an order over an operational Cría batch.
+        $this->assertSame(11, BatchType::count());
+        $this->assertNull(BatchType::where('code', 'SERVICE')->first());
         $this->assertNull(BatchType::where('code', 'GROWING_CONFINED')->first());
 
         $expected = [
             'OPERATIONAL' => null,
             'RESERVE' => null,
-            'SERVICE' => 'CRIA',
             'WEANING' => 'CRIA',
             'GROWING_HEIFERS' => 'RECRIA',
             'GROWING_STEERS' => 'RECRIA',

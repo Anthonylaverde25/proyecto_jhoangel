@@ -5,17 +5,16 @@ declare(strict_types=1);
 namespace App\Application\UseCases\Caravans;
 
 use App\Application\DTOs\BulkRecordCaravanWeightDTO;
-use App\Core\Entities\CaravanWeightEntity;
-use App\Core\Interfaces\ICaravanWeightRepository;
+use App\Core\Enums\BatchWeightCause;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Services\BatchWeightService;
+use App\Core\Services\CaravanWeighingRecorder;
 use Illuminate\Support\Facades\DB;
-use App\Core\Enums\BatchWeightCause;
 
 final class BulkRecordCaravanWeightUseCase
 {
     public function __construct(
-        private readonly ICaravanWeightRepository $caravanWeightRepository,
+        private readonly CaravanWeighingRecorder $recorder,
         private readonly ICaravanRepository $caravanRepository,
         private readonly BatchWeightService $batchWeightService
     ) {
@@ -24,34 +23,33 @@ final class BulkRecordCaravanWeightUseCase
     public function __invoke(BulkRecordCaravanWeightDTO $dto): void
     {
         DB::transaction(function () use ($dto) {
-            $batchIdsToRecalculate = [];
+            /** @var array<int, array{date: \DateTimeInterface, type: \App\Core\Enums\WeighingTypeCode}> $batches */
+            $batches = [];
 
             foreach ($dto->weights as $weightDto) {
-                // 1. Mark existing as non-current
-                $this->caravanWeightRepository->markAllNonCurrentForCaravan($weightDto->caravanId);
+                $reading = $weightDto->toReading();
+                $this->recorder->record($weightDto->caravanId, $reading);
 
-                // 2. Create new weight
-                $entity = new CaravanWeightEntity(
-                    null,
-                    $weightDto->caravanId,
-                    $weightDto->weight,
-                    true,
-                    new \DateTime($weightDto->weighingDate),
-                    $weightDto->notes
-                );
-
-                $this->caravanWeightRepository->save($entity);
-
-                // 3. Collect batch ID for recalculation
                 $caravan = $this->caravanRepository->findById($weightDto->caravanId);
-                if ($caravan && $caravan->getBatchId()) {
-                    $batchIdsToRecalculate[] = $caravan->getBatchId();
+                $batchId = $caravan?->getBatchId();
+                if ($batchId === null) {
+                    continue;
+                }
+
+                // The point of the batch is dated on the day the animals were weighed, not on
+                // the day the sheet was loaded.
+                if (!isset($batches[$batchId]) || $reading->date > $batches[$batchId]['date']) {
+                    $batches[$batchId] = ['date' => $reading->date, 'type' => $reading->type];
                 }
             }
 
-            // 4. Recalculate unique batches once
-            foreach (array_unique($batchIdsToRecalculate) as $batchId) {
-                $this->batchWeightService->recalculateBatchWeight($batchId, BatchWeightCause::CONTROL);
+            foreach ($batches as $batchId => $point) {
+                $this->batchWeightService->recalculateBatchWeight(
+                    $batchId,
+                    BatchWeightCause::CONTROL,
+                    $point['date'],
+                    $point['type']
+                );
             }
         });
     }

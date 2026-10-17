@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Core\Enums\WeighingTypeCode;
+use App\Models\WeighingType;
 use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
 use App\Models\Batch;
@@ -138,6 +140,7 @@ class CreateBatchWithExtraFieldsTest extends TestCase
         ]);
         // Record current weight for caravan 1
         $caravan1->weights()->create([
+            'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
             'weight' => 320.0,
             'weighing_date' => now()->toDateString(),
             'current' => true
@@ -154,6 +157,7 @@ class CreateBatchWithExtraFieldsTest extends TestCase
         ]);
         // Record current weight for caravan 2
         $caravan2->weights()->create([
+            'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
             'weight' => 440.0,
             'weighing_date' => now()->toDateString(),
             'current' => true

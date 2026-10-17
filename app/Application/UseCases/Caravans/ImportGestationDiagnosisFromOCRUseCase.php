@@ -6,8 +6,8 @@ namespace App\Application\UseCases\Caravans;
 
 use App\Application\DTOs\ImportOCRGestationDiagnosisDTO;
 use App\Application\DTOs\RegisterGestationDiagnosisDTO;
-use App\Core\Enums\GestationStage;
 use App\Core\Interfaces\ICaravanRepository;
+use App\Core\Interfaces\IServiceOrderRepository;
 use App\Core\ValueObjects\CaravanNumber;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -23,7 +23,8 @@ final class ImportGestationDiagnosisFromOCRUseCase
 {
     public function __construct(
         private readonly ICaravanRepository $caravanRepository,
-        private readonly RegisterGestationDiagnosisUseCase $registerDiagnosis
+        private readonly RegisterGestationDiagnosisUseCase $registerDiagnosis,
+        private readonly IServiceOrderRepository $serviceOrderRepository
     ) {
     }
 
@@ -32,7 +33,7 @@ final class ImportGestationDiagnosisFromOCRUseCase
      *
      * @param ImportOCRGestationDiagnosisDTO $dto
      * @param int $companyId
-     * @return array{processed: int, skipped: int, errors: array<int, array{row: int, identification: string, reason: string}>}
+     * @return array{processed: int, skipped: int, errors: array<int, array{row: int, identification: string, reason: string}>, order_status: ?string, order_pending: ?int}
      */
     public function __invoke(ImportOCRGestationDiagnosisDTO $dto, int $companyId): array
     {
@@ -84,15 +85,41 @@ final class ImportGestationDiagnosisFromOCRUseCase
                     continue;
                 }
 
-                // 2. Parse diagnosis value
-                $diagnosticoRaw = strtoupper(trim((string)($row['diagnostico'] ?? '')));
-                $isPregnant = in_array($diagnosticoRaw, ['PREGNANT', 'PREÑADA', 'PRENADA'], true);
+                // 2. Parse the diagnosis cell. Blank: not checked in this round (stays pending).
+                // Anything that is not clearly pregnant or empty is reported, never read as empty.
+                $diagnosticoRaw = (string) ($row['diagnostico'] ?? '');
+                $isPregnant = $this->parseDiagnosis($diagnosticoRaw);
+                if ($isPregnant === null) {
+                    if (trim($diagnosticoRaw) === '') {
+                        $skipped++;
+                        continue;
+                    }
 
-                // 3. Parse gestation stage (only relevant if pregnant)
+                    $errors[] = [
+                        'row'            => $index + 1,
+                        'identification' => $identificationRaw,
+                        'reason'         => "Diagnóstico ilegible: '{$diagnosticoRaw}'. Debe ser P (preñada) o V (vacía).",
+                    ];
+                    continue;
+                }
+
+                // 3. Stage and months only matter when pregnant, and both are optional.
                 $gestationStage = null;
+                $gestationMonths = null;
                 if ($isPregnant) {
                     $stageRaw = strtolower(trim((string)($row['gestation_stage'] ?? $row['gestational_stage'] ?? $row['estadio_estimado'] ?? '')));
                     $gestationStage = $this->resolveStageString($stageRaw);
+                    if ($stageRaw !== '' && $gestationStage === null) {
+                        $errors[] = [
+                            'row'            => $index + 1,
+                            'identification' => $identificationRaw,
+                            'reason'         => "Estadio ilegible: '{$stageRaw}'. Debe ser cabeza, cuerpo o cola (o quedar en blanco).",
+                        ];
+                        continue;
+                    }
+
+                    $monthsRaw = $row['gestation_months'] ?? $row['meses'] ?? null;
+                    $gestationMonths = $monthsRaw !== null && $monthsRaw !== '' ? (float) $monthsRaw : null;
                 }
 
                 // 4. Build DTO and delegate to the existing Use Case
@@ -102,10 +129,11 @@ final class ImportGestationDiagnosisFromOCRUseCase
                         serviceOrderId: $dto->serviceOrderId,
                         isPregnant: $isPregnant,
                         gestationStage: $gestationStage,
-                        gestationMonths: null,
+                        gestationMonths: $gestationMonths,
                         confirmedSireId: null,
                         diagnosisDate: $diagnosisDate,
-                        emptyDestinationBatchId: $dto->emptyDestinationBatchId
+                        emptyDestinationBatchId: $dto->emptyDestinationBatchId,
+                        userId: $dto->userId
                     );
 
                     ($this->registerDiagnosis)($diagnosisDto, $companyId);
@@ -122,10 +150,16 @@ final class ImportGestationDiagnosisFromOCRUseCase
                 }
             }
 
+            // The scan never closes the order: it tells how many females still lack a final
+            // verdict, so the review can offer to close it.
+            $order = $this->serviceOrderRepository->findById($dto->serviceOrderId, $companyId);
+
             return [
-                'processed' => $processed,
-                'skipped'   => $skipped,
-                'errors'    => $errors,
+                'processed'     => $processed,
+                'skipped'       => $skipped,
+                'errors'        => $errors,
+                'order_status'  => $order?->getStatus()->value,
+                'order_pending' => $order?->getDiagnosisSummary(date('Y-m-d'))->pendingCount(),
             ];
         });
     }
@@ -155,6 +189,20 @@ final class ImportGestationDiagnosisFromOCRUseCase
             'cola'    => 'tail',
         ];
 
-        return $map[$stage] ?? GestationStage::HEAD->value;
+        return $map[$stage] ?? null;
+    }
+
+    /**
+     * P / PREÑADA / PREGNANT -> true; V / VACÍA / EMPTY -> false; anything else -> null.
+     */
+    private function parseDiagnosis(string $raw): ?bool
+    {
+        $value = mb_strtoupper(trim($raw));
+
+        return match ($value) {
+            'P', 'PREÑADA', 'PRENADA', 'PREGNANT' => true,
+            'V', 'VACÍA', 'VACIA', 'EMPTY' => false,
+            default => null,
+        };
     }
 }

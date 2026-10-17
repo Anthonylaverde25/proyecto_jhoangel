@@ -23,7 +23,7 @@ class ProcessLser01Request extends FormRequest
     public function rules(): array
     {
         return [
-            'lote'                => 'required|string|max:255',
+            'batch_id'            => 'required|integer|exists:batches,id',
             'toro_caravana'       => 'required|string|max:100',
             'planned_start_date'  => 'required|date',
             'planned_end_date'    => 'nullable|date|after_or_equal:planned_start_date',
@@ -41,7 +41,8 @@ class ProcessLser01Request extends FormRequest
     public function messages(): array
     {
         return [
-            'lote.required'               => 'Falta el nombre del lote de servicio.',
+            'batch_id.required'           => 'Falta el lote sobre el que se inicia el servicio.',
+            'batch_id.exists'             => 'El lote indicado no existe.',
             'toro_caravana.required'      => 'Falta la caravana del toro.',
             'planned_start_date.required' => 'Falta la fecha de inicio de servicio.',
             'planned_start_date.date'     => 'La fecha de inicio de servicio no es válida.',

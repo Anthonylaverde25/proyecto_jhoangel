@@ -8,11 +8,15 @@ use App\Core\Entities\ServiceOrderEntity;
 use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Exceptions\ServiceOrderDomainException;
 use App\Core\Interfaces\IServiceOrderRepository;
+use App\Core\Enums\BatchWeightCause;
+use App\Core\Services\BatchWeightService;
+use Illuminate\Support\Facades\DB;
 
 final class UpdateServiceOrderStatusUseCase
 {
     public function __construct(
-        private readonly IServiceOrderRepository $repository
+        private readonly IServiceOrderRepository $repository,
+        private readonly BatchWeightService $batchWeightService
     ) {
     }
 
@@ -26,17 +30,30 @@ final class UpdateServiceOrderStatusUseCase
             throw ServiceOrderDomainException::domainError("Service order not found");
         }
 
-        $entity->changeStatus($newStatus, $userId);
-        $savedEntity = $this->repository->save($entity, $userId, 'Status updated via administrative patch');
+        $wasApproved = $entity->getStatus() === ServiceOrderStatus::APPROVED;
 
-        // If the new status is APPROVED, physically move the animals
-        if ($newStatus === ServiceOrderStatus::APPROVED) {
-            $allCaravans = array_merge($entity->getMaleCaravanIds(), $entity->getFemaleCaravanIds());
-            if (!empty($allCaravans)) {
-                $this->repository->moveAnimalsToBatch($allCaravans, $entity->getBatchId(), $companyId, $userId);
+        return DB::transaction(function () use ($entity, $companyId, $userId, $newStatus, $wasApproved): ServiceOrderEntity {
+            $entity->changeStatus($newStatus, $userId);
+            $savedEntity = $this->repository->save($entity, $userId, 'Status updated via administrative patch');
+
+            // On approval only the bulls enter the serviced batch: the females already are there.
+            if ($newStatus === ServiceOrderStatus::APPROVED && !$wasApproved) {
+                $donorBatchIds = $this->repository->moveBullsToBatch(
+                    $entity->getMaleCaravanIds(),
+                    $entity->getBatchId(),
+                    $companyId,
+                    (string) $entity->getActualStartDate(),
+                    $entity->getCode()
+                );
+                foreach ($donorBatchIds as $donorBatchId) {
+                    $this->batchWeightService->recalculateBatchWeight($donorBatchId, BatchWeightCause::MOVEMENT_OUT);
+                }
+                if ($donorBatchIds !== []) {
+                    $this->batchWeightService->recalculateBatchWeight($entity->getBatchId(), BatchWeightCause::MOVEMENT_IN);
+                }
             }
-        }
 
-        return $savedEntity;
+            return $savedEntity;
+        });
     }
 }

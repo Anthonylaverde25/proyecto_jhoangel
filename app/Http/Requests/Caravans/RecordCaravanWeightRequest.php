@@ -24,9 +24,10 @@ class RecordCaravanWeightRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'weight'        => 'required|numeric|min:0',
-            'weighing_date' => 'required|date',
-            'notes'         => 'nullable|string',
+            'weight'           => 'required|numeric|gt:0|max:2000',
+            'weighing_date'    => 'required|date',
+            'notes'            => 'nullable|string',
+            ...WeighingFieldRules::rules(),
         ];
     }
 }

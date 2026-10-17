@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\WorkTemplates;
 
+use App\Core\Enums\WeighingTypeCode;
+use App\Models\WeighingType;
 use Tests\Feature\DryRun\AssertsDryRun;
 use App\Models\Activity;
 use App\Models\AnimalCategory;
@@ -922,6 +924,7 @@ class Cact01TemplateProcessingTest extends VeterinaryTestCase
         ]);
 
         CaravanWeight::create([
+            'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
             'caravan_id' => $caravan->id,
             'weight' => $weight,
             'current' => true,

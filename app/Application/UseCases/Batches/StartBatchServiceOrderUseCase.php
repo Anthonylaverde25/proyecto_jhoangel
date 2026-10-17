@@ -11,27 +11,35 @@ use App\Core\Enums\BatchWeightCause;
 use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Exceptions\ServiceOrderDomainException;
 use App\Core\Interfaces\IBatchRepository;
-use App\Core\Interfaces\IBatchTypeRepository;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Interfaces\IServiceOrderRepository;
 use App\Core\Services\BatchWeightService;
 use App\Core\Services\BullServiceFitnessPolicy;
-use App\Models\Batch;
+use App\Core\Services\ServiceOrderCodeGenerator;
+use App\Core\Services\ServiceStartPolicy;
 use App\Models\Caravan;
-use App\Models\CaravanMovement;
 use App\Models\ServiceOrder;
 use App\Models\ServiceOrderFemale;
 use App\Models\ServiceOrderHistory;
 use App\Models\ServiceOrderMale;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Puts an operational Cría batch into service.
+ *
+ * The service is an order over the batch, not a batch of its own: the females stay where they
+ * are, the bulls join them, and the order keeps the policies (type, bull ratio, window), the
+ * exposure window of every female and the trace of the campaign.
+ */
 final class StartBatchServiceOrderUseCase
 {
     public function __construct(
         private readonly IBatchRepository $batchRepository,
-        private readonly IBatchTypeRepository $batchTypeRepository,
         private readonly IServiceOrderRepository $serviceOrderRepository,
         private readonly ICaravanRepository $caravanRepository,
+        private readonly ServiceStartPolicy $startPolicy,
+        private readonly ServiceOrderCodeGenerator $codeGenerator,
         private readonly BullServiceFitnessPolicy $fitnessPolicy,
         private readonly BatchWeightService $batchWeightService
     ) {
@@ -42,276 +50,175 @@ final class StartBatchServiceOrderUseCase
      */
     public function __invoke(StartBatchServiceOrderDTO $dto): ServiceOrderEntity
     {
-        // 1. Validar lote base de origen
-        $originBatch = Batch::withoutGlobalScopes()
+        // 1. The batch: own, Cría, without another active service.
+        $batch = $this->batchRepository->findById($dto->batchId);
+        if ($batch === null) {
+            throw ServiceOrderDomainException::domainError("El lote con ID {$dto->batchId} no existe.");
+        }
+
+        $this->startPolicy->assertBatchCanStartService(
+            $batch,
+            $this->serviceOrderRepository->findActiveServiceOnBatch($dto->batchId) !== null
+        );
+
+        // 2. Exposed females: the whole batch in natural service (the owner's breeding exclusion
+        // cannot keep a cow away from bulls sharing her paddock), only eligible ones in a
+        // controlled service / AI.
+        $femaleIds = $this->startPolicy->resolveExposedFemales(
+            $dto->isControlledService,
+            $this->caravanRepository->findServiceableFemaleIdsInBatch($dto->batchId, $dto->isControlledService),
+            $dto->selectedFemaleCaravanIds,
+            $this->caravanRepository->findBreedingExcludedFemaleIdsInBatch($dto->batchId)
+        );
+
+        // 3. Bulls: males that pass the admission guard (owner decision + veterinary verdict).
+        $this->startPolicy->assertHasBulls($dto->maleCaravanIds);
+        $maleCaravans = Caravan::withoutGlobalScopes()
             ->where('company_id', $dto->companyId)
-            ->find($dto->originBatchId);
+            ->whereIn('id', $dto->maleCaravanIds)
+            ->with('bullHealthEvaluation')
+            ->get()
+            ->keyBy('id');
 
-        if ($originBatch === null) {
-            throw ServiceOrderDomainException::domainError("El lote de origen con ID {$dto->originBatchId} no existe.");
-        }
-
-        if ($originBatch->farm_id !== null && $originBatch->farm?->provider_id !== null) {
-            throw ServiceOrderDomainException::domainError("El lote de origen debe ser un lote propio interno.");
-        }
-
-        $activityCode = strtoupper((string) ($originBatch->activity?->code ?? ''));
-        $activityName = mb_strtolower((string) ($originBatch->activity?->name ?? ''));
-        if ($activityCode !== 'CRIA' && !str_contains($activityName, 'cría') && !str_contains($activityName, 'cria')) {
-            throw ServiceOrderDomainException::domainError("El lote de origen debe pertenecer a la actividad de 'Cría'.");
-        }
-
-        if ($originBatch->isInService()) {
-            throw ServiceOrderDomainException::domainError(
-                "El lote '{$originBatch->name}' ya cuenta con un servicio activo en curso."
-            );
-        }
-
-        // 2. Resolver tipo de lote 'SERVICE'
-        $serviceBatchType = $this->batchTypeRepository->findByCode('SERVICE');
-        if ($serviceBatchType === null) {
-            throw ServiceOrderDomainException::domainError("El tipo de lote 'SERVICE' no está configurado en el sistema.");
-        }
-
-        // 3. Cargar y validar hembras del lote de origen
-        $femaleQuery = Caravan::withoutGlobalScopes()
-            ->where('company_id', $dto->companyId)
-            ->where('batch_id', $originBatch->id)
-            ->where(function ($q) {
-                $q->where('sex', AnimalSex::FEMALE->value)
-                  ->orWhere('sex', 'H')
-                  ->orWhere('sex', 'F');
-            });
-
-        if (!empty($dto->selectedFemaleCaravanIds)) {
-            $femaleQuery->whereIn('id', $dto->selectedFemaleCaravanIds);
-        }
-
-        $femaleCaravans = $femaleQuery->with(['currentWeight', 'currentBodyCondition', 'femaleDetail'])->get();
-
-        if ($femaleCaravans->isEmpty()) {
-            throw ServiceOrderDomainException::domainError("El lote de origen no cuenta con hembras disponibles para entore.");
-        }
-
-        if (empty($dto->maleCaravanIds)) {
-            throw ServiceOrderDomainException::domainError("Debe seleccionar al menos un reproductor macho para el servicio.");
-        }
-
-        // 4. Validar aptitud de toros (ADR-5 / BullServiceFitnessPolicy)
-        $maleCaravans = [];
+        $sanitaryStatusByBull = [];
         foreach ($dto->maleCaravanIds as $maleId) {
-            $bull = Caravan::withoutGlobalScopes()
-                ->where('company_id', $dto->companyId)
-                ->with(['currentWeight', 'bullHealthEvaluation'])
-                ->find($maleId);
-
+            $bull = $maleCaravans->get($maleId);
             if ($bull === null) {
                 throw ServiceOrderDomainException::domainError("El reproductor macho con ID {$maleId} no fue encontrado.");
             }
 
-            $sexVal = $bull->sex instanceof AnimalSex ? $bull->sex->value : (string)$bull->sex;
-            if ($sexVal !== AnimalSex::MALE->value && $sexVal !== 'M') {
-                throw ServiceOrderDomainException::invalidAnimalSex($maleId, 'male', $sexVal);
+            $sex = $bull->sex instanceof AnimalSex ? $bull->sex->value : (string) $bull->sex;
+            if ($sex !== AnimalSex::MALE->value) {
+                throw ServiceOrderDomainException::invalidAnimalSex($maleId, 'male', $sex);
             }
 
-            // Guarda Andrológica y Clínica Estricta
-            $this->fitnessPolicy->assertFit($maleId, $dto->companyId, (string)$bull->identification);
-            $maleCaravans[] = $bull;
+            $sanitaryStatusByBull[$maleId] = $this->fitnessPolicy->assertFit($maleId, $dto->companyId, (string) $bull->identification);
         }
 
-        // 5. Verificar que ningún animal esté activo en otra orden simultánea
-        $allCaravanIds = array_merge(
-            $femaleCaravans->pluck('id')->map(fn($id) => (int)$id)->toArray(),
-            $dto->maleCaravanIds
+        // 4. No animal may be in another active service.
+        $conflicts = $this->serviceOrderRepository->findActiveOrdersByCaravans(
+            array_merge($femaleIds, $dto->maleCaravanIds),
+            $dto->companyId
         );
-        $conflicts = $this->serviceOrderRepository->findActiveOrdersByCaravans($allCaravanIds, $dto->companyId);
-        if (!empty($conflicts)) {
-            throw ServiceOrderDomainException::activeOrderConflict('caravan', reset($conflicts));
+        if ($conflicts !== []) {
+            throw ServiceOrderDomainException::activeOrderConflict('caravan', (int) reset($conflicts));
         }
 
-        // 6. Generar código canónico de la orden
-        $year = date('Y', strtotime($dto->plannedStartDate));
-        $count = ServiceOrder::withoutGlobalScopes()
-            ->where('company_id', $dto->companyId)
-            ->whereYear('planned_start_date', $year)
-            ->count() + 1;
-        $orderCode = sprintf('SO-%s-%03d', $year, $count);
+        $femaleCaravans = Caravan::withoutGlobalScopes()
+            ->whereIn('id', $femaleIds)
+            ->with(['currentWeight', 'currentBodyCondition', 'femaleDetail'])
+            ->get();
 
-        $createdOrderId = 0;
-        $donorBullBatchIds = [];
+        try {
+            $orderId = DB::transaction(function () use ($dto, $batch, $femaleCaravans, $maleCaravans, $sanitaryStatusByBull): int {
+                $orderCode = $this->codeGenerator->next($dto->companyId, $dto->plannedStartDate);
 
-        // 7. Transacción Atómica
-        DB::transaction(function () use (
-            $dto,
-            $originBatch,
-            $serviceBatchType,
-            $orderCode,
-            $femaleCaravans,
-            $maleCaravans,
-            &$createdOrderId,
-            &$donorBullBatchIds
-        ) {
-            // A. Crear el Lote de Servicio en batches
-            $serviceBatchName = $dto->serviceBatchName ?? "{$originBatch->name} - Servicio {$orderCode}";
-            $serviceBatch = Batch::create([
-                'company_id'    => $dto->companyId,
-                'farm_id'       => $originBatch->farm_id,
-                'activity_id'   => $originBatch->activity_id,
-                'batch_type_id' => $serviceBatchType->getId(),
-                'name'          => $serviceBatchName,
-                'is_active'     => true,
-                'is_system'     => false,
-                'observaciones' => "Lote de servicio generado a partir de {$originBatch->name} para orden {$orderCode}",
-            ]);
+                $order = ServiceOrder::create([
+                    'company_id'            => $dto->companyId,
+                    'batch_id'              => $batch->getId(),
+                    'parent_service_order_id' => $dto->parentServiceOrderId,
+                    'code'                  => $orderCode,
+                    'status'                => ServiceOrderStatus::APPROVED->value,
+                    'service_type'          => $dto->serviceType,
+                    'is_controlled_service' => $dto->isControlledService,
+                    'target_bull_ratio'     => $dto->targetBullRatio,
+                    'planned_start_date'    => $dto->plannedStartDate,
+                    'actual_start_date'     => $dto->plannedStartDate,
+                    'planned_end_date'      => $dto->plannedEndDate,
+                    'requested_by_user_id'  => $dto->userId,
+                    'approved_by_user_id'   => $dto->userId,
+                    'approved_at'           => now(),
+                    'executed_at'           => now(),
+                    'observations'          => $dto->observations,
+                ]);
 
-            // B. Crear la orden de servicio enlazando ambos lotes
-            $serviceOrder = ServiceOrder::create([
-                'company_id'            => $dto->companyId,
-                'origin_batch_id'       => $originBatch->id,
-                'service_batch_id'      => $serviceBatch->id,
-                'batch_id'              => $serviceBatch->id,
-                'code'                  => $orderCode,
-                'status'                => ServiceOrderStatus::APPROVED->value,
-                'service_type'          => $dto->serviceType,
-                'is_controlled_service' => $dto->isControlledService,
-                'target_bull_ratio'     => $dto->targetBullRatio,
-                'planned_start_date'    => $dto->plannedStartDate,
-                'actual_start_date'     => $dto->plannedStartDate,
-                'planned_end_date'      => $dto->plannedEndDate,
-                'requested_by_user_id'  => $dto->userId,
-                'approved_by_user_id'   => $dto->userId,
-                'approved_at'           => now(),
-                'executed_at'           => now(),
-                'observations'          => $dto->observations ?? "Servicio iniciado automáticamente desde lote {$originBatch->name}",
-            ]);
-
-            $createdOrderId = (int) $serviceOrder->id;
-
-            // C. Snapshots de Hembras y Cálculo de Masa
-            $femaleTotalWeight = 0.0;
-            $femaleWeighedCount = 0;
-            foreach ($femaleCaravans as $female) {
-                $assignedSireId = null;
-                if ($dto->isControlledService && !empty($dto->femaleSireAssignments)) {
+                $sireByFemale = [];
+                if ($dto->isControlledService) {
                     foreach ($dto->femaleSireAssignments as $assignment) {
-                        if ((int)($assignment['female_caravan_id'] ?? 0) === (int)$female->id) {
-                            $assignedSireId = (int)$assignment['assigned_male_caravan_id'];
-                            break;
-                        }
+                        $sireByFemale[(int) ($assignment['female_caravan_id'] ?? 0)] = (int) ($assignment['assigned_male_caravan_id'] ?? 0);
                     }
                 }
 
-                $entryWeight = $female->currentWeight?->weight ?? $female->entry_weight;
-                $bodyCondition = $female->currentBodyCondition?->score ?? $female->femaleDetail?->body_condition;
-
-                if ($entryWeight !== null && (float)$entryWeight > 0) {
-                    $femaleTotalWeight += (float)$entryWeight;
-                    $femaleWeighedCount++;
+                foreach ($femaleCaravans as $female) {
+                    ServiceOrderFemale::create([
+                        'company_id'               => $dto->companyId,
+                        'service_order_id'         => $order->id,
+                        'female_caravan_id'        => $female->id,
+                        'assigned_male_caravan_id' => $sireByFemale[(int) $female->id] ?? null,
+                        'snapshot_entry_weight'    => $female->currentWeight?->weight ?? $female->entry_weight,
+                        'snapshot_body_condition'  => $female->currentBodyCondition?->score ?? $female->femaleDetail?->body_condition,
+                        'reproductive_status'      => 'UNCHECKED',
+                        'exposed_from'             => $dto->plannedStartDate,
+                    ]);
                 }
 
-                ServiceOrderFemale::create([
-                    'company_id'               => $dto->companyId,
-                    'service_order_id'         => $serviceOrder->id,
-                    'female_caravan_id'        => $female->id,
-                    'assigned_male_caravan_id' => $assignedSireId,
-                    'snapshot_entry_weight'    => $entryWeight,
-                    'snapshot_body_condition'  => $bodyCondition,
-                    'reproductive_status'      => 'UNCHECKED',
-                ]);
-            }
-
-            // D. Snapshots de Machos, Cálculo de Masa y Transferencia Física al Lote de Origen
-            $maleTotalWeight = 0.0;
-            $maleWeighedCount = 0;
-            foreach ($maleCaravans as $bull) {
-                $originBullBatchId = $bull->batch_id;
-                if ($originBullBatchId !== null && $originBullBatchId !== $originBatch->id) {
-                    $donorBullBatchIds[$originBullBatchId] = true;
+                foreach ($maleCaravans as $bull) {
+                    ServiceOrderMale::create([
+                        'company_id'                     => $dto->companyId,
+                        'service_order_id'               => $order->id,
+                        'male_caravan_id'                => $bull->id,
+                        'joined_at'                      => $dto->plannedStartDate,
+                        'snapshot_scrotal_circumference' => $bull->bullHealthEvaluation?->scrotal_circumference_cm,
+                        'sanitary_status_at_entry'       => $sanitaryStatusByBull[(int) $bull->id]?->value,
+                        'service_capacity'               => 'HIGH',
+                        'status'                         => 'ACTIVE',
+                    ]);
                 }
 
-                $bullWeight = $bull->currentWeight?->weight ?? $bull->entry_weight;
-                if ($bullWeight !== null && (float)$bullWeight > 0) {
-                    $maleTotalWeight += (float)$bullWeight;
-                    $maleWeighedCount++;
+                // The bulls join the females in the batch; both sides of the move are recomputed.
+                $donorBatchIds = $this->serviceOrderRepository->moveBullsToBatch(
+                    $dto->maleCaravanIds,
+                    (int) $batch->getId(),
+                    $dto->companyId,
+                    $dto->plannedStartDate,
+                    $orderCode
+                );
+                foreach ($donorBatchIds as $donorBatchId) {
+                    $this->batchWeightService->recalculateBatchWeight($donorBatchId, BatchWeightCause::MOVEMENT_OUT);
                 }
+                $this->batchWeightService->recalculateBatchWeight((int) $batch->getId(), BatchWeightCause::MOVEMENT_IN);
 
-                $scrotalCirc = $bull->bullHealthEvaluation?->scrotal_circumference_cm;
-                $serviceCapacity = 'HIGH';
-
-                ServiceOrderMale::create([
-                    'company_id'                     => $dto->companyId,
-                    'service_order_id'               => $serviceOrder->id,
-                    'male_caravan_id'                => $bull->id,
-                    'snapshot_scrotal_circumference' => $scrotalCirc,
-                    'service_capacity'               => (string) $serviceCapacity,
-                    'status'                         => 'ACTIVE',
+                ServiceOrderHistory::create([
+                    'company_id'       => $dto->companyId,
+                    'service_order_id' => $order->id,
+                    'action_user_id'   => $dto->userId,
+                    'from_status'      => ServiceOrderStatus::DRAFT->value,
+                    'to_status'        => ServiceOrderStatus::APPROVED->value,
+                    'action_reason'    => "Servicio iniciado sobre el lote '{$batch->getName()}'",
                 ]);
 
-                // Físicamente los toros ingresan al rodeo y potrero del Lote de Origen
-                $bull->batch_id = $originBatch->id;
-                $bull->save();
-
-                CaravanMovement::create([
-                    'company_id'    => $dto->companyId,
-                    'caravan_id'    => $bull->id,
-                    'renspa'        => $bull->renspa !== null && $bull->renspa !== '' && $bull->renspa !== 'NO_DEFINIDO' ? $bull->renspa : 'NO_DEFINIDO',
-                    'type'          => 'TRANSFER',
-                    'movement_date' => $dto->plannedStartDate,
-                    'from_batch_id' => $originBullBatchId,
-                    'to_batch_id'   => $originBatch->id,
-                    'observations'  => "Ingreso de reproductor a servicio en '{$originBatch->name}' (Orden {$orderCode})"
-                ]);
+                return (int) $order->id;
+            });
+        } catch (UniqueConstraintViolationException $e) {
+            // Any other unique violation is a real failure and must not pass for this one.
+            if (!self::isOneActivePerBatchViolation($e)) {
+                throw $e;
             }
 
-            // E. Recalcular masas:
-            // 1) Lotes donantes de toros (salida física)
-            foreach (array_keys($donorBullBatchIds) as $donorId) {
-                $this->batchWeightService->recalculateBatchWeight((int) $donorId, BatchWeightCause::MOVEMENT_OUT);
-            }
-
-            // 2) Lote de Origen (ingreso físico de los toros: vacas + toros)
-            $this->batchWeightService->recalculateBatchWeight((int) $originBatch->id, BatchWeightCause::MOVEMENT_IN);
-
-            // 3) Lote de Servicio (contenedor organizacional y zootécnico del entore)
-            $totalServiceHeads = count($femaleCaravans) + count($maleCaravans);
-            $totalServiceWeight = $femaleTotalWeight + $maleTotalWeight;
-            $totalWeighedCount = $femaleWeighedCount + $maleWeighedCount;
-            $avgServiceWeight = $totalWeighedCount > 0 ? round($totalServiceWeight / $totalWeighedCount, 1) : null;
-
-            $serviceBatch->update([
-                'caravans_count' => $totalServiceHeads,
-                'current_weight' => $avgServiceWeight,
-                'total_weight'   => $totalServiceWeight > 0 ? $totalServiceWeight : null,
-                'weighed_count'  => $totalWeighedCount,
-            ]);
-
-            \App\Models\BatchWeight::create([
-                'batch_id'       => $serviceBatch->id,
-                'activity_id'    => $originBatch->activity_id,
-                'weight'         => $avgServiceWeight,
-                'total_weight'   => $totalServiceWeight > 0 ? $totalServiceWeight : null,
-                'caravans_count' => $totalServiceHeads,
-                'weighed_count'  => $totalWeighedCount,
-                'type'           => BatchWeightCause::MOVEMENT_IN->value,
-                'weighing_date'  => $dto->plannedStartDate,
-            ]);
-
-            // F. Auditoría
-            ServiceOrderHistory::create([
-                'company_id'       => $dto->companyId,
-                'service_order_id' => $serviceOrder->id,
-                'action_user_id'   => $dto->userId,
-                'from_status'      => ServiceOrderStatus::DRAFT->value,
-                'to_status'        => ServiceOrderStatus::APPROVED->value,
-                'action_reason'    => "Servicio de entore iniciado desde lote base '{$originBatch->name}' generando lote '{$serviceBatch->name}'"
-            ]);
-        });
-
-        $persistedEntity = $this->serviceOrderRepository->findById($createdOrderId, $dto->companyId);
-        if ($persistedEntity === null) {
-            throw ServiceOrderDomainException::domainError("Error al recuperar la orden de servicio creada.");
+            // Two requests raced past the domain check: the one-active-service-per-batch index won.
+            throw ServiceOrderDomainException::domainError(
+                "El lote '{$batch->getName()}' ya tiene un servicio activo en curso."
+            );
         }
 
-        return $persistedEntity;
+        $order = $this->serviceOrderRepository->findById($orderId, $dto->companyId);
+        if ($order === null) {
+            throw ServiceOrderDomainException::domainError('Error al recuperar la orden de servicio creada.');
+        }
+
+        return $order;
+    }
+
+    /**
+     * The "one active service per batch" guard: named in MySQL (index over the generated
+     * `active_batch_guard` column), reported by column in SQLite (partial index over `batch_id`).
+     */
+    private static function isOneActivePerBatchViolation(UniqueConstraintViolationException $e): bool
+    {
+        $message = $e->getMessage();
+
+        return str_contains($message, 'uq_so_one_active_per_batch')
+            || str_contains($message, 'active_batch_guard')
+            || str_contains($message, 'service_orders.batch_id');
     }
 }

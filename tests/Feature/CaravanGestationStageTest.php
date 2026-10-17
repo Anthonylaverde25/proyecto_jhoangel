@@ -91,27 +91,33 @@ class CaravanGestationStageTest extends TestCase
         $caravan = Caravan::where('identification', 'CARAVAN-PREG-1')->first();
         $this->assertNotNull($caravan);
 
-        // Verify the CaravanGestation was created with the correct stage and default months
+        // The declared stage is kept; months were not declared, so none are invented.
         $gestation = CaravanGestation::where('caravan_id', $caravan->id)->first();
         $this->assertNotNull($gestation);
         $this->assertEquals(GestationStage::BODY, $gestation->gestation_stage);
-        $this->assertEquals(2.0, $gestation->gestation_months);
+        $this->assertNull($gestation->gestation_months);
         $this->assertTrue($gestation->is_current);
     }
 
-    public function test_api_validation_requires_gestation_stage_or_months_when_pregnant(): void
+    public function test_pregnant_caravan_without_stage_nor_months_is_accepted(): void
     {
-        // Pregnancy (is_empty = false) requires either stage or months
+        // Many producers only declare "pregnant": stage and months stay empty, never defaulted.
         $response = $this->postJson('http://test.localhost/api/caravans', [
-            'identification' => 'CARAVAN-ERR-1',
+            'identification' => 'CARAVAN-PREG-ONLY',
             'sex' => 'H',
             'category' => 'vaquillona',
             'teeth' => 2,
             'is_empty' => false,
         ]);
 
-        $response->assertStatus(422);
-        $response->assertJsonValidationErrors(['gestation_stage', 'gestation_months']);
+        $response->assertStatus(201);
+
+        $caravan = Caravan::where('identification', 'CARAVAN-PREG-ONLY')->first();
+        $gestation = CaravanGestation::where('caravan_id', $caravan->id)->first();
+        $this->assertNotNull($gestation);
+        $this->assertNull($gestation->gestation_stage);
+        $this->assertNull($gestation->gestation_months);
+        $this->assertTrue((bool) $gestation->is_current);
     }
 
     public function test_api_validation_accepts_valid_gestation_stage(): void
@@ -133,7 +139,7 @@ class CaravanGestationStageTest extends TestCase
         $gestation = CaravanGestation::where('caravan_id', $caravan->id)->first();
         $this->assertNotNull($gestation);
         $this->assertEquals(GestationStage::TAIL, $gestation->gestation_stage);
-        $this->assertEquals(1.0, $gestation->gestation_months);
+        $this->assertNull($gestation->gestation_months);
     }
 
     public function test_api_validation_rejects_invalid_gestation_stage(): void
@@ -193,7 +199,7 @@ class CaravanGestationStageTest extends TestCase
         $this->assertEquals(1.5, $gestation->gestation_months);
     }
 
-    public function test_can_upsert_pregnant_caravan_with_gestation_stage_only_and_uses_default_months(): void
+    public function test_can_upsert_pregnant_caravan_with_gestation_stage_only_without_inventing_months(): void
     {
         $response = $this->postJson('http://test.localhost/api/caravans', [
             'identification' => 'CARAVAN-STAGE-1',
@@ -212,7 +218,7 @@ class CaravanGestationStageTest extends TestCase
         $gestation = CaravanGestation::where('caravan_id', $caravan->id)->first();
         $this->assertNotNull($gestation);
         $this->assertEquals(GestationStage::TAIL, $gestation->gestation_stage);
-        $this->assertEquals(1.0, $gestation->gestation_months);
+        $this->assertNull($gestation->gestation_months);
     }
 
     public function test_updating_pregnant_caravan_to_empty_closes_active_gestation_successfully(): void
@@ -311,7 +317,7 @@ class CaravanGestationStageTest extends TestCase
         $gestation = CaravanGestation::where('caravan_id', $caravan->id)->first();
         $this->assertNotNull($gestation);
         $this->assertEquals(GestationStage::BODY, $gestation->gestation_stage);
-        $this->assertEquals(2.0, $gestation->gestation_months);
+        $this->assertNull($gestation->gestation_months);
         $this->assertEquals($so->id, $gestation->service_order_id);
         $this->assertTrue((bool)$gestation->is_current);
 

@@ -82,11 +82,6 @@ class BatchType extends Model
         return $this->code === 'QUARANTINE';
     }
 
-    public function isService(): bool
-    {
-        return $this->code === 'SERVICE';
-    }
-
     public function isWeaning(): bool
     {
         return $this->code === 'WEANING';

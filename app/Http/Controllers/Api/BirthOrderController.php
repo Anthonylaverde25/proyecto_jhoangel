@@ -81,14 +81,16 @@ final class BirthOrderController extends Controller
     }
 
     /**
-     * "Registrar partos": an order born executed, for calvings that already happened.
+     * "Registrar partos", for calvings that already happened: a new order born executed with the
+     * free females, and the ones held by an open order registered in it. `order` and `data` are the
+     * first order touched (the new one, when there is one); `orders` lists every one.
      */
     public function register(RegisterBirthsRequest $request): JsonResponse
     {
         try {
             $validated = $request->validated();
             $dto = EmitBirthOrderDTO::fromArray([...$validated, 'issue' => true], $this->companyId(), $request->user()?->id);
-            $result = ($this->useCases->register)($dto, BirthFieldData::mapFromAnimals($validated['animals']));
+            $registered = ($this->useCases->register)($dto, BirthFieldData::mapFromAnimals($validated['animals']));
         } catch (Par01ValidationException $e) {
             return $this->sheetError($e);
         } catch (BirthOrderDomainException $e) {
@@ -97,10 +99,20 @@ final class BirthOrderController extends Controller
             return response()->json(['status' => 'invalid', 'message' => $e->getMessage()], 422);
         }
 
+        $first = $registered[0];
+
         return response()->json([
-            'message' => Par01ResultResource::message($result['result']),
-            'order' => (new BirthOrderResource($result['order']))->resolve($request),
-            'data' => (new Par01ResultResource($result['result']))->resolve($request),
+            'message' => Par01ResultResource::message($first['result']),
+            'order' => (new BirthOrderResource($first['order']))->resolve($request),
+            'data' => (new Par01ResultResource($first['result']))->resolve($request),
+            'orders' => array_map(fn (array $entry) => [
+                'id' => $entry['order']->getId(),
+                'code' => $entry['order']->getCode(),
+                'status' => $entry['order']->getStatus()->value,
+                'created' => $entry['created'],
+                'message' => Par01ResultResource::message($entry['result']),
+                'warnings' => (new Par01ResultResource($entry['result']))->resolve($request)['warnings'] ?? [],
+            ], $registered),
         ], 201);
     }
 

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Core\Enums\WeighingTypeCode;
+use App\Models\WeighingType;
 use App\Models\Activity;
 use App\Models\AnimalCategory;
 use App\Models\Batch;
@@ -183,6 +185,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             ]);
 
             CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::ENTRY),
                 'caravan_id' => $caravan->id,
                 'weight' => $item['w0'],
                 'current' => false,
@@ -226,6 +229,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             $cohort1WeightsM2[] = $newWeight;
 
             CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
                 'caravan_id' => $caravan->id,
                 'weight' => $newWeight,
                 'current' => false,
@@ -288,6 +292,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             ]);
 
             CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::ENTRY),
                 'caravan_id' => $caravan->id,
                 'weight' => $item['w0'],
                 'current' => false,
@@ -334,6 +339,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             $cohort1WeightsM3[] = $newWeight;
 
             CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
                 'caravan_id' => $caravan->id,
                 'weight' => $newWeight,
                 'current' => false,
@@ -349,6 +355,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             $cohort2WeightsM3[] = $newWeight;
 
             CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
                 'caravan_id' => $caravan->id,
                 'weight' => $newWeight,
                 'current' => false,
@@ -412,6 +419,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             ]);
 
             CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::ENTRY),
                 'caravan_id' => $caravan->id,
                 'weight' => $item['w0'],
                 'current' => false,
@@ -459,6 +467,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             $cohort1WeightsM4[] = $newWeight;
 
             CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
                 'caravan_id' => $caravan->id,
                 'weight' => $newWeight,
                 'current' => false,
@@ -474,6 +483,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             $cohort2WeightsM4[] = $newWeight;
 
             CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
                 'caravan_id' => $caravan->id,
                 'weight' => $newWeight,
                 'current' => false,
@@ -489,6 +499,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             $cohort3WeightsM4[] = $newWeight;
 
             CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
                 'caravan_id' => $caravan->id,
                 'weight' => $newWeight,
                 'current' => false,
@@ -552,6 +563,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             ]);
 
             CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::ENTRY),
                 'caravan_id' => $caravan->id,
                 'weight' => $item['w0'],
                 'current' => false,
@@ -601,6 +613,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             $cohort1WeightsM5[] = $newWeight;
 
             CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
                 'caravan_id' => $caravan->id,
                 'weight' => $newWeight,
                 'current' => true,
@@ -616,6 +629,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             $cohort2WeightsM5[] = $newWeight;
 
             CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
                 'caravan_id' => $caravan->id,
                 'weight' => $newWeight,
                 'current' => true,
@@ -631,6 +645,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             $cohort3WeightsM5[] = $newWeight;
 
             CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
                 'caravan_id' => $caravan->id,
                 'weight' => $newWeight,
                 'current' => true,
@@ -646,6 +661,7 @@ class SimulateBatchProgressiveEntriesSeeder extends Seeder
             $cohort4WeightsM5[] = $newWeight;
 
             CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
                 'caravan_id' => $caravan->id,
                 'weight' => $newWeight,
                 'current' => true,

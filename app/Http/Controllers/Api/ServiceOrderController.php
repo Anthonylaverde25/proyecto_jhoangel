@@ -7,7 +7,10 @@ namespace App\Http\Controllers\Api;
 use App\Application\DTOs\ServiceOrders\CreateServiceOrderDTO;
 use App\Application\UseCases\ServiceOrders\CreateServiceOrderUseCase;
 use App\Application\UseCases\ServiceOrders\ApproveServiceOrderUseCase;
-use App\Application\UseCases\ServiceOrders\CompleteServiceOrderUseCase;
+use App\Application\UseCases\ServiceOrders\CloseServiceOrderDiagnosisUseCase;
+use App\Application\UseCases\ServiceOrders\GetServiceOrderDiagnosisUseCase;
+use App\Application\UseCases\ServiceOrders\MarkFemalesNotDiagnosedUseCase;
+use App\Application\UseCases\ServiceOrders\ResolveServiceOrderIncidentUseCase;
 use App\Application\UseCases\ServiceOrders\CloseServiceOrderWithBullWithdrawalUseCase;
 use App\Application\UseCases\ServiceOrders\UpdateServiceOrderStatusUseCase;
 use App\Application\UseCases\ServiceOrders\GetServiceOrderUseCase;
@@ -18,7 +21,9 @@ use App\Core\Enums\ServiceOrderStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CreateServiceOrderRequest;
 use App\Http\Requests\ReviewServiceOrderRequest;
-use App\Http\Requests\ServiceOrders\CompleteServiceOrderRequest;
+use App\Http\Requests\ServiceOrders\CloseServiceOrderDiagnosisRequest;
+use App\Http\Requests\ServiceOrders\MarkNotDiagnosedRequest;
+use App\Http\Requests\ServiceOrders\ResolveServiceOrderIncidentRequest;
 use App\Http\Requests\ServiceOrders\CloseServiceOrderWithBullWithdrawalRequest;
 use App\Http\Requests\ServiceOrders\ReplaceServiceBullRequest;
 use App\Http\Requests\ServiceOrders\UpdateServiceOrderStatusRequest;
@@ -35,12 +40,16 @@ class ServiceOrderController extends Controller
     public function __construct(
         private readonly CreateServiceOrderUseCase $createUseCase,
         private readonly ApproveServiceOrderUseCase $approveUseCase,
-        private readonly CompleteServiceOrderUseCase $completeUseCase,
+        private readonly CloseServiceOrderDiagnosisUseCase $closeDiagnosisUseCase,
+        private readonly GetServiceOrderDiagnosisUseCase $getDiagnosisUseCase,
+        private readonly MarkFemalesNotDiagnosedUseCase $markNotDiagnosedUseCase,
+        private readonly ResolveServiceOrderIncidentUseCase $resolveIncidentUseCase,
         private readonly CloseServiceOrderWithBullWithdrawalUseCase $closeServiceUseCase,
         private readonly UpdateServiceOrderStatusUseCase $updateStatusUseCase,
         private readonly GetServiceOrderUseCase $getUseCase,
         private readonly ListServiceOrdersUseCase $listUseCase,
-        private readonly ReplaceServiceBullUseCase $replaceBullUseCase
+        private readonly ReplaceServiceBullUseCase $replaceBullUseCase,
+        private readonly \App\Application\UseCases\ServiceOrders\RetireServiceBullUseCase $retireBullUseCase
     ) {
     }
 
@@ -99,20 +108,83 @@ class ServiceOrderController extends Controller
         }
     }
 
-    public function complete(CompleteServiceOrderRequest $request, int $id): JsonResponse
+    /**
+     * "Cerrar orden": the missing verdicts, the decision on the bulls, and the closing, at once.
+     */
+    public function closeDiagnosis(CloseServiceOrderDiagnosisRequest $request, int $id): JsonResponse
     {
         $companyId = (int) $request->header('X-Company-ID');
-        $userId = (int) Auth::id();
-        $validated = $request->validated();
-        $observations = $validated['observations'] ?? null;
-        $targetBatchId = isset($validated['target_batch_id']) ? (int) $validated['target_batch_id'] : null;
 
         try {
-            $entity = ($this->completeUseCase)($id, $companyId, $userId, $observations, $targetBatchId);
-            return response()->json(new ServiceOrderResource($entity));
+            $result = ($this->closeDiagnosisUseCase)($request->toDTO($id, $companyId, Auth::id() !== null ? (int) Auth::id() : null));
+
+            return response()->json([
+                'message' => 'Orden de servicio cerrada con su diagnóstico.',
+                'order' => new ServiceOrderResource($result['order']),
+                'continuation_order' => $result['continuation_order'] !== null
+                    ? ['id' => $result['continuation_order']->getId(), 'code' => $result['continuation_order']->getCode()]
+                    : null,
+                'transfer_order' => $result['transfer_order'] !== null
+                    ? ['id' => $result['transfer_order']->getId(), 'code' => $result['transfer_order']->getCode()]
+                    : null,
+                'moved_female_ids' => $result['moved_female_ids'],
+            ]);
         } catch (ServiceOrderDomainException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
+            return $this->domainError($e);
         }
+    }
+
+    /**
+     * Rounds, verdicts of every female and incidents of the order.
+     */
+    public function diagnosis(Request $request, int $id): JsonResponse
+    {
+        try {
+            return response()->json(($this->getDiagnosisUseCase)($id, (int) $request->header('X-Company-ID')));
+        } catch (ServiceOrderDomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 404);
+        }
+    }
+
+    /**
+     * "Guardar avance": females declared without diagnosis, once the bulls are gone.
+     */
+    public function markNotDiagnosed(MarkNotDiagnosedRequest $request, int $id): JsonResponse
+    {
+        $companyId = (int) $request->header('X-Company-ID');
+
+        try {
+            $count = ($this->markNotDiagnosedUseCase)($request->toDTO($id, $companyId, Auth::id() !== null ? (int) Auth::id() : null));
+
+            return response()->json(['message' => "{$count} vientre(s) declarados sin diagnóstico.", 'count' => $count], 201);
+        } catch (ServiceOrderDomainException $e) {
+            return $this->domainError($e);
+        }
+    }
+
+    public function resolveIncident(ResolveServiceOrderIncidentRequest $request, int $id, int $incidentId): JsonResponse
+    {
+        try {
+            ($this->resolveIncidentUseCase)(
+                $id,
+                $incidentId,
+                (int) $request->header('X-Company-ID'),
+                (string) $request->validated('resolution'),
+                Auth::id() !== null ? (int) Auth::id() : null
+            );
+
+            return response()->json(['message' => 'Novedad resuelta.']);
+        } catch (ServiceOrderDomainException $e) {
+            return $this->domainError($e);
+        }
+    }
+
+    private function domainError(ServiceOrderDomainException $e): JsonResponse
+    {
+        return response()->json(array_filter([
+            'message' => $e->getMessage(),
+            'code' => $e->getReasonCode(),
+        ] + $e->getContext(), static fn ($value) => $value !== null), 422);
     }
 
     public function updateStatus(UpdateServiceOrderStatusRequest $request, int $id): JsonResponse
@@ -169,6 +241,21 @@ class ServiceOrderController extends Controller
         }
     }
 
+    /**
+     * Take a bull out of a running service without a replacement.
+     */
+    public function retireBull(\App\Http\Requests\ServiceOrders\RetireServiceBullRequest $request, int $id): JsonResponse
+    {
+        $companyId = (int) $request->header('X-Company-ID');
+        $userId = (int) Auth::id();
+
+        try {
+            return response()->json(($this->retireBullUseCase)($request->toDTO($id, $companyId, $userId)), 200);
+        } catch (\App\Core\Exceptions\DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
     public function getBullReplacements(Request $request, int $id): JsonResponse
     {
         $companyId = (int) $request->header('X-Company-ID');
@@ -195,11 +282,14 @@ class ServiceOrderController extends Controller
 
         try {
             $dto = $request->toDTO($id, $companyId, $userId);
-            $entity = ($this->closeServiceUseCase)($dto);
+            $result = ($this->closeServiceUseCase)($dto);
+            $reopened = count($result['reopened_female_ids']);
 
             return response()->json([
-                'message' => 'Servicio finalizado y torada retirada al descanso exitosamente',
-                'order'   => new ServiceOrderResource($entity),
+                'message' => 'Torada retirada. La orden sigue abierta hasta completar el diagnóstico de gestación.'
+                    . ($reopened > 0 ? " {$reopened} vacía(s) tactada(s) con los toros en el lote vuelven a pendiente." : ''),
+                'order'   => new ServiceOrderResource($result['order']),
+                'reopened_female_ids' => $result['reopened_female_ids'],
             ]);
         } catch (ServiceOrderDomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);

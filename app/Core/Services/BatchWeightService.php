@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Services;
 
 use App\Core\Enums\BatchWeightCause;
+use App\Core\Enums\WeighingTypeCode;
 use App\Core\Interfaces\IBatchRepository;
 use App\Core\Interfaces\ICaravanRepository;
 
@@ -30,11 +31,16 @@ class BatchWeightService
      * the same set of animals again, while a movement changes the set itself. Blending
      * both into a single CONTROL makes a compositional jump indistinguishable from a
      * loss of weight.
+     *
+     * A point produced by a weighing names its purpose, so the curve can tell a growth control
+     * from a pregnancy-check or entry weighing. Movements and snapshots carry none.
      */
     public function recalculateBatchWeight(
         int $batchId,
         BatchWeightCause $cause = BatchWeightCause::CONTROL,
-        ?\DateTimeInterface $date = null
+        ?\DateTimeInterface $date = null,
+        ?WeighingTypeCode $weighingType = null,
+        ?int $weighingOrderId = null
     ): void {
         $batch = $this->batchRepository->findById($batchId);
         if (!$batch) {
@@ -79,7 +85,9 @@ class BatchWeightService
             $totalWeight,
             $caravansCount,
             $weighedCount,
-            $weightsAsOf
+            $weightsAsOf,
+            $cause === BatchWeightCause::CONTROL ? $weighingType : null,
+            $cause === BatchWeightCause::CONTROL ? $weighingOrderId : null
         );
     }
 

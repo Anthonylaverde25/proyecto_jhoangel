@@ -7,17 +7,19 @@ namespace App\Application\UseCases\Caravans;
 use App\Application\DTOs\WeanCaravanDTO;
 use App\Application\UseCases\Batches\CreateBatchUseCase;
 use App\Core\Entities\CaravanMovementEntity;
-use App\Core\Entities\CaravanWeightEntity;
 use App\Core\Enums\BatchWeightCause;
 use App\Core\Exceptions\DomainException;
 use App\Core\Interfaces\IBatchRepository;
 use App\Core\Interfaces\ICaravanLineageRepository;
 use App\Core\Interfaces\ICaravanMovementRepository;
 use App\Core\Interfaces\ICaravanRepository;
-use App\Core\Interfaces\ICaravanWeightRepository;
 use App\Core\Interfaces\ICompanyRepository;
 use App\Core\Interfaces\IFarmRepository;
+use App\Core\Enums\WeighingSource;
+use App\Core\Enums\WeighingTypeCode;
 use App\Core\Services\BatchWeightService;
+use App\Core\Services\CaravanWeighingRecorder;
+use App\Core\ValueObjects\WeighingReading;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -32,7 +34,7 @@ final class WeanCaravanUseCase
     public function __construct(
         private readonly ICaravanLineageRepository $lineageRepository,
         private readonly ICaravanRepository $caravanRepository,
-        private readonly ICaravanWeightRepository $caravanWeightRepository,
+        private readonly CaravanWeighingRecorder $weighingRecorder,
         private readonly ICaravanMovementRepository $movementRepository,
         private readonly IBatchRepository $batchRepository,
         private readonly IFarmRepository $farmRepository,
@@ -123,19 +125,12 @@ final class WeanCaravanUseCase
             // 6. Record the weaning weight. Without a weight the calf keeps its last recorded one;
             // a weaning loaded late joins the history without displacing a later current weight.
             if ($dto->weaningWeight !== null) {
-                $isCurrent = !$this->caravanWeightRepository->hasWeighingAfter($dto->caravanId, $weaningDate);
-
-                if ($isCurrent) {
-                    $this->caravanWeightRepository->markAllNonCurrentForCaravan($dto->caravanId);
-                }
-
-                $this->caravanWeightRepository->save(new CaravanWeightEntity(
-                    id: null,
-                    caravanId: $dto->caravanId,
-                    weight: $dto->weaningWeight,
-                    current: $isCurrent,
-                    weighingDate: $weaningDate,
-                    notes: $dto->notes ?? 'Weaning weight'
+                $this->weighingRecorder->record($dto->caravanId, WeighingReading::typical(
+                    $dto->weaningWeight,
+                    $weaningDate,
+                    WeighingTypeCode::WEANING,
+                    WeighingSource::WEANING,
+                    $dto->notes ?? 'Weaning weight'
                 ));
             }
 

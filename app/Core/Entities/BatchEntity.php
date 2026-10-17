@@ -33,7 +33,6 @@ final class BatchEntity
         private ?int $ageInMonths = null,
         private ?float $minWeight = null,
         private ?float $maxWeight = null,
-        private ?ServiceBatchDetailEntity $serviceDetail = null,
         private bool $wasEmptied = false,
         private ?int $pendingIdentificationCount = null
     ) {
@@ -66,19 +65,35 @@ final class BatchEntity
         return (int) $this->caravansCount + (int) $this->pendingIdentificationCount;
     }
 
-    public function getServiceDetail(): ?ServiceBatchDetailEntity
+    /**
+     * The active service running on the batch, when the repository read it.
+     *
+     * @var array{id: int, code: string, status: string, planned_start_date: ?string, is_controlled_service: bool}|null
+     */
+    private ?array $activeServiceOrder = null;
+
+    private bool $activeServiceOrderLoaded = false;
+
+    /**
+     * @param array{id: int, code: string, status: string, planned_start_date: ?string, is_controlled_service: bool}|null $order
+     */
+    public function setActiveServiceOrder(?array $order): void
     {
-        return $this->serviceDetail;
+        $this->activeServiceOrder = $order;
+        $this->activeServiceOrderLoaded = true;
     }
 
-    public function setServiceDetail(?ServiceBatchDetailEntity $serviceDetail): void
+    /**
+     * @return array{id: int, code: string, status: string, planned_start_date: ?string, is_controlled_service: bool}|null
+     */
+    public function getActiveServiceOrder(): ?array
     {
-        $this->serviceDetail = $serviceDetail;
+        return $this->activeServiceOrder;
     }
 
-    public function isServiceBatch(): bool
+    public function isActiveServiceOrderLoaded(): bool
     {
-        return $this->batchTypeCode === 'SERVICE' || $this->serviceDetail !== null;
+        return $this->activeServiceOrderLoaded;
     }
 
     public function getCurrentWeight(): ?float
@@ -256,6 +271,14 @@ final class BatchEntity
     public function isOwn(): bool
     {
         return !$this->isExternal();
+    }
+
+    /**
+     * A breeding (Cría) batch is the only kind that can host a reproductive service.
+     */
+    public function isCria(): bool
+    {
+        return strtoupper((string) $this->activityCode) === 'CRIA';
     }
 
     public function getRenspa(): ?string

@@ -127,7 +127,7 @@ class BirthOrderMapper
     {
         $stage = $gestation->gestation_stage instanceof GestationStage
             ? $gestation->gestation_stage
-            : (GestationStage::tryFrom((string) $gestation->gestation_stage) ?? GestationStage::HEAD);
+            : ($gestation->gestation_stage !== null ? GestationStage::tryFrom((string) $gestation->gestation_stage) : null);
 
         return (new GestationEntity(
             id: (int) $gestation->id,
@@ -140,7 +140,7 @@ class BirthOrderMapper
             endDate: self::date($gestation->end_date),
             notes: $gestation->notes,
             gestationStage: $stage,
-            gestationMonths: (float) ($gestation->gestation_months ?? $stage->toDefaultMonths())
+            gestationMonths: $gestation->gestation_months !== null ? (float) $gestation->gestation_months : null
         ))->getEstimatedDueDate();
     }
 

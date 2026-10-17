@@ -80,11 +80,6 @@ class Batch extends Model
         return $this->hasMany(CaravanMovement::class, 'from_batch_id');
     }
 
-    public function serviceDetail(): HasOne
-    {
-        return $this->hasOne(ServiceBatchDetail::class, 'batch_id');
-    }
-
     /**
      * Head of entry orders received by count on this batch and still waiting for their caravan:
      * they are in the batch, but caravans_count does not see them because their caravans do not
@@ -129,13 +124,6 @@ class Batch extends Model
         });
     }
 
-    public function scopeService($query)
-    {
-        return $query->whereHas('batchType', function ($q) {
-            $q->where('code', 'SERVICE');
-        });
-    }
-
     public function scopeWeaning($query)
     {
         return $query->whereHas('batchType', function ($q) {
@@ -146,11 +134,6 @@ class Batch extends Model
     public function isInQuarantine(): bool
     {
         return $this->batchType?->code === 'QUARANTINE' ?? false;
-    }
-
-    public function isServiceBatch(): bool
-    {
-        return $this->batchType?->code === 'SERVICE' ?? false;
     }
 
     public function isWeaningBatch(): bool
@@ -164,37 +147,26 @@ class Batch extends Model
     }
 
     /**
-     * Campañas de servicio originadas desde este lote base (1 a N).
+     * Every service the batch went through (1 to N campaigns), newest first.
      */
-    public function serviceOrdersAsOrigin(): HasMany
+    public function serviceOrders(): HasMany
     {
-        return $this->hasMany(ServiceOrder::class, 'origin_batch_id')
+        return $this->hasMany(ServiceOrder::class, 'batch_id')
             ->orderByDesc('planned_start_date');
     }
 
     /**
-     * Orden de servicio activa originada sobre este lote (si existe).
+     * The service running on the batch, if any (DRAFT or APPROVED: at most one, enforced by index).
      */
-    public function activeServiceOrderAsOrigin(): HasOne
+    public function activeServiceOrder(): HasOne
     {
-        return $this->hasOne(ServiceOrder::class, 'origin_batch_id')
-            ->where('status', 'APPROVED');
+        return $this->hasOne(ServiceOrder::class, 'batch_id')
+            ->whereIn('status', ['DRAFT', 'APPROVED']);
     }
 
-    /**
-     * Orden de servicio a la que pertenece este lote (si es un lote de servicio).
-     */
-    public function serviceOrderAsServiceBatch(): HasOne
-    {
-        return $this->hasOne(ServiceOrder::class, 'service_batch_id');
-    }
-
-    /**
-     * Helper para verificar si este lote de origen tiene un servicio activo.
-     */
     public function isInService(): bool
     {
-        return $this->activeServiceOrderAsOrigin()->exists();
+        return $this->activeServiceOrder()->exists();
     }
 }
 

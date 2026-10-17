@@ -479,29 +479,37 @@ class WorkTemplateSeeder extends Seeder
                 ]
             );
 
-            // Seed LSER-01: Conformación de Lote de Servicio de toro único (genera lote, orden y movimientos)
+            // Seed LSER-01: Acta de inicio de servicio de toro único sobre un lote de Cría existente
+            // (el lote viene preimpreso; genera la orden de servicio, no un lote nuevo)
             WorkTemplate::updateOrCreate(
                 ['company_id' => $company->id, 'code' => 'LSER-01'],
                 [
                     'category' => 'REPRODUCTIVE',
-                    'title' => 'Conformación de Lote de Servicio — Toro Único',
-                    'description' => 'Constitución de un lote de servicio antes del entore: el toro en el encabezado y los vientres en la tabla. No es registro de montas (MON-01). Al cargarse genera el lote, la orden de servicio y los movimientos.',
+                    'title' => 'Acta de Inicio de Servicio — Toro Único',
+                    'description' => 'Inicio del servicio sobre un lote de Cría existente: el lote sale preimpreso con sus vientres, el toro va en el encabezado. No es registro de montas (MON-01). Al cargarse genera la orden de servicio y el ingreso del toro al lote; los vientres no se mueven.',
                     'status' => 'active',
                     'schema_definition' => [
                         'header_fields' => [
                             [
+                                'name' => 'lote_id',
+                                'label' => 'ID del Lote',
+                                'type' => 'integer',
+                                'required' => true,
+                                'ai_hint' => 'Número de ID del lote, preimpreso junto al nombre del lote en el encabezado (ej: "ID 12").',
+                            ],
+                            [
                                 'name' => 'lote',
-                                'label' => 'Nombre del Lote de Servicio',
+                                'label' => 'Lote en Servicio',
                                 'type' => 'string',
                                 'required' => true,
-                                'ai_hint' => 'Nombre del lote de servicio escrito en el encabezado. Ej: Entore Vaquillonas Toro 004',
+                                'ai_hint' => 'Nombre del lote preimpreso en el encabezado. Ej: Rodeo de Cría A',
                             ],
                             [
                                 'name' => 'toro_caravana',
                                 'label' => 'Caravana del Toro',
                                 'type' => 'string',
                                 'required' => true,
-                                'ai_hint' => 'Caravana del único toro del lote, en el recuadro destacado del encabezado. No es un vientre de la tabla.',
+                                'ai_hint' => 'Caravana del único toro del servicio, en el recuadro destacado del encabezado. No es un vientre de la tabla.',
                             ],
                             [
                                 'name' => 'planned_start_date',
@@ -509,7 +517,7 @@ class WorkTemplateSeeder extends Seeder
                                 'type' => 'date',
                                 'required' => true,
                                 'default' => 'today',
-                                'ai_hint' => 'Fecha de inicio del servicio y del ingreso de los animales al lote (DD/MM/AAAA).',
+                                'ai_hint' => 'Fecha de inicio del servicio y del ingreso del toro al lote (DD/MM/AAAA).',
                             ],
                             [
                                 'name' => 'planned_end_date',
@@ -523,7 +531,7 @@ class WorkTemplateSeeder extends Seeder
                                 'label' => 'Responsable / Firma',
                                 'type' => 'string',
                                 'required' => false,
-                                'ai_hint' => 'Nombre de quien arma el lote en la manga.',
+                                'ai_hint' => 'Nombre de quien controla la manga al iniciar el servicio.',
                             ],
                             [
                                 'name' => 'observaciones',
@@ -539,7 +547,7 @@ class WorkTemplateSeeder extends Seeder
                                 'label' => 'Caravana del Vientre',
                                 'type' => 'string',
                                 'required' => true,
-                                'ai_hint' => 'Número de caravana del vientre escrito a mano, una por fila. Ignorar filas vacías.',
+                                'ai_hint' => 'Número de caravana del vientre, preimpreso o escrito a mano en los renglones libres, una por fila. Ignorar filas vacías.',
                             ],
                             [
                                 'name' => 'observations',

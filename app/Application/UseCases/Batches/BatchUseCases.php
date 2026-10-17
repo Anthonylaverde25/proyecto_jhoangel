@@ -15,8 +15,9 @@ final class BatchUseCases
         public readonly GetBatchWeightHistoryUseCase $getWeights,
         public readonly GetOrCreateReserveBatchUseCase $getOrCreateReserve,
         public readonly AssignExternalCaravansToOwnBatchUseCase $assignExternalToOwn,
-        public readonly CreateServiceBatchUseCase $createService,
-        public readonly StartBatchServiceOrderUseCase $startService
+        public readonly StartBatchServiceOrderUseCase $startService,
+        public readonly ListBatchServiceOrdersUseCase $listServiceOrders,
+        public readonly GetBatchOverviewUseCase $overview
     ) {
     }
 }

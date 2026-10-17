@@ -8,7 +8,6 @@ use App\Core\Enums\AnimalSex;
 use App\Core\Enums\GestationStage;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
-use Illuminate\Validation\Rule;
 
 class BulkStoreCaravanRequest extends FormRequest
 {
@@ -44,32 +43,9 @@ class BulkStoreCaravanRequest extends FormRequest
             'caravans.*.entry_date'     => 'nullable|date',
         ];
 
-        $caravans = $this->input('caravans', []);
-        if (is_array($caravans)) {
-            foreach ($caravans as $index => $caravan) {
-                $rules["caravans.{$index}.gestation_stage"] = [
-                    Rule::requiredIf(function () use ($caravan) {
-                        $isEmpty = isset($caravan['is_empty']) ? filter_var($caravan['is_empty'], FILTER_VALIDATE_BOOLEAN) : null;
-                        $hasMonths = isset($caravan['gestation_months']) && $caravan['gestation_months'] !== '';
-                        return $isEmpty === false && !$hasMonths;
-                    }),
-                    'nullable',
-                    new Enum(GestationStage::class)
-                ];
-
-                $rules["caravans.{$index}.gestation_months"] = [
-                    Rule::requiredIf(function () use ($caravan) {
-                        $isEmpty = isset($caravan['is_empty']) ? filter_var($caravan['is_empty'], FILTER_VALIDATE_BOOLEAN) : null;
-                        $hasStage = isset($caravan['gestation_stage']) && $caravan['gestation_stage'] !== '';
-                        return $isEmpty === false && !$hasStage;
-                    }),
-                    'nullable',
-                    'numeric',
-                    'min:0',
-                    'max:12'
-                ];
-            }
-        }
+        // Stage and months are optional: many producers only declare "pregnant".
+        $rules['caravans.*.gestation_stage'] = ['nullable', new Enum(GestationStage::class)];
+        $rules['caravans.*.gestation_months'] = ['nullable', 'numeric', 'min:0', 'max:12'];
 
         return $rules;
     }

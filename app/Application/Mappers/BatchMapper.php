@@ -66,25 +66,15 @@ class BatchMapper
             }
         }
 
-        if ($model->relationLoaded('serviceDetail') && $model->serviceDetail) {
-            $detail = $model->serviceDetail;
-            $entity->setServiceDetail(new \App\Core\Entities\ServiceBatchDetailEntity(
-                $detail->id,
-                $detail->batch_id,
-                $detail->female_category_id,
-                $detail->male_category_id,
-                $detail->female_subcategory_id,
-                $detail->femaleCategory?->name,
-                $detail->femaleCategory?->code,
-                $detail->femaleSubcategory?->name,
-                $detail->femaleSubcategory?->code,
-                $detail->maleCategory?->name,
-                $detail->maleCategory?->code,
-                $detail->target_bull_ratio !== null ? (float) $detail->target_bull_ratio : null,
-                $detail->planned_start_date ? (is_string($detail->planned_start_date) ? $detail->planned_start_date : $detail->planned_start_date->format('Y-m-d')) : null,
-                $detail->planned_end_date ? (is_string($detail->planned_end_date) ? $detail->planned_end_date : $detail->planned_end_date->format('Y-m-d')) : null,
-                $detail->notes
-            ));
+        if ($model->relationLoaded('activeServiceOrder')) {
+            $order = $model->activeServiceOrder;
+            $entity->setActiveServiceOrder($order === null ? null : [
+                'id' => (int) $order->id,
+                'code' => (string) $order->code,
+                'status' => (string) $order->status,
+                'planned_start_date' => $order->planned_start_date?->format('Y-m-d'),
+                'is_controlled_service' => (bool) $order->is_controlled_service,
+            ]);
         }
 
         return $entity;

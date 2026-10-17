@@ -615,9 +615,9 @@ class PedigreeLineageTest extends TestCase
             'teeth' => 2,
         ]);
 
-        // 2. Call moveAnimalsToBatch directly in EloquentServiceOrderRepository
+        // 2. Bring the bull into the serviced batch through the repository
         $repo = $this->app->make(\App\Infrastructure\Persistence\EloquentServiceOrderRepository::class);
-        $repo->moveAnimalsToBatch([$calf->id], $ownBatch->id, $this->company->id, 1);
+        $repo->moveBullsToBatch([$calf->id], $ownBatch->id, $this->company->id, now()->toDateString(), 'SO-TEST-001');
 
         // 3. Verify movement created with company's renspa
         $movement = \App\Models\CaravanMovement::where('caravan_id', $calf->id)

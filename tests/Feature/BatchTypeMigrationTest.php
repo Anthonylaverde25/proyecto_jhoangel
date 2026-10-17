@@ -94,7 +94,7 @@ class BatchTypeMigrationTest extends TestCase
             'is_active' => true,
         ]);
 
-        $batchType = BatchType::where('code', 'SERVICE')->first();
+        $batchType = BatchType::where('code', 'WEANING')->first();
         $this->assertNotNull($batchType);
 
         CompanyBatchType::create([

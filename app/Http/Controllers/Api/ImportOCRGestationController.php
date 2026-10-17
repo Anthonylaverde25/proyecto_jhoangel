@@ -47,6 +47,7 @@ final class ImportOCRGestationController extends Controller
             serviceOrderId: (int) $validated['service_order_id'],
             diagnosisDate: $validated['diagnosis_date'] ?? null,
             emptyDestinationBatchId: isset($validated['empty_cows_batch_id']) ? (int) $validated['empty_cows_batch_id'] : null,
+            userId: $request->user()?->id !== null ? (int) $request->user()->id : null,
         );
 
         try {

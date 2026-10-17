@@ -23,7 +23,8 @@ final class RegisterBullHealthEvaluationUseCase
         private readonly IVeterinaryDiagnosisRepository $diagnosisRepository,
         private readonly ICaravanRepository $caravanRepository,
         private readonly ICompanyContext $companyContext,
-        private readonly BullHealthEvaluationEngine $engine
+        private readonly BullHealthEvaluationEngine $engine,
+        private readonly \App\Application\UseCases\Veterinary\RaiseSanitaryExposureAlertUseCase $raiseExposureAlert
     ) {
     }
 
@@ -84,7 +85,12 @@ final class RegisterBullHealthEvaluationUseCase
             activeDiagnoses: $activeDiagnoses
         );
 
-        // 6. Persist and return
-        return $this->bullHealthRepository->save($evaluation);
+        // 6. Persist; a contagious positive opens the exposure alert of the females he served.
+        $saved = $this->bullHealthRepository->save($evaluation);
+        if ($status === \App\Core\Enums\ReproductiveAptitudeStatus::UNFIT) {
+            ($this->raiseExposureAlert)($dto->caravanId, $companyId, $activeDiagnoses);
+        }
+
+        return $saved;
     }
 }

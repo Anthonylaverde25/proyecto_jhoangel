@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Application\DTOs\Caravans\UpdateBreedingEligibilityDTO;
+use App\Http\Requests\Caravans\UpdateBreedingEligibilityRequest;
 use App\Application\DTOs\RegisterCaravanDTO;
 use App\Application\UseCases\Caravans\CaravanUseCases;
 use App\Http\Controllers\Controller;
@@ -25,6 +27,7 @@ use App\Http\Requests\Caravans\BulkTransferCaravansRequest;
 use App\Application\UseCases\Caravans\BulkTransferCaravansUseCase;
 use App\Application\UseCases\Caravans\PaginateCaravansSummaryUseCase;
 use App\Http\Resources\CaravanSummaryResource;
+use App\Core\ValueObjects\CaravanSummaryCriteria;
 
 
 class CaravanController extends Controller
@@ -86,25 +89,35 @@ class CaravanController extends Controller
      */
     public function summary(\Illuminate\Http\Request $request): JsonResponse
     {
-        $scope = (string) $request->query('scope', 'own');
         $batchId = $request->query('batch_id');
         $search = $request->query('search');
         $sex = $request->query('sex');
-        $page = (int) $request->query('page', 1);
-        $perPage = (int) $request->query('per_page', 25);
+        $sort = $request->query('sort');
 
-        $paginator = ($this->paginateCaravansSummary)(
-            scope: $scope,
-            batchId: $batchId,
+        $result = ($this->paginateCaravansSummary)(new CaravanSummaryCriteria(
+            scope: (string) $request->query('scope', 'own'),
+            batchId: is_string($batchId) && $batchId !== '' ? $batchId : null,
             search: $search ? (string) $search : null,
             sex: $sex ? (string) $sex : null,
-            page: $page,
-            perPage: $perPage
-        );
+            sort: $sort ? (string) $sort : null,
+            page: (int) $request->query('page', 1),
+            perPage: (int) $request->query('per_page', 25),
+        ));
 
-        return response()->json(
-            CaravanSummaryResource::collection($paginator)->response()->getData(true)
-        );
+        $count = count($result->items);
+        $from = $count > 0 ? ($result->page - 1) * $result->perPage + 1 : null;
+
+        return response()->json([
+            'data' => CaravanSummaryResource::collection($result->items)->resolve($request),
+            'meta' => [
+                'current_page' => $result->page,
+                'last_page'    => $result->lastPage(),
+                'per_page'     => $result->perPage,
+                'total'        => $result->total,
+                'from'         => $from,
+                'to'           => $from !== null ? $from + $count - 1 : null,
+            ],
+        ]);
     }
 
 
@@ -149,12 +162,7 @@ class CaravanController extends Controller
     {
         $validated = $request->validated();
 
-        $dto = new RecordCaravanWeightDTO(
-            caravanId: $id,
-            weight: (float) $validated['weight'],
-            weighingDate: $validated['weighing_date'],
-            notes: $validated['notes'] ?? null
-        );
+        $dto = RecordCaravanWeightDTO::fromArray(['caravan_id' => $id] + $validated);
 
         ($this->caravan->recordWeight)($dto);
 
@@ -234,14 +242,10 @@ class CaravanController extends Controller
     {
         $validated = $request->validated();
 
-        $weightDtos = array_map(function ($data) {
-            return new RecordCaravanWeightDTO(
-                caravanId: $data['caravan_id'],
-                weight: (float) $data['weight'],
-                weighingDate: $data['weighing_date'],
-                notes: $data['notes'] ?? null
-            );
-        }, $validated['weights']);
+        $weightDtos = array_map(
+            static fn (array $data): RecordCaravanWeightDTO => RecordCaravanWeightDTO::fromArray($data),
+            $validated['weights']
+        );
 
         $dto = new BulkRecordCaravanWeightDTO($weightDtos);
 
@@ -298,6 +302,7 @@ class CaravanController extends Controller
     ): JsonResponse {
         $validated = $request->validated();
         $validated['caravan_id'] = $id;
+        $validated['user_id'] = $request->user()?->id;
 
         $companyId = (int) $request->header('X-Company-ID');
 
@@ -320,8 +325,9 @@ class CaravanController extends Controller
         $validated = $request->validated();
         $companyId = (int) $request->header('X-Company-ID');
 
-        $dtos = array_map(function ($data) {
-            return \App\Application\DTOs\RegisterGestationDiagnosisDTO::fromArray($data);
+        $userId = $request->user()?->id;
+        $dtos = array_map(function ($data) use ($userId) {
+            return \App\Application\DTOs\RegisterGestationDiagnosisDTO::fromArray($data + ['user_id' => $userId]);
         }, $validated['diagnoses']);
 
         try {
@@ -362,5 +368,22 @@ class CaravanController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
     }
-}
 
+    /**
+     * The owner marks or unmarks animals as fit for breeding (one or many).
+     */
+    public function bulkBreedingEligibility(UpdateBreedingEligibilityRequest $request): JsonResponse
+    {
+        $dto = UpdateBreedingEligibilityDTO::fromArray(
+            $request->validated(),
+            (int) $request->header('X-Company-ID'),
+            $request->user()?->id !== null ? (int) $request->user()->id : null
+        );
+
+        try {
+            return response()->json(($this->caravan->updateBreedingEligibility)($dto), 200);
+        } catch (\App\Core\Exceptions\DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+}

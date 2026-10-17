@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Application\UseCases\Veterinary;
 
 use App\Application\DTOs\Veterinary\CreateVeterinaryDiagnosisDTO;
+use App\Application\Services\RecomputeBullAptitudeBulkService;
 use App\Core\Entities\BullHealthEvaluationEntity;
+use App\Core\Enums\AnimalSex;
 use App\Core\Entities\VeterinaryDiagnosisEntity;
 use App\Core\Enums\DiagnosisStatus;
 use App\Core\Exceptions\DomainException;
@@ -23,7 +25,9 @@ final class CreateVeterinaryDiagnosisUseCase
         private readonly IBullHealthEvaluationRepository $bullHealthRepository,
         private readonly ICaravanRepository $caravanRepository,
         private readonly ICompanyContext $companyContext,
-        private readonly BullHealthEvaluationEngine $engine
+        private readonly BullHealthEvaluationEngine $engine,
+        private readonly RaiseSanitaryExposureAlertUseCase $raiseExposureAlert,
+        private readonly RecomputeBullAptitudeBulkService $recomputeAptitude
     ) {
     }
 
@@ -79,7 +83,14 @@ final class CreateVeterinaryDiagnosisUseCase
             );
 
             $this->bullHealthRepository->save($updatedBullHealth);
+        } elseif ($caravan->getSex() === AnimalSex::MALE) {
+            // A bull never examined still gets a verdict row, so the service lock can read the
+            // diagnosis: without it an UNFIT bull would pass as "not evaluated".
+            ($this->recomputeAptitude)([$dto->caravanId], $companyId, $dto->diagnosisDate);
         }
+
+        // A contagious positive reaches the females that served with him, evaluated or not.
+        ($this->raiseExposureAlert)($dto->caravanId, $companyId);
 
         return $savedDiagnosis;
     }

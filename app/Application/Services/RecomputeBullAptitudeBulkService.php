@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Application\Services;
 
 use App\Application\Mappers\VeterinaryDiagnosisMapper;
+use App\Application\UseCases\Veterinary\RaiseSanitaryExposureAlertUseCase;
 use App\Core\Enums\DiagnosisStatus;
+use App\Core\Enums\ReproductiveAptitudeStatus;
 use App\Core\Interfaces\IBullHealthEvaluationRepository;
 use App\Core\Services\BullHealthEvaluationEngine;
 use App\Models\BullHealthEvaluation;
@@ -23,7 +25,8 @@ final class RecomputeBullAptitudeBulkService
 {
     public function __construct(
         private readonly BullHealthEvaluationEngine $engine,
-        private readonly IBullHealthEvaluationRepository $bullHealthRepository
+        private readonly IBullHealthEvaluationRepository $bullHealthRepository,
+        private readonly RaiseSanitaryExposureAlertUseCase $raiseExposureAlert
     ) {
     }
 
@@ -92,6 +95,13 @@ final class RecomputeBullAptitudeBulkService
 
         if ($inserts !== []) {
             DB::table('bull_health_evaluations')->insert($inserts);
+        }
+
+        // A contagious positive opens (or updates) the exposure alert of the females he served.
+        foreach ($statuses as $caravanId => $statusValue) {
+            if ($statusValue === ReproductiveAptitudeStatus::UNFIT->value) {
+                ($this->raiseExposureAlert)($caravanId, $companyId, $activeDiagnoses[$caravanId] ?? [], $sampling[$caravanId] ?? null);
+            }
         }
 
         return $statuses;

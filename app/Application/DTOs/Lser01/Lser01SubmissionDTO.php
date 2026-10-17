@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Application\DTOs\Lser01;
 
 /**
- * LSER-01: single-bull service batch sheet. The bull is declared in the header and the
- * females are the rows of the table.
+ * LSER-01: service start record over an existing batch. The batch and the bull are declared in
+ * the header and the females of the batch are the rows of the table.
  */
 final readonly class Lser01SubmissionDTO
 {
@@ -15,7 +15,8 @@ final readonly class Lser01SubmissionDTO
      */
     public function __construct(
         public int $companyId,
-        public string $lote,
+        public int $userId,
+        public int $batchId,
         public string $toroCaravana,
         public string $plannedStartDate,
         public ?string $plannedEndDate,
@@ -28,7 +29,7 @@ final readonly class Lser01SubmissionDTO
     /**
      * @param array<string, mixed> $data
      */
-    public static function fromArray(array $data, int $companyId): self
+    public static function fromArray(array $data, int $companyId, int $userId): self
     {
         $rows = [];
         foreach ((array) ($data['rows'] ?? []) as $row) {
@@ -40,7 +41,8 @@ final readonly class Lser01SubmissionDTO
 
         return new self(
             companyId: $companyId,
-            lote: trim((string) ($data['lote'] ?? '')),
+            userId: $userId,
+            batchId: (int) ($data['batch_id'] ?? 0),
             toroCaravana: trim((string) ($data['toro_caravana'] ?? '')),
             plannedStartDate: (string) ($data['planned_start_date'] ?? ''),
             plannedEndDate: self::nullableString($data['planned_end_date'] ?? null),

@@ -12,6 +12,8 @@ class BatchWeight extends Model
     protected $fillable = [
         'batch_id',
         'activity_id',
+        'weighing_type_id',
+        'weighing_order_id',
         'weight',
         'total_weight',
         'caravans_count',
@@ -24,6 +26,8 @@ class BatchWeight extends Model
     protected $casts = [
         'batch_id' => 'integer',
         'activity_id' => 'integer',
+        'weighing_type_id' => 'integer',
+        'weighing_order_id' => 'integer',
         'weighing_date' => 'date',
         'weights_as_of' => 'date',
         'weight' => 'decimal:2',
@@ -35,6 +39,11 @@ class BatchWeight extends Model
     public function batch(): BelongsTo
     {
         return $this->belongsTo(Batch::class);
+    }
+
+    public function weighingType(): BelongsTo
+    {
+        return $this->belongsTo(WeighingType::class);
     }
 
     public function activity(): BelongsTo

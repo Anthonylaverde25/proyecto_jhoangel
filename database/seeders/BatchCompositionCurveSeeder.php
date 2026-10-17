@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Core\Enums\WeighingTypeCode;
+use App\Models\WeighingType;
 use App\Core\Enums\BatchWeightCause;
 use App\Core\Services\BatchWeightService;
 use App\Models\Activity;
@@ -113,6 +115,7 @@ class BatchCompositionCurveSeeder extends Seeder
         foreach ($caravans as $caravan) {
             $caravan->weights()->update(['current' => false]);
             $caravan->weights()->create([
+                'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
                 'weight' => $weight,
                 'weighing_date' => $date->format('Y-m-d'),
                 'current' => true,

@@ -46,6 +46,8 @@ return [
     */
     'ai_agent' => [
         'url' => env('AI_AGENT_URL', 'http://localhost:8001'),
+        // A chat turn may chain several tool calls; keep it above ai-agent's own model timeout.
+        'assistant_timeout' => (int) env('AI_AGENT_ASSISTANT_TIMEOUT', 120),
     ],
 
 ];

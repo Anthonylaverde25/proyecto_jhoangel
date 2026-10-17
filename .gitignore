@@ -23,3 +23,7 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# SQLite databases and storage folders of the tenants the test suite creates
+/database/tenant_*
+/storage/tenant*/

@@ -95,8 +95,10 @@ return [
     ],
 
     'service_order' => [
-        // ADR-5: fail-closed. A bull with no sanitary evaluation cannot enter a service order.
-        'block_unevaluated_bulls' => env('LIVESTOCK_BLOCK_UNEVALUATED_BULLS', true),
+        // The veterinary module is optional: a bull with no evaluation (or a pending one) enters
+        // service on the owner's decision. Set to true for certified herds (studs), where every
+        // bull needs an APT verdict. UNFIT and IN_TREATMENT always block.
+        'require_sanitary_certification' => env('LIVESTOCK_REQUIRE_SANITARY_CERTIFICATION', false),
     ],
 
     'attachments' => [

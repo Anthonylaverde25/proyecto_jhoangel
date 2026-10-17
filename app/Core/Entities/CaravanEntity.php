@@ -92,6 +92,38 @@ final class CaravanEntity
         $this->farmName = $farmName;
     }
 
+    /**
+     * The owner's breeding decision. Null when the entity was built without it (it defaults
+     * to eligible in the database).
+     */
+    private ?\App\Core\ValueObjects\BreedingEligibility $breedingEligibility = null;
+
+    public function getBreedingEligibility(): ?\App\Core\ValueObjects\BreedingEligibility
+    {
+        return $this->breedingEligibility;
+    }
+
+    public function setBreedingEligibility(?\App\Core\ValueObjects\BreedingEligibility $breedingEligibility): void
+    {
+        $this->breedingEligibility = $breedingEligibility;
+    }
+
+    /**
+     * The catalog's word on whether the category breeds. Null when the entity was built
+     * without its category, or the caravan has none.
+     */
+    private ?bool $isReproductiveCategory = null;
+
+    public function isReproductiveCategory(): ?bool
+    {
+        return $this->isReproductiveCategory;
+    }
+
+    public function setReproductiveCategory(?bool $isReproductiveCategory): void
+    {
+        $this->isReproductiveCategory = $isReproductiveCategory;
+    }
+
     public function getCurrentWeight(): ?float
     {
         return $this->currentWeight;
@@ -250,8 +282,8 @@ final class CaravanEntity
 
     public function startNewGestation(
         ?string $startDate,
-        GestationStage $gestationStage,
-        float $gestationMonths,
+        ?GestationStage $gestationStage,
+        ?float $gestationMonths,
         ?int $serviceOrderId = null
     ): void {
         if ($this->sex !== AnimalSex::FEMALE) {
@@ -491,11 +523,14 @@ final class CaravanEntity
             return PhysiologicalState::UNKNOWN;
         }
 
-        if ($this->isInService) {
+        $hasActiveGestation = $this->hasActiveGestation();
+
+        // Exposed to the bulls of a running service and not yet diagnosed pregnant: a
+        // positive tacto is more informative than the exposure, so it takes precedence.
+        if ($this->isInService && !$hasActiveGestation) {
             return PhysiologicalState::IN_SERVICE;
         }
 
-        $hasActiveGestation = $this->hasActiveGestation();
         $isNursing = $this->isNursing();
 
         if ($hasActiveGestation && $isNursing) {

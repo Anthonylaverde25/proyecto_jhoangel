@@ -436,37 +436,33 @@ final class ImportCaravansUseCase
     }
 
     /**
-     * Resolve gestation stage and months bidirectionally.
+     * Resolve gestation stage and months. Months (a scan) determine the stage; a stage alone is
+     * kept without inventing months; nothing declared leaves both null.
      *
-     * @param string|null $stageStr
-     * @param float|null $months
-     * @return array{0: \App\Core\Enums\GestationStage, 1: float}
+     * @return array{0: ?\App\Core\Enums\GestationStage, 1: ?float}
      */
     private function resolveGestationDetails(?string $stageStr, ?float $months): array
     {
         if ($months !== null) {
-            $stage = \App\Core\Enums\GestationStage::fromMonths($months);
-            return [$stage, $months];
+            return [\App\Core\Enums\GestationStage::fromMonths($months), $months];
         }
 
-        if ($stageStr !== null) {
-            $normalizedStage = strtolower(trim($stageStr));
-            if (str_contains($normalizedStage, 'cabeza') || str_contains($normalizedStage, 'head') || str_contains($normalizedStage, 'cobeza')) {
-                $stage = \App\Core\Enums\GestationStage::HEAD;
-            } elseif (str_contains($normalizedStage, 'cuerpo') || str_contains($normalizedStage, 'body')) {
-                $stage = \App\Core\Enums\GestationStage::BODY;
-            } elseif (str_contains($normalizedStage, 'cola') || str_contains($normalizedStage, 'tail')) {
-                $stage = \App\Core\Enums\GestationStage::TAIL;
-            } else {
-                try {
-                    $stage = \App\Core\Enums\GestationStage::from(strtoupper($stageStr));
-                } catch (\ValueError) {
-                    $stage = \App\Core\Enums\GestationStage::HEAD;
-                }
-            }
-            return [$stage, $stage->toDefaultMonths()];
+        $normalizedStage = strtolower(trim((string) $stageStr));
+        if ($normalizedStage === '') {
+            return [null, null];
         }
 
-        return [\App\Core\Enums\GestationStage::HEAD, 3.0];
+        if (str_contains($normalizedStage, 'cabeza') || str_contains($normalizedStage, 'head') || str_contains($normalizedStage, 'cobeza')) {
+            return [\App\Core\Enums\GestationStage::HEAD, null];
+        }
+        if (str_contains($normalizedStage, 'cuerpo') || str_contains($normalizedStage, 'body')) {
+            return [\App\Core\Enums\GestationStage::BODY, null];
+        }
+        if (str_contains($normalizedStage, 'cola') || str_contains($normalizedStage, 'tail')) {
+            return [\App\Core\Enums\GestationStage::TAIL, null];
+        }
+
+        // An unreadable stage is not a stage.
+        return [\App\Core\Enums\GestationStage::tryFrom($normalizedStage), null];
     }
 }

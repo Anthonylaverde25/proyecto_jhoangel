@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Core\Enums\WeighingTypeCode;
+use App\Models\WeighingType;
 use App\Models\Activity;
 use App\Models\AnimalCategory;
 use App\Models\AnimalSubcategory;
@@ -327,6 +329,7 @@ class Cact01ActivityChangeScanTestSeeder extends Seeder
         CaravanWeight::where('caravan_id', $caravanId)->update(['current' => false]);
 
         CaravanWeight::create([
+            'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
             'caravan_id' => $caravanId,
             'weight' => self::LATE_WEIGHT,
             'current' => true,
@@ -446,6 +449,7 @@ class Cact01ActivityChangeScanTestSeeder extends Seeder
         CaravanWeight::where('caravan_id', $caravan->id)->delete();
 
         CaravanWeight::create([
+            'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
             'caravan_id' => $caravan->id,
             'weight' => $weight,
             'current' => true,

@@ -5,19 +5,18 @@ declare(strict_types=1);
 namespace App\Application\UseCases\ServiceOrders;
 
 use App\Application\DTOs\ServiceOrders\ReplaceServiceBullDTO;
+use App\Application\Services\ServiceBullRetirement;
+use App\Application\UseCases\Veterinary\RaiseSanitaryExposureAlertUseCase;
 use App\Core\Enums\AnimalSex;
 use App\Core\Enums\BatchWeightCause;
 use App\Core\Enums\BullReplacementReason;
 use App\Core\Enums\ServiceOrderMaleStatus;
-use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Exceptions\ServiceOrderDomainException;
 use App\Core\Interfaces\IServiceOrderRepository;
 use App\Core\Services\BatchWeightService;
 use App\Core\Services\BullServiceFitnessPolicy;
-use App\Models\Batch;
 use App\Models\Caravan;
 use App\Models\CaravanMovement;
-use App\Models\ServiceOrder;
 use App\Models\ServiceOrderBullReplacement;
 use App\Models\ServiceOrderHistory;
 use App\Models\ServiceOrderMale;
@@ -28,7 +27,9 @@ final class ReplaceServiceBullUseCase
     public function __construct(
         private readonly IServiceOrderRepository $serviceOrderRepository,
         private readonly BullServiceFitnessPolicy $fitnessPolicy,
-        private readonly BatchWeightService $batchWeightService
+        private readonly BatchWeightService $batchWeightService,
+        private readonly ServiceBullRetirement $retirement,
+        private readonly RaiseSanitaryExposureAlertUseCase $raiseExposureAlert
     ) {
     }
 
@@ -37,47 +38,12 @@ final class ReplaceServiceBullUseCase
      */
     public function __invoke(ReplaceServiceBullDTO $dto): ServiceOrderBullReplacement
     {
-        // 1. Validar existencia y vigencia de la orden de servicio
-        $serviceOrder = ServiceOrder::withoutGlobalScopes()
-            ->where('id', $dto->serviceOrderId)
-            ->where('company_id', $dto->companyId)
-            ->first();
-
-        if ($serviceOrder === null) {
-            throw ServiceOrderDomainException::domainError("La orden de servicio con ID {$dto->serviceOrderId} no existe.");
-        }
-
-        if ($serviceOrder->status !== ServiceOrderStatus::APPROVED->value) {
-            throw ServiceOrderDomainException::domainError(
-                "Solo se pueden sustituir reproductores en órdenes de servicio aprobadas o en curso (Estado actual: {$serviceOrder->status})."
-            );
-        }
-
-        // 2. Validar que el reproductor a retirar pertenezca a la orden y esté activo
-        $retiredBull = Caravan::withoutGlobalScopes()
-            ->where('id', $dto->retiredMaleCaravanId)
-            ->where('company_id', $dto->companyId)
-            ->first();
-
-        if ($retiredBull === null) {
-            throw ServiceOrderDomainException::domainError("El reproductor saliente con ID {$dto->retiredMaleCaravanId} no fue encontrado.");
-        }
-
-        $activeServiceMale = ServiceOrderMale::where('service_order_id', $serviceOrder->id)
-            ->where('male_caravan_id', $dto->retiredMaleCaravanId)
-            ->first();
-
-        if ($activeServiceMale === null) {
-            throw ServiceOrderDomainException::domainError(
-                "El reproductor #{$retiredBull->identification} no está asignado a la orden de servicio {$serviceOrder->code}."
-            );
-        }
-
-        if ($activeServiceMale->status !== ServiceOrderMaleStatus::ACTIVE->value) {
-            throw ServiceOrderDomainException::domainError(
-                "El reproductor #{$retiredBull->identification} ya no se encuentra activo en esta orden de servicio (Estado: {$activeServiceMale->status})."
-            );
-        }
+        // 1-2. The order must be running and the outgoing bull active in it.
+        [$serviceOrder, $retiredBull, $activeServiceMale] = $this->retirement->loadActiveBull(
+            $dto->serviceOrderId,
+            $dto->retiredMaleCaravanId,
+            $dto->companyId
+        );
 
         // 3. Validar reproductor suplente entrante
         $replacementBull = Caravan::withoutGlobalScopes()
@@ -107,86 +73,41 @@ final class ReplaceServiceBullUseCase
         }
 
         // Guarda Andrológica y Sanitaria Estricta (ADR-5)
-        $this->fitnessPolicy->assertFit($dto->replacementMaleCaravanId, $dto->companyId, (string)$replacementBull->identification);
+        $replacementSanitaryStatus = $this->fitnessPolicy->assertFit($dto->replacementMaleCaravanId, $dto->companyId, (string)$replacementBull->identification);
 
         // 4. Resolver lote de destino del toro saliente
-        $destinationBatchId = $dto->destinationBatchId;
-        if ($destinationBatchId === null && $dto->reason !== BullReplacementReason::DEATH) {
-            // Intentar precargar lote donante original a partir del último movimiento hacia el lote de servicio
-            $targetServiceBatchId = $serviceOrder->origin_batch_id ?? $serviceOrder->batch_id;
-            $lastEntryMovement = CaravanMovement::where('caravan_id', $retiredBull->id)
-                ->where('company_id', $dto->companyId)
-                ->where('to_batch_id', $targetServiceBatchId)
-                ->latest('movement_date')
-                ->first();
-
-            $destinationBatchId = $lastEntryMovement?->from_batch_id;
-        }
-
-        if ($destinationBatchId !== null) {
-            $destBatch = Batch::withoutGlobalScopes()
-                ->where('id', $destinationBatchId)
-                ->where('company_id', $dto->companyId)
-                ->first();
-            if ($destBatch === null) {
-                throw ServiceOrderDomainException::domainError("El lote de destino con ID {$destinationBatchId} no existe en esta empresa.");
-            }
-        }
+        $destinationBatchId = $this->retirement->resolveDestination(
+            $serviceOrder,
+            $retiredBull,
+            $dto->reason,
+            $dto->destinationBatchId,
+            $dto->companyId
+        );
 
         // 5. Transacción Atómica
-        return DB::transaction(function () use (
+        $replacement = DB::transaction(function () use (
             $dto,
             $serviceOrder,
             $retiredBull,
             $activeServiceMale,
             $replacementBull,
-            $destinationBatchId
+            $destinationBatchId,
+            $replacementSanitaryStatus
         ) {
             $replacementTimestamp = $dto->replacementDate;
-            $targetServiceBatchId = (int) ($serviceOrder->origin_batch_id ?? $serviceOrder->batch_id);
+            $targetServiceBatchId = (int) $serviceOrder->batch_id;
 
-            // A. Actualizar estado del toro saliente en service_order_males
-            $retiredStatus = $dto->reason === BullReplacementReason::LOW_LIBIDO_RINCONERO
-                ? ServiceOrderMaleStatus::REPLACED->value
-                : ServiceOrderMaleStatus::RETIRED_INJURED->value;
-
-            $activeServiceMale->update([
-                'status'     => $retiredStatus,
-                'retired_at' => $replacementTimestamp,
-            ]);
-
-            // B. Mover físicamente al toro saliente
-            $previousRetiredBatchId = $retiredBull->batch_id;
-            if ($dto->reason === BullReplacementReason::DEATH) {
-                $retiredBull->batch_id = null;
-                $retiredBull->save();
-
-                CaravanMovement::create([
-                    'company_id'    => $dto->companyId,
-                    'caravan_id'    => $retiredBull->id,
-                    'renspa'        => $retiredBull->renspa ?: 'NO_DEFINIDO',
-                    'type'          => 'TRANSFER',
-                    'movement_date' => $replacementTimestamp,
-                    'from_batch_id' => $previousRetiredBatchId,
-                    'to_batch_id'   => null,
-                    'observations'  => "Baja por muerte en potrero durante orden {$serviceOrder->code}",
-                ]);
-            } elseif ($destinationBatchId !== null) {
-                $retiredBull->batch_id = $destinationBatchId;
-                $retiredBull->save();
-
-                CaravanMovement::create([
-                    'company_id'    => $dto->companyId,
-                    'caravan_id'    => $retiredBull->id,
-                    'renspa'        => $retiredBull->renspa ?: 'NO_DEFINIDO',
-                    'type'          => 'TRANSFER',
-                    'movement_date' => $replacementTimestamp,
-                    'from_batch_id' => $previousRetiredBatchId,
-                    'to_batch_id'   => $destinationBatchId,
-                    'observations'  => "Retiro de servicio {$serviceOrder->code} por {$dto->reason->label()}" .
-                        ($dto->notes ? ": {$dto->notes}" : ''),
-                ]);
-            }
+            // A-B. Close the outgoing bull's stay and move him out of the serviced batch.
+            $this->retirement->retire(
+                $serviceOrder,
+                $retiredBull,
+                $activeServiceMale,
+                $dto->reason,
+                $replacementTimestamp,
+                $destinationBatchId,
+                $dto->notes,
+                $dto->companyId
+            );
 
             // C. Insertar toro suplente en service_order_males
             $scrotalCirc = $replacementBull->bullHealthEvaluation?->scrotal_circumference_cm;
@@ -194,7 +115,9 @@ final class ReplaceServiceBullUseCase
                 'company_id'                     => $dto->companyId,
                 'service_order_id'               => $serviceOrder->id,
                 'male_caravan_id'                => $replacementBull->id,
+                'joined_at'                      => substr((string) $replacementTimestamp, 0, 10),
                 'snapshot_scrotal_circumference' => $scrotalCirc,
+                'sanitary_status_at_entry'       => $replacementSanitaryStatus?->value,
                 'service_capacity'               => 'HIGH',
                 'status'                         => ServiceOrderMaleStatus::ACTIVE->value,
             ]);
@@ -260,5 +183,10 @@ final class ReplaceServiceBullUseCase
                 'user',
             ]);
         });
+
+        // An open exposure alert of the outgoing bull now knows when he left the females.
+        ($this->raiseExposureAlert)((int) $retiredBull->id, $dto->companyId);
+
+        return $replacement;
     }
 }

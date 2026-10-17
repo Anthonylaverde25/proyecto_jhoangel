@@ -32,6 +32,8 @@ use App\Http\Controllers\Api\BatchTypeController;
 use App\Http\Controllers\Api\ServiceOrderController;
 use App\Http\Controllers\Api\TransferOrderController;
 use App\Http\Controllers\Api\WeaningOrderController;
+use App\Http\Controllers\Api\WeighingTypeController;
+use App\Http\Controllers\Api\WeighingOrderController;
 use App\Http\Controllers\Api\EntryOrderController;
 use App\Http\Controllers\Api\BirthController;
 use App\Http\Controllers\Api\AnimalCategoryController;
@@ -43,6 +45,7 @@ use App\Http\Controllers\Api\VeterinarianController;
 use App\Http\Controllers\Api\VeterinaryPortalController;
 use App\Http\Controllers\Api\VeterinaryPortalTokenController;
 use App\Http\Controllers\Api\OperationalKpiController;
+use App\Http\Controllers\Api\AssistantController;
 use Illuminate\Support\Facades\Route;
 
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -68,11 +71,16 @@ Route::middleware([
     Route::get('/caravans/{id}/weights', [CaravanController::class, 'listWeights']);
     Route::post('/caravans/{id}/weights', [CaravanController::class, 'recordWeight']);
     Route::post('/caravans/bulk-weights', [CaravanController::class, 'bulkRecordWeights']);
+    Route::get('/weighing-types', [WeighingTypeController::class, 'index']);
+    Route::patch('/weighing-types/{id}/active', [WeighingTypeController::class, 'toggle']);
+    Route::post('/weighing-orders/register-batch', [WeighingOrderController::class, 'registerBatch']);
+    Route::get('/batches/{batchId}/weighing-orders', [WeighingOrderController::class, 'byBatch'])->whereNumber('batchId');
     Route::post('/caravans/bulk-birth', [CaravanController::class, 'bulkBirth']);
     Route::post('/caravans/{id}/gestation-loss', [CaravanController::class, 'gestationLoss']);
     Route::post('/caravans/bulk-gestation-diagnosis', [CaravanController::class, 'bulkGestationDiagnosis']);
     Route::post('/caravans/{id}/gestation-diagnosis', [CaravanController::class, 'registerGestationDiagnosis']);
     Route::post('/caravans/bulk-transfer', [CaravanController::class, 'bulkTransfer']);
+    Route::post('/caravans/bulk-breeding-eligibility', [CaravanController::class, 'bulkBreedingEligibility']);
     Route::get('/caravans/births-history', [BirthController::class, 'index']);
     Route::get('/caravans/pending-sires', [BirthController::class, 'pendingSires']);
     Route::patch('/caravans/{calfId}/assign-sire', [BirthController::class, 'assignSire']);
@@ -84,7 +92,8 @@ Route::middleware([
     Route::apiResource('providers', ProviderController::class)->only(['index', 'store', 'show']);
     Route::apiResource('farms', FarmController::class)->only(['index', 'store', 'show']);
     Route::get('/batches/reserve', [BatchController::class, 'reserve']);
-    Route::post('/batches/service', [BatchController::class, 'storeService']);
+    Route::get('/batches/{id}/service-orders', [BatchController::class, 'serviceOrders'])->whereNumber('id');
+    Route::get('/batches/{id}/overview', [BatchController::class, 'overview'])->whereNumber('id');
     Route::post('/batches/{id}/start-service', [BatchController::class, 'startService']);
     Route::post('/batches/assign-to-own', [BatchController::class, 'assignExternalToOwn']);
     Route::apiResource('batches', BatchController::class)->only(['index', 'store', 'show']);
@@ -123,6 +132,12 @@ Route::middleware([
         Route::post('/caravans/register-new', RegisterNewCaravansController::class);
         Route::get('/dashboard/operational-kpis', [OperationalKpiController::class, 'index']);
         Route::get('/dashboard/herd-summary', \App\Http\Controllers\Api\HerdSummaryController::class);
+    });
+
+    // Asistente Virtual (drawer): read-only, forwarded to ai-agent on behalf of the user.
+    // No `throttle` yet: the database cache store has no table in tenant context (see AGT-03).
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/assistant/chat', [AssistantController::class, 'chat']);
     });
 
     // Órdenes de Transferencia (CACT-01)
@@ -202,10 +217,23 @@ Route::middleware([
         Route::post('/service-orders', [ServiceOrderController::class, 'store']);
         Route::get('/service-orders/{id}', [ServiceOrderController::class, 'show']);
         Route::post('/service-orders/{id}/approve', [ServiceOrderController::class, 'approve']);
-        Route::post('/service-orders/{id}/complete', [ServiceOrderController::class, 'complete']);
+        Route::post('/service-orders/{id}/close-diagnosis', [ServiceOrderController::class, 'closeDiagnosis'])->whereNumber('id');
+        Route::get('/service-orders/{id}/diagnosis', [ServiceOrderController::class, 'diagnosis'])->whereNumber('id');
+        Route::post('/service-orders/{id}/not-diagnosed', [ServiceOrderController::class, 'markNotDiagnosed'])->whereNumber('id');
+        Route::post('/service-orders/{id}/incidents/{incidentId}/resolve', [ServiceOrderController::class, 'resolveIncident'])
+            ->whereNumber('id')
+            ->whereNumber('incidentId');
         Route::patch('/service-orders/{id}/status', [ServiceOrderController::class, 'updateStatus']);
         Route::post('/service-orders/{id}/upload-pdf', [ServiceOrderController::class, 'uploadPdf']);
         Route::post('/service-orders/{id}/replace-bull', [ServiceOrderController::class, 'replaceBull'])->whereNumber('id');
+        Route::post('/service-orders/{id}/retire-bull', [ServiceOrderController::class, 'retireBull'])->whereNumber('id');
+
+        // Females that served with a bull found positive to a contagious pathogen.
+        Route::get('/sanitary-exposure-alerts', [\App\Http\Controllers\Api\SanitaryExposureAlertController::class, 'index']);
+        Route::post('/sanitary-exposure-alerts/open-for-females', [\App\Http\Controllers\Api\SanitaryExposureAlertController::class, 'openForFemales']);
+        Route::get('/sanitary-exposure-alerts/{id}', [\App\Http\Controllers\Api\SanitaryExposureAlertController::class, 'show'])->whereNumber('id');
+        Route::post('/sanitary-exposure-alerts/{id}/review-females', [\App\Http\Controllers\Api\SanitaryExposureAlertController::class, 'reviewFemales'])->whereNumber('id');
+        Route::post('/sanitary-exposure-alerts/{id}/resolve', [\App\Http\Controllers\Api\SanitaryExposureAlertController::class, 'resolve'])->whereNumber('id');
         Route::get('/service-orders/{id}/bull-replacements', [ServiceOrderController::class, 'getBullReplacements'])->whereNumber('id');
         Route::post('/service-orders/{id}/close-service', [ServiceOrderController::class, 'closeService'])->whereNumber('id');
 

@@ -7,10 +7,15 @@ namespace App\Infrastructure\Persistence;
 use App\Core\Entities\CaravanEntity;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\ValueObjects\CaravanNumber;
+use App\Core\ValueObjects\CaravanSummaryCriteria;
+use App\Core\ValueObjects\CaravanSummaryRow;
+use App\Core\ValueObjects\PaginatedResult;
 use App\Models\Caravan;
 use Illuminate\Support\Facades\DB;
 use App\Application\Mappers\CaravanMapper;
 use App\Core\Enums\AnimalSex;
+use App\Core\Enums\BreedingExclusionReason;
+use App\Core\ValueObjects\BreedingEligibility;
 
 class EloquentCaravanRepository implements ICaravanRepository
 {
@@ -41,7 +46,7 @@ class EloquentCaravanRepository implements ICaravanRepository
                     'start_date' => $gestation->getStartDate(),
                     'estimated_due_date' => $gestation->getEstimatedDueDate(),
                     'is_current' => $gestation->isCurrent(),
-                    'gestation_stage' => $gestation->getGestationStage()->value,
+                    'gestation_stage' => $gestation->getGestationStage()?->value,
                     'gestation_months' => $gestation->getGestationMonths(),
                     'success' => $gestation->getSuccess(),
                     'loss_reason_id' => $gestation->getLossReasonId(),
@@ -160,7 +165,9 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function findById(int $id): ?CaravanEntity
     {
-        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'batch.farm.provider', 'provider', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father'])->find($id);
+        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'batch.farm.provider', 'provider', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father'])
+            ->withExists('openServiceExposures as is_in_service')
+            ->find($id);
         
         return $model ? CaravanMapper::toEntity($model) : null;
     }
@@ -271,6 +278,96 @@ class EloquentCaravanRepository implements ICaravanRepository
         });
     }
 
+    public function paginateSummary(CaravanSummaryCriteria $criteria): PaginatedResult
+    {
+        $query = Caravan::query()
+            ->with([
+                'categoryRelation:id,name,is_reproductive',
+                'subcategoryRelation:id,name',
+                'breedRelation:id,name',
+                'batch:id,name,farm_id',
+                'batch.farm:id,name',
+                'currentWeight:id,caravan_id,weight,current',
+            ])
+            ->withExists(['gestations as has_current_gestation' => fn ($q) => $q->where('is_current', true)]);
+
+        if ($criteria->scope === 'own') {
+            $this->applyOwnScope($query);
+        } elseif ($criteria->scope === 'external') {
+            $query->where(function ($q) {
+                $q->whereNotNull('provider_id')
+                  ->orWhereHas('batch.farm', fn ($farmQb) => $farmQb->whereNotNull('provider_id'));
+            });
+        }
+
+        if ($criteria->isUnassigned()) {
+            $query->where(fn ($q) => $q->whereNull('batch_id')->orWhere('batch_id', 0));
+        } elseif ($criteria->specificBatchId() !== null) {
+            $query->where('batch_id', $criteria->specificBatchId());
+        }
+
+        if ($criteria->sex !== null) {
+            $query->where('sex', $criteria->sex);
+        }
+
+        $term = trim((string) $criteria->search);
+        if ($term !== '') {
+            $query->where(function ($q) use ($term) {
+                $q->where('identification', 'LIKE', "%{$term}%")
+                  ->orWhereHas('breedRelation', fn ($bq) => $bq->where('name', 'LIKE', "%{$term}%"))
+                  ->orWhereHas('categoryRelation', fn ($cq) => $cq->where('name', 'LIKE', "%{$term}%"));
+            });
+        }
+
+        if ($criteria->sort === CaravanSummaryCriteria::SORT_RECENT) {
+            $query->orderByDesc('batch_assigned_at')->orderByDesc('id');
+        } else {
+            $query->orderBy('identification');
+        }
+
+        $paginator = $query->paginate($criteria->perPage, ['*'], 'page', $criteria->page);
+
+        return new PaginatedResult(
+            items: array_map(fn (Caravan $model) => $this->toSummaryRow($model), $paginator->items()),
+            total: $paginator->total(),
+            page: $paginator->currentPage(),
+            perPage: $paginator->perPage(),
+        );
+    }
+
+    private function toSummaryRow(Caravan $model): CaravanSummaryRow
+    {
+        $currentWeight = $model->currentWeight?->weight ?? $model->entry_weight;
+        $sex = $model->sex instanceof \BackedEnum ? (string) $model->sex->value : (string) $model->sex;
+        $entryDate = $model->entry_date ?? $model->created_at;
+        $isReproductiveCategory = $model->categoryRelation !== null ? (bool) $model->categoryRelation->is_reproductive : null;
+        $breeds = $isReproductiveCategory !== false;
+
+        return new CaravanSummaryRow(
+            id: (int) $model->id,
+            identification: (string) $model->identification,
+            categoryId: $model->category_id,
+            categoryName: $model->categoryRelation?->name,
+            subcategoryId: $model->subcategory_id,
+            subcategoryName: $model->subcategoryRelation?->name,
+            teeth: $model->teeth,
+            entryWeight: $model->entry_weight !== null ? (float) $model->entry_weight : null,
+            currentWeight: $currentWeight !== null ? (float) $currentWeight : null,
+            breedId: $model->breed_id,
+            breedName: $model->breedRelation?->name,
+            sex: $sex,
+            entryDate: $entryDate?->format('m/Y'),
+            batchId: $model->batch_id,
+            batchName: $model->batch?->name,
+            farmName: $model->batch?->farm?->name,
+            batchAssignedAt: $model->batch_assigned_at !== null ? \DateTimeImmutable::createFromInterface($model->batch_assigned_at) : null,
+            gestationStatus: $sex === AnimalSex::FEMALE->value && $breeds ? ($model->has_current_gestation ? 'PREGNANT' : 'NONE') : null,
+            isBreedingEligible: (bool) ($model->is_breeding_eligible ?? true),
+            breedingExclusionReason: $model->breeding_exclusion_reason,
+            isReproductiveCategory: $isReproductiveCategory,
+        );
+    }
+
     public function findAll(?string $scope = 'own'): array
     {
         $query = Caravan::with([
@@ -285,7 +382,7 @@ class EloquentCaravanRepository implements ICaravanRepository
             'lineage.mother',
             'lineage.father',
             'provider',
-        ]);
+        ])->withExists('openServiceExposures as is_in_service');
 
         if ($scope === 'own') {
             $this->applyOwnScope($query);
@@ -305,6 +402,15 @@ class EloquentCaravanRepository implements ICaravanRepository
     public function delete(int $id): bool
     {
         return (bool) Caravan::destroy($id);
+    }
+
+    public function findIdsInPossessionByBatch(int $batchId): array
+    {
+        return Caravan::inPossession()->where('caravans.batch_id', $batchId)
+            ->orderBy('caravans.id')
+            ->pluck('caravans.id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
     }
 
     public function countByBatch(int $batchId): int
@@ -371,6 +477,12 @@ class EloquentCaravanRepository implements ICaravanRepository
         if ($subcategoryId !== null) {
             $data['subcategory_id'] = $subcategoryId;
         }
+
+        // Query builder writes skip the model observer: stamp the arrival here, only on the
+        // caravans that actually change batch.
+        Caravan::whereIn('id', $caravanIds)
+            ->where(fn ($q) => $q->whereNull('batch_id')->orWhere('batch_id', '!=', $targetBatchId))
+            ->update(['batch_assigned_at' => now()]);
 
         Caravan::whereIn('id', $caravanIds)->update($data);
 
@@ -452,16 +564,29 @@ class EloquentCaravanRepository implements ICaravanRepository
         if ($subcategoryId !== null) {
             $data['subcategory_id'] = $subcategoryId;
         }
+        $this->stampBatchArrival($caravanId, $batchId);
         Caravan::where('id', $caravanId)->update($data);
     }
 
     public function updateBatchAndReclassify(int $caravanId, int $batchId, int $categoryId, ?int $subcategoryId = null): void
     {
+        $this->stampBatchArrival($caravanId, $batchId);
         Caravan::where('id', $caravanId)->update([
             'batch_id' => $batchId,
             'category_id' => $categoryId,
             'subcategory_id' => $subcategoryId,
         ]);
+    }
+
+    /**
+     * Query builder writes skip the model observer, so the arrival date is stamped here when the
+     * caravan is about to change batch.
+     */
+    private function stampBatchArrival(int $caravanId, int $batchId): void
+    {
+        Caravan::where('id', $caravanId)
+            ->where(fn ($q) => $q->whereNull('batch_id')->orWhere('batch_id', '!=', $batchId))
+            ->update(['batch_assigned_at' => now()]);
     }
 
     public function updateTeeth(int $caravanId, int $teeth): void
@@ -480,5 +605,57 @@ class EloquentCaravanRepository implements ICaravanRepository
             
         return $models->map(fn($model) => CaravanMapper::toEntity($model))->toArray();
     }
-}
 
+    public function findServiceableFemaleIdsInBatch(int $batchId, bool $onlyBreedingEligible = false): array
+    {
+        return Caravan::inPossession()
+            ->where('caravans.batch_id', $batchId)
+            ->where('caravans.sex', AnimalSex::FEMALE->value)
+            ->whereDoesntHave('gestations', fn ($q) => $q->where('is_current', true))
+            ->whereDoesntHave('categoryRelation', fn ($q) => $q->where('is_reproductive', false))
+            ->when($onlyBreedingEligible, fn ($q) => $q->where('caravans.is_breeding_eligible', true))
+            ->pluck('caravans.id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    public function findBreedingExcludedFemaleIdsInBatch(int $batchId): array
+    {
+        return Caravan::inPossession()
+            ->where('caravans.batch_id', $batchId)
+            ->where('caravans.sex', AnimalSex::FEMALE->value)
+            ->where('caravans.is_breeding_eligible', false)
+            ->whereDoesntHave('gestations', fn ($q) => $q->where('is_current', true))
+            ->whereDoesntHave('categoryRelation', fn ($q) => $q->where('is_reproductive', false))
+            ->pluck('caravans.id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    public function findBreedingEligibility(int $caravanId): ?BreedingEligibility
+    {
+        $row = Caravan::withoutGlobalScopes()
+            ->whereKey($caravanId)
+            ->first(['is_breeding_eligible', 'breeding_exclusion_reason']);
+
+        if ($row === null) {
+            return null;
+        }
+
+        return new BreedingEligibility(
+            (bool) $row->is_breeding_eligible,
+            BreedingExclusionReason::tryFrom((string) $row->breeding_exclusion_reason)
+        );
+    }
+
+    public function findCategoryBreedingProfile(int $caravanId): ?array
+    {
+        $category = Caravan::withoutGlobalScopes()
+            ->whereKey($caravanId)
+            ->with('categoryRelation:id,name,is_reproductive')
+            ->first(['id', 'category_id'])
+            ?->categoryRelation;
+
+        return $category !== null ? ['name' => (string) $category->name, 'is_reproductive' => (bool) $category->is_reproductive] : null;
+    }
+}

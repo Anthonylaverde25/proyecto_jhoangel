@@ -55,15 +55,6 @@ class BatchTypeSeeder extends Seeder
 
             // --- Cría ---
             [
-                'code' => 'SERVICE',
-                'name' => 'Servicio / Entore',
-                'description' => 'Lote reproductivo homogéneo para servicio natural o IATF',
-                'icon' => 'heroicons-outline:heart',
-                'color' => '#ec4899',
-                'activity_id' => $criaId,
-                'is_active' => true,
-            ],
-            [
                 'code' => 'WEANING',
                 'name' => 'Lote de Destete',
                 'description' => 'Lote transitorio de desmadre, acostumbramiento o concentración para comercialización',
