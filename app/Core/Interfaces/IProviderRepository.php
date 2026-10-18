@@ -9,15 +9,21 @@ use App\Core\Entities\ProviderEntity;
 interface IProviderRepository
 {
     /**
+     * Providers of the active company.
+     *
+     * @param 'livestock'|'items'|null $supplies only providers with that role; null = all
      * @return ProviderEntity[]
      */
-    public function findAll(): array;
+    public function findAll(?string $supplies = null): array;
 
     public function findById(int $id): ?ProviderEntity;
 
-    public function findByCuit(string $cuit): ?ProviderEntity;
+    public function findByCuit(string $cuit, int $companyId): ?ProviderEntity;
 
     public function save(ProviderEntity $provider): ProviderEntity;
+
+    /** Persists only the two role flags; the provider's farms are left untouched. */
+    public function updateRoles(ProviderEntity $provider): void;
 
     public function delete(int $id): bool;
 }

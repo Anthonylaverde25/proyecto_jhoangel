@@ -28,6 +28,8 @@ class ProviderResource extends JsonResource
             'email'           => $this->resource->getEmail(),
             'phone'           => $this->resource->getPhone(),
             'is_active'       => $this->resource->isActive(),
+            'supplies_livestock' => $this->resource->suppliesLivestock(),
+            'supplies_items'  => $this->resource->suppliesItems(),
             'farms'           => FarmResource::collection($this->resource->getFarms()),
             'created_at'      => $this->resource->getCreatedAt()?->format('Y-m-d H:i:s'),
         ];

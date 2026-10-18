@@ -20,11 +20,6 @@ interface IFarmRepository
      */
      public function findByProviderId(int $providerId): array;
 
-    /**
-     * @return FarmEntity[]
-     */
-    public function findOwnFarms(): array;
-
     public function save(FarmEntity $farm): FarmEntity;
 
 

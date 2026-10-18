@@ -29,6 +29,8 @@ class OperationalKpisApiTest extends EntryOrderTestCase
         $pendingEntryStatuses = [
             EntryOrderStatus::AWAITING_DTE->value,
             EntryOrderStatus::IN_TRANSIT->value,
+            // Received by count with caravans still to write: pending for the endpoint too.
+            EntryOrderStatus::RECEIVED->value,
             EntryOrderStatus::DRAFT->value,
         ];
         $pendingOrderStatuses = [

@@ -157,7 +157,7 @@ class EloquentCaravanRepository implements ICaravanRepository
         }
 
         return Caravan::whereIn('id', $caravanIds)
-            ->whereHas('batch.farm', fn ($farmQb) => $farmQb->whereNotNull('provider_id'))
+            ->whereHas('batch', fn ($batchQb) => $batchQb->whereNotNull('farm_id'))
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->all();
@@ -261,20 +261,13 @@ class EloquentCaravanRepository implements ICaravanRepository
     }
 
     /**
-     * Own animals: no batch, or a batch that is not in a provider's farm.
+     * Own animals: no batch, or an own batch (one without a farm: every farm is a provider's, D21).
      */
     private function applyOwnScope(\Illuminate\Database\Eloquent\Builder $query): void
     {
         $query->where(function ($q) {
             $q->whereNull('batch_id')
-              ->orWhereHas('batch', function ($qb) {
-                  $qb->where(function ($subQb) {
-                      $subQb->whereNull('farm_id')
-                            ->orWhereHas('farm', function ($farmQb) {
-                                $farmQb->whereNull('provider_id');
-                            });
-                  });
-              });
+              ->orWhereHas('batch', fn ($qb) => $qb->whereNull('farm_id'));
         });
     }
 
@@ -296,7 +289,7 @@ class EloquentCaravanRepository implements ICaravanRepository
         } elseif ($criteria->scope === 'external') {
             $query->where(function ($q) {
                 $q->whereNotNull('provider_id')
-                  ->orWhereHas('batch.farm', fn ($farmQb) => $farmQb->whereNotNull('provider_id'));
+                  ->orWhereHas('batch', fn ($batchQb) => $batchQb->whereNotNull('farm_id'));
             });
         }
 
@@ -389,9 +382,7 @@ class EloquentCaravanRepository implements ICaravanRepository
         } elseif ($scope === 'external') {
             $query->where(function ($q) {
                 $q->whereNotNull('provider_id')
-                  ->orWhereHas('batch.farm', function ($farmQb) {
-                      $farmQb->whereNotNull('provider_id');
-                  });
+                  ->orWhereHas('batch', fn ($batchQb) => $batchQb->whereNotNull('farm_id'));
             });
         }
 

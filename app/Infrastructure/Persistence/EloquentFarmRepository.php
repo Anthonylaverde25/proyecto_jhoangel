@@ -32,14 +32,6 @@ class EloquentFarmRepository implements IFarmRepository
             ->toArray();
     }
 
-    public function findOwnFarms(): array
-    {
-        return Farm::whereNull('provider_id')
-            ->get()
-            ->map(fn (Farm $model) => FarmMapper::toEntity($model))
-            ->toArray();
-    }
-
 
     public function save(FarmEntity $farm): FarmEntity
     {

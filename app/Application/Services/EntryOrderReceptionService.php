@@ -589,7 +589,12 @@ final class EntryOrderReceptionService
     {
         $troop = $order->getTroop();
         $breeds = $troop->breedsByPosition();
-        $renspa = (string) (Farm::withoutGlobalScopes()->whereKey($troop->farmId)->value('renspa') ?? 'NO_DEFINIDO');
+        // The order's origin farm, read inside its own company. A farm without RENSPA leaves the
+        // caravan's origin as NO_DEFINIDO, the caravans' convention for an unknown RENSPA.
+        $renspa = (string) (Farm::withoutGlobalScopes()
+            ->where('company_id', $order->getCompanyId())
+            ->whereKey($troop->farmId)
+            ->value('renspa') ?? 'NO_DEFINIDO');
 
         return [
             'renspa' => $renspa,

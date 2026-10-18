@@ -49,8 +49,8 @@ final class AssignExternalCaravansToOwnBatchUseCase
             throw new DomainException("El lote propio destino no se encuentra activo.");
         }
 
-        $targetFarm = $targetBatch->getFarmId() ? $this->farmRepository->findById($targetBatch->getFarmId()) : null;
-        $targetRenspa = $targetFarm?->getRenspa() ?? 'NO_DEFINIDO';
+        // An own batch has no farm: its RENSPA is the company's, resolved by the batch mapper (D21).
+        $targetRenspa = $targetBatch->getRenspa() ?? 'NO_DEFINIDO';
 
         $affectedSourceBatchIds = [];
         $transferredCount = 0;

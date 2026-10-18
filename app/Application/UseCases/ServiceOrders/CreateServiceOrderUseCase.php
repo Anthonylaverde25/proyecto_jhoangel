@@ -89,11 +89,9 @@ final class CreateServiceOrderUseCase
         // 2.5. Verify that no animal belongs to an external batch (pending own assignment)
         $invalidCaravans = \Illuminate\Support\Facades\DB::table('caravans')
             ->join('batches', 'caravans.batch_id', '=', 'batches.id')
-            ->leftJoin('farms', 'batches.farm_id', '=', 'farms.id')
             ->whereIn('caravans.id', $allCaravans)
-            ->where(function ($query) {
-                $query->whereNotNull('farms.provider_id');
-            })
+            // A batch with a farm is external: every farm is a provider's (D21).
+            ->whereNotNull('batches.farm_id')
             ->select('caravans.id', 'caravans.identification', 'batches.name as batch_name')
             ->get()
             ->map(fn($row) => [

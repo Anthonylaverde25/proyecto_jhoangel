@@ -92,9 +92,10 @@ class EntryOrderDestinationTest extends EntryOrderTestCase
         $this->assertSame(['EO-DS-1', 'EO-DS-4'], Caravan::where('batch_id', $males->id)->orderBy('identification')->pluck('identification')->all());
         $this->assertSame(['EO-DS-2', 'EO-DS-3'], Caravan::where('batch_id', $females->id)->orderBy('identification')->pluck('identification')->all());
 
-        // The own farm's RENSPA operates the animal; the seller's stays in its provenance.
+        // The company's RENSPA operates the animal (an own batch has no farm, D21); the seller's
+        // stays in its provenance.
         $caravan = Caravan::where('identification', 'EO-DS-1')->firstOrFail();
-        $this->assertSame('02.111.0.00001/00', $caravan->renspa);
+        $this->assertSame($this->company->fresh()->renspa, $caravan->renspa);
         $this->assertSame($this->provider->id, (int) $caravan->provider_id);
         $this->assertSame('01.234.5.67890/00', $caravan->provenance_metadata['origin_renspa']);
         $this->assertSame(now()->toDateString(), $caravan->provenance_metadata['assigned_to_own_batch_at']);

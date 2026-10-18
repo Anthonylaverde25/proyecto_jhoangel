@@ -8,15 +8,13 @@ use App\Core\Entities\BatchEntity;
 use App\Core\Interfaces\IBatchRepository;
 use App\Core\Interfaces\IBatchTypeRepository;
 use App\Core\Interfaces\IActivityRepository;
-use App\Core\Interfaces\IFarmRepository;
 
 final class GetOrCreateReserveBatchUseCase
 {
     public function __construct(
         private readonly IBatchRepository $batchRepository,
         private readonly IBatchTypeRepository $batchTypeRepository,
-        private readonly IActivityRepository $activityRepository,
-        private readonly IFarmRepository $farmRepository
+        private readonly IActivityRepository $activityRepository
     ) {
     }
 
@@ -28,11 +26,7 @@ final class GetOrCreateReserveBatchUseCase
             return $existing;
         }
 
-        // 2. Resolve own farm for the company
-        $ownFarms = $this->farmRepository->findOwnFarms();
-        $ownFarm = !empty($ownFarms) ? reset($ownFarms) : null;
-        $ownFarmId = $ownFarm?->getId();
-        $ownFarmName = $ownFarm?->getName();
+        // 2. An own batch has no farm: the company is its own farm (D21).
 
         // 3. Resolve RESERVE batch type
         $batchType = $this->batchTypeRepository->findByCode('RESERVE');
@@ -46,11 +40,11 @@ final class GetOrCreateReserveBatchUseCase
         $batchEntity = new BatchEntity(
             id: null,
             name: 'Lote Reserva | Animales Apartados',
-            farmId: $ownFarmId,
+            farmId: null,
             observaciones: 'Lote interno del sistema para animales apartados, descartes reproductivos o reserva genética',
             isActive: true,
             createdAt: new \DateTimeImmutable(),
-            farmName: $ownFarmName,
+            farmName: null,
             providerId: null,
             providerName: null,
             activityId: $activityId,

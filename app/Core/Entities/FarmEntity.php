@@ -9,9 +9,9 @@ final class FarmEntity
     public function __construct(
         private readonly ?int $id,
         private string $name,
-        private string $renspa,
+        private ?string $renspa,
         private ?string $location,
-        private ?int $providerId = null,
+        private int $providerId,
         private bool $isActive = true,
         private ?\DateTimeInterface $createdAt = null,
         private ?int $companyId = null
@@ -33,7 +33,7 @@ final class FarmEntity
         return $this->name;
     }
 
-    public function getRenspa(): string
+    public function getRenspa(): ?string
     {
         return $this->renspa;
     }
@@ -43,19 +43,12 @@ final class FarmEntity
         return $this->location;
     }
 
-    public function getProviderId(): ?int
+    /**
+     * Every farm is a provider's origin farm: a company *is* its own farm (D21).
+     */
+    public function getProviderId(): int
     {
         return $this->providerId;
-    }
-
-    public function isOwn(): bool
-    {
-        return $this->providerId === null;
-    }
-
-    public function isExternal(): bool
-    {
-        return !$this->isOwn();
     }
 
     public function isActive(): bool
@@ -69,7 +62,7 @@ final class FarmEntity
         return $this->createdAt;
     }
 
-    public function updateDetails(string $name, string $renspa, ?string $location): void
+    public function updateDetails(string $name, ?string $renspa, ?string $location): void
     {
         $this->name = $name;
         $this->renspa = $renspa;

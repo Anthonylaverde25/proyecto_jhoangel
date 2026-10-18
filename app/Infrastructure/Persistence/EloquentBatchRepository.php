@@ -22,17 +22,11 @@ class EloquentBatchRepository implements IBatchRepository
     {
         $query = Batch::with($this->relations)->withPendingIdentification();
         
+        // Every farm is a provider's (D21): own batches have no farm, external ones do.
         if ($scope === 'own') {
-            $query->where(function ($q) {
-                $q->whereNull('farm_id')
-                  ->orWhereHas('farm', function ($fqb) {
-                      $fqb->whereNull('provider_id');
-                  });
-            });
+            $query->whereNull('farm_id');
         } elseif ($scope === 'external') {
-            $query->whereHas('farm', function ($fqb) {
-                $fqb->whereNotNull('provider_id');
-            });
+            $query->whereNotNull('farm_id');
         }
 
         if ($batchType !== null) {

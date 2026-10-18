@@ -17,8 +17,37 @@ final class ProviderEntity
         private bool $isActive = true,
         private ?\DateTimeInterface $createdAt = null,
         /** @var FarmEntity[] */
-        private array $farms = []
+        private array $farms = [],
+        private ?int $companyId = null,
+        private bool $suppliesLivestock = true,
+        private bool $suppliesItems = false
     ) {
+        self::assertHasRole($suppliesLivestock, $suppliesItems);
+    }
+
+    /**
+     * A provider sells livestock, items (articles or services), or both; never neither.
+     */
+    private static function assertHasRole(bool $suppliesLivestock, bool $suppliesItems): void
+    {
+        if (!$suppliesLivestock && !$suppliesItems) {
+            throw new \App\Core\Exceptions\DomainException('El proveedor tiene que vender hacienda, artículos o servicios (al menos una de las dos).');
+        }
+    }
+
+    public function getCompanyId(): ?int
+    {
+        return $this->companyId;
+    }
+
+    public function suppliesLivestock(): bool
+    {
+        return $this->suppliesLivestock;
+    }
+
+    public function suppliesItems(): bool
+    {
+        return $this->suppliesItems;
     }
 
     public function getId(): ?int
@@ -86,6 +115,13 @@ final class ProviderEntity
         $this->location = $location;
         $this->email = $email;
         $this->phone = $phone;
+    }
+
+    public function changeRoles(bool $suppliesLivestock, bool $suppliesItems): void
+    {
+        self::assertHasRole($suppliesLivestock, $suppliesItems);
+        $this->suppliesLivestock = $suppliesLivestock;
+        $this->suppliesItems = $suppliesItems;
     }
 
     public function activate(): void

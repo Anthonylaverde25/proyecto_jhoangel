@@ -14,9 +14,9 @@ class FarmMapper
         return new FarmEntity(
             $model->id,
             $model->name,
-            (string) $model->renspa,
+            $model->renspa !== null && $model->renspa !== '' ? (string) $model->renspa : null,
             $model->location,
-            $model->provider_id !== null ? (int) $model->provider_id : null,
+            (int) $model->provider_id,
             (bool) $model->is_active,
             $model->created_at,
             $model->company_id !== null ? (int) $model->company_id : null

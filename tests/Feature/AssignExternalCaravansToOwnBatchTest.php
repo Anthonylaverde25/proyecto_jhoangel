@@ -121,10 +121,13 @@ class AssignExternalCaravansToOwnBatchTest extends TestCase
         $response->assertStatus(200);
         $response->assertJsonPath('data.transferred', 2);
 
-        // 6. Validar Base de Datos: renspa se actualiza al lote propio, origin_renspa queda en metadata
+        // 6. The caravan takes the own batch's RENSPA, which is the company's (an own batch has no
+        // farm, D21); the origin RENSPA stays in the provenance.
+        $companyRenspa = $this->company->fresh()->renspa;
+        $this->assertNotNull($companyRenspa);
         $caravan1->refresh();
         $this->assertEquals($ownBatch->id, $caravan1->batch_id);
-        $this->assertEquals('NO_DEFINIDO', $caravan1->renspa);
+        $this->assertEquals($companyRenspa, $caravan1->renspa);
         $this->assertEquals('01.002.3.00456/00', $caravan1->provenance_metadata['origin_renspa']);
         $this->assertEquals('Lote 14 Remate Anual', $caravan1->provenance_metadata['origin_batch_name']);
 
@@ -133,7 +136,7 @@ class AssignExternalCaravansToOwnBatchTest extends TestCase
             'from_batch_id' => $externalBatch->id,
             'to_batch_id' => $ownBatch->id,
             'type' => 'PURCHASE',
-            'renspa' => 'NO_DEFINIDO',
+            'renspa' => $companyRenspa,
             'from_renspa' => '01.002.3.00456/00'
         ]);
     }

@@ -14,9 +14,12 @@ use App\Application\Mappers\FarmMapper;
 
 class EloquentProviderRepository implements IProviderRepository
 {
-    public function findAll(): array
+    public function findAll(?string $supplies = null): array
     {
-        return Provider::with('farms')->get()
+        return Provider::with('farms')
+            ->when($supplies === 'livestock', fn ($query) => $query->where('supplies_livestock', true))
+            ->when($supplies === 'items', fn ($query) => $query->where('supplies_items', true))
+            ->get()
             ->map(fn (Provider $model) => ProviderMapper::toEntity($model))
             ->toArray();
     }
@@ -27,9 +30,10 @@ class EloquentProviderRepository implements IProviderRepository
         return $model ? ProviderMapper::toEntity($model) : null;
     }
 
-    public function findByCuit(string $cuit): ?ProviderEntity
+    public function findByCuit(string $cuit, int $companyId): ?ProviderEntity
     {
-        $model = Provider::where('cuit', $cuit)->first();
+        // Explicit company filter: this may run outside a request, without company context.
+        $model = Provider::withoutGlobalScopes()->where('company_id', $companyId)->where('cuit', $cuit)->first();
         return $model ? ProviderMapper::toEntity($model) : null;
     }
 
@@ -45,12 +49,25 @@ class EloquentProviderRepository implements IProviderRepository
                 foreach ($provider->getFarms() as $farmEntity) {
                     $farmModel = FarmMapper::toModel($farmEntity);
                     $farmModel->provider_id = $model->id; // Vincular al nuevo proveedor
+                    // The farm belongs to the provider's company, never to whatever context is active.
+                    $farmModel->company_id = $model->company_id;
                     $farmModel->save();
                 }
             }
 
             return ProviderMapper::toEntity($model->load('farms'));
         });
+    }
+
+    public function updateRoles(ProviderEntity $provider): void
+    {
+        Provider::withoutGlobalScopes()
+            ->where('company_id', $provider->getCompanyId())
+            ->whereKey($provider->getId())
+            ->update([
+                'supplies_livestock' => $provider->suppliesLivestock(),
+                'supplies_items' => $provider->suppliesItems(),
+            ]);
     }
 
     public function delete(int $id): bool

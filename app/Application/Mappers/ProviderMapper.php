@@ -29,7 +29,10 @@ class ProviderMapper
             $model->phone,
             (bool) $model->is_active,
             $model->created_at,
-            $farms
+            $farms,
+            $model->company_id !== null ? (int) $model->company_id : null,
+            (bool) ($model->supplies_livestock ?? true),
+            (bool) ($model->supplies_items ?? false)
         );
     }
 
@@ -46,6 +49,12 @@ class ProviderMapper
         $model->email = $entity->getEmail();
         $model->phone = $entity->getPhone();
         $model->is_active = $entity->isActive();
+        $model->supplies_livestock = $entity->suppliesLivestock();
+        $model->supplies_items = $entity->suppliesItems();
+
+        if ($entity->getCompanyId() !== null) {
+            $model->company_id = $entity->getCompanyId();
+        }
 
         return $model;
     }

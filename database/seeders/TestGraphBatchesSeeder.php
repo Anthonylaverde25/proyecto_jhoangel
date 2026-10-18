@@ -36,7 +36,9 @@ class TestGraphBatchesSeeder extends Seeder
         }
 
         $companyId = (int) $company->id;
-        $farmId = \App\Models\Farm::withoutGlobalScopes()->where('company_id', $companyId)->value('id');
+        // These are own batches: no farm, the company is its own farm (D21). Hanging them from the
+        // company's first farm would make them external, since every farm is a provider's.
+        $farmId = null;
 
         $criaActivityId = Activity::withoutGlobalScopes()->where('code', 'CRIA')->value('id')
             ?? Activity::withoutGlobalScopes()->first()?->id;

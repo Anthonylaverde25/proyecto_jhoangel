@@ -70,7 +70,7 @@ class EloquentActivityRepository implements IActivityRepository
                 $b->observaciones,
                 (bool) $b->is_active,
                 $b->created_at,
-                $b->farm?->name ?? 'Sin Granja',
+                $b->farm?->name ?? $this->companyName((int) $b->company_id),
                 null,
                 null,
                 (int) $b->activity_id,
@@ -128,7 +128,7 @@ class EloquentActivityRepository implements IActivityRepository
                 $b->observaciones,
                 (bool) $b->is_active,
                 $b->created_at,
-                $b->farm?->name ?? 'Sin Granja',
+                $b->farm?->name ?? $this->companyName((int) $b->company_id),
                 null,
                 null,
                 (int) $b->activity_id,
@@ -200,5 +200,18 @@ class EloquentActivityRepository implements IActivityRepository
             false,
             1
         );
+    }
+
+    /** @var array<int, string>|null */
+    private ?array $companyNames = null;
+
+    /**
+     * An own batch has no farm: its place is the company itself (D21).
+     */
+    private function companyName(int $companyId): ?string
+    {
+        $this->companyNames ??= \App\Models\Company::query()->pluck('name', 'id')->all();
+
+        return $this->companyNames[$companyId] ?? null;
     }
 }

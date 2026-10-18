@@ -122,8 +122,9 @@ class EntryOrderTestSeeder extends Seeder
         DB::transaction(function () use ($companyId): void {
             $this->reset($companyId);
 
-            $provider = Provider::updateOrCreate(
-                ['cuit' => self::PROVIDER_CUIT],
+            // Providers are company-scoped; seeders run without model events, so the company goes in the key.
+            $provider = Provider::withoutGlobalScopes()->updateOrCreate(
+                ['company_id' => $companyId, 'cuit' => self::PROVIDER_CUIT],
                 ['name' => 'Consignataria Test Ingreso', 'commercial_name' => 'Remates Test', 'is_active' => true]
             );
             $mainFarm = $this->farm($companyId, (int) $provider->id, 'Estancia La Porteña (TEST ING)', '02.345.6.78901/00');

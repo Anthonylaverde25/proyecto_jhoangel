@@ -34,6 +34,10 @@ class TenantDatabaseSeeder extends Seeder
             SecondaryCompanyLivestockSeeder::class,
             PathogenSeeder::class,
             BullHealthSeeder::class,
+            // Base units and categories for every company (the company observer does not run here),
+            // then the catalog that backs the B1 screens: it needs the providers seeded above.
+            CompanyItemCatalogSeeder::class,
+            ItemCatalogTestSeeder::class,
             // Sanitary diagnostics module: catalogues, evidentiary protocols, portal access
             // links, and a final aptitude recomputation under the venereal rule (ADR-4).
             VeterinaryCatalogSeeder::class,

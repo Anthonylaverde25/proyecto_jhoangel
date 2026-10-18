@@ -22,7 +22,7 @@ final class CreateFarmUseCase
             name: $dto->name,
             renspa: $dto->renspa,
             location: $dto->location,
-            providerId: $dto->providerId,
+            providerId: (int) $dto->providerId,
             isActive: true,
             createdAt: null,
             companyId: $dto->companyId

@@ -14,11 +14,14 @@ final readonly class CreateProviderDTO
         public ?string $email,
         public ?string $phone,
         /** @var array<string, mixed>[] */
-        public array $farms = []
+        public array $farms = [],
+        public ?int $companyId = null,
+        public bool $suppliesLivestock = true,
+        public bool $suppliesItems = false
     ) {
     }
 
-    public static function fromArray(array $data): self
+    public static function fromArray(array $data, ?int $companyId = null): self
     {
         return new self(
             (string) ($data['name'] ?? ''),
@@ -27,7 +30,10 @@ final readonly class CreateProviderDTO
             isset($data['location']) ? (string) $data['location'] : null,
             isset($data['email']) ? (string) $data['email'] : null,
             isset($data['phone']) ? (string) $data['phone'] : null,
-            (array) ($data['farms'] ?? [])
+            (array) ($data['farms'] ?? []),
+            $companyId,
+            (bool) ($data['supplies_livestock'] ?? true),
+            (bool) ($data['supplies_items'] ?? false)
         );
     }
 }

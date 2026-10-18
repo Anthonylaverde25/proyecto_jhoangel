@@ -21,7 +21,6 @@ abstract class EntryOrderTestCase extends VeterinaryTestCase
     protected Provider $provider;
     protected Farm $farm;
     protected Farm $otherFarm;
-    protected ?Farm $ownFarm = null;
 
     protected function setUp(): void
     {
@@ -191,22 +190,15 @@ abstract class EntryOrderTestCase extends VeterinaryTestCase
     }
 
     /**
-     * An own batch, on an own farm of the company: a destination for the animals of a purchase.
+     * An own batch of the company: a destination for the animals of a purchase. It has no farm,
+     * because the company is its own farm (D21).
      */
     protected function ownBatch(string $name, bool $active = true): Batch
     {
-        $this->ownFarm ??= Farm::create([
-            'company_id' => $this->company->id,
-            'provider_id' => null,
-            'name' => 'Campo Propio EO',
-            'renspa' => '02.111.0.00001/00',
-            'is_active' => true,
-        ]);
-
         return Batch::create([
             'company_id' => $this->company->id,
             'name' => $name,
-            'farm_id' => $this->ownFarm->id,
+            'farm_id' => null,
             'is_active' => $active,
         ]);
     }

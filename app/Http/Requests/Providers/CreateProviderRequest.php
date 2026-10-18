@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Providers;
 
+use App\Core\Interfaces\ICompanyContext;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class CreateProviderRequest extends FormRequest
 {
@@ -23,16 +25,22 @@ class CreateProviderRequest extends FormRequest
      */
     public function rules(): array
     {
+        // Providers and their farms are company-scoped: a CUIT, an email or a RENSPA may repeat
+        // across companies, never inside one.
+        $companyId = app(ICompanyContext::class)->getCompanyId();
+
         return [
             'name'            => 'required|string|max:255',
             'commercial_name' => 'nullable|string|max:255',
-            'cuit'            => 'required|string|max:20|unique:providers,cuit',
+            'cuit'            => ['required', 'string', 'max:20', Rule::unique('providers', 'cuit')->where('company_id', $companyId)],
             'location'        => 'nullable|string|max:500',
-            'email'           => 'nullable|email|max:255',
+            'email'           => ['nullable', 'email', 'max:255', Rule::unique('providers', 'email')->where('company_id', $companyId)],
             'phone'           => 'nullable|string|max:50',
+            'supplies_livestock' => 'sometimes|boolean',
+            'supplies_items'  => 'sometimes|boolean',
             'farms'           => 'nullable|array',
             'farms.*.name'    => 'required|string|max:255',
-            'farms.*.renspa'  => 'required|string|distinct|unique:farms,renspa|max:255',
+            'farms.*.renspa'  => ['nullable', 'string', 'distinct', 'max:255', Rule::unique('farms', 'renspa')->where('company_id', $companyId)],
             'farms.*.location'=> 'nullable|string|max:500',
         ];
     }

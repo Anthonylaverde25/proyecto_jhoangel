@@ -79,7 +79,9 @@ class LivestockHierarchySeeder extends Seeder
         $companyId = DB::table('companies')->first()->id;
 
         // 1. Crear Proveedores
+        // Seeders run without model events: company_id goes explicitly (providers are company-scoped).
         $provider1Id = DB::table('providers')->insertGetId([
+            'company_id' => $companyId,
             'name' => 'Estancia El Trébol S.A.',
             'commercial_name' => 'El Trébol',
             'cuit' => '30-12345678-9',
@@ -92,6 +94,7 @@ class LivestockHierarchySeeder extends Seeder
         ]);
 
         $provider2Id = DB::table('providers')->insertGetId([
+            'company_id' => $companyId,
             'name' => 'Ganadera del Sur SRL',
             'commercial_name' => 'Ganadera Sur',
             'cuit' => '30-98765432-1',
@@ -106,33 +109,12 @@ class LivestockHierarchySeeder extends Seeder
         $providerIds = [$provider1Id, $provider2Id];
         $names = ['El Trébol', 'Ganadera Sur'];
 
-        // 2. Crear Granjas (2 por proveedor + 2 fincas propias)
-        $ownFarm1Id = DB::table('farms')->insertGetId([
-            'company_id' => $companyId,
-            'name' => 'Establecimiento La Juanita',
-            'location' => 'Ruta 7, Km 220, Junín',
-            'renspa' => '02.001.0.00001/01',
-            'provider_id' => null,
-            'is_active' => true,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        $ownFarm2Id = DB::table('farms')->insertGetId([
-            'company_id' => $companyId,
-            'name' => 'Campo San Jorge',
-            'location' => 'Ruta 188, Km 85, Pergamino',
-            'renspa' => '02.001.0.00002/01',
-            'provider_id' => null,
-            'is_active' => true,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
+        // 2. Own batches carry no farm: the company is its own farm (D21). farms only holds
+        // the providers' origin farms, created below (2 per provider).
         $ownBatch1Id = DB::table('batches')->insertGetId([
             'company_id' => $companyId,
             'name' => 'Corral Invernada 1',
-            'farm_id' => $ownFarm1Id,
+            'farm_id' => null,
             'observaciones' => 'Lote propio de engorde intensivo.',
             'current_weight' => 385.0,
             'is_active' => true,
@@ -143,7 +125,7 @@ class LivestockHierarchySeeder extends Seeder
         $ownBatch2Id = DB::table('batches')->insertGetId([
             'company_id' => $companyId,
             'name' => 'Rodeo de Cría A',
-            'farm_id' => $ownFarm1Id,
+            'farm_id' => null,
             'observaciones' => 'Lote propio de vientres y reproducción.',
             'current_weight' => 420.0,
             'is_active' => true,
@@ -154,7 +136,7 @@ class LivestockHierarchySeeder extends Seeder
         $ownBatchTestCriaId = DB::table('batches')->insertGetId([
             'company_id' => $companyId,
             'name' => 'LOTE TEST CRIA',
-            'farm_id' => $ownFarm1Id,
+            'farm_id' => null,
             'observaciones' => 'Lote propio de prueba para cría, entore y servicio reproductivo.',
             'current_weight' => 430.0,
             'is_active' => true,

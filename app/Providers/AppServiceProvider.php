@@ -121,6 +121,12 @@ class AppServiceProvider extends ServiceProvider
             \App\Core\Interfaces\ISanitaryExposureRepository::class,
             \App\Infrastructure\Persistence\EloquentSanitaryExposureRepository::class
         );
+
+        // Company item catalog (B1): units, categories, items and the base catalog.
+        $this->app->bind(\App\Core\Interfaces\IUnitOfMeasureRepository::class, \App\Infrastructure\Persistence\EloquentUnitOfMeasureRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IItemCategoryRepository::class, \App\Infrastructure\Persistence\EloquentItemCategoryRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IItemRepository::class, \App\Infrastructure\Persistence\EloquentItemRepository::class);
+        $this->app->bind(\App\Core\Interfaces\ICompanyItemCatalogRepository::class, \App\Infrastructure\Persistence\EloquentCompanyItemCatalogRepository::class);
     }
 
     /**
@@ -130,6 +136,8 @@ class AppServiceProvider extends ServiceProvider
     {
         CaravanMovement::observe(CaravanMovementServiceExposureObserver::class);
         Caravan::observe(CaravanBatchAssignmentObserver::class);
+        // Every company is born with its base units and categories (DB6).
+        \App\Models\Company::observe(\App\Infrastructure\Observers\CompanyItemCatalogObserver::class);
     }
 }
 

@@ -7,6 +7,7 @@ namespace App\Http\Requests\EntryOrders;
 use App\Core\Enums\BatchNameMode;
 use App\Core\Enums\SexComposition;
 use App\Core\Enums\TroopCondition;
+use App\Core\Interfaces\ICompanyContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -34,8 +35,9 @@ final class StoreEntryOrderRequest extends FormRequest
     {
         return [
             'confirm' => 'sometimes|boolean',
-            'provider_id' => 'required|integer|exists:providers,id',
-            'farm_id' => 'required|integer|exists:farms,id',
+            // Provider and origin farm of the order's own company (the database enforces it too).
+            'provider_id' => ['required', 'integer', Rule::exists('providers', 'id')->where('company_id', $this->companyId())],
+            'farm_id' => ['required', 'integer', Rule::exists('farms', 'id')->where('company_id', $this->companyId())],
             'auction_number' => ['nullable', 'string', 'max:20', 'regex:/^[A-Za-z0-9]+$/'],
             'batch_name_mode' => ['required', Rule::enum(BatchNameMode::class)],
             'batch_name' => 'nullable|string|max:255',
@@ -118,5 +120,10 @@ final class StoreEntryOrderRequest extends FormRequest
             'destinations.*.destination_batch_id.exists' => 'El lote de destino no existe.',
             'destinations.*.sex_scope.in' => 'El destino es para toda la categoría (ALL), los machos (M) o las hembras (H).',
         ];
+    }
+
+    private function companyId(): ?int
+    {
+        return app(ICompanyContext::class)->getCompanyId();
     }
 }

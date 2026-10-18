@@ -248,9 +248,9 @@ class Ing01TemplateProcessingTest extends TestCase
         $this->assertNotNull($batch->activity_id);
         $this->assertEquals('RECRIA', $batch->activity?->code);
 
-        $ownFarm = Farm::where('company_id', $this->company->id)->whereNull('provider_id')->first();
-        $this->assertNotNull($ownFarm);
-        $this->assertEquals($ownFarm->id, $batch->farm_id);
+        // An own batch has no farm, and ING-01 creates no "own farm" row (D21).
+        $this->assertNull($batch->farm_id);
+        $this->assertSame(0, Farm::where('company_id', $this->company->id)->whereNull('provider_id')->count());
 
         // 2. Verify Caravan 1 (TAG-101) -> Angus Negro, 2D, Entry Date normalized to 2026-08-28
         $c1 = Caravan::with(['breedRelation', 'colorRelation'])->where('identification', 'TAG-101')->first();

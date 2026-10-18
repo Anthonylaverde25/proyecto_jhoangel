@@ -15,10 +15,11 @@ final class ListProvidersUseCase
     }
 
     /**
+     * @param 'livestock'|'items'|null $supplies only providers with that role; null = all
      * @return ProviderEntity[]
      */
-    public function __invoke(): array
+    public function __invoke(?string $supplies = null): array
     {
-        return $this->repository->findAll();
+        return $this->repository->findAll($supplies);
     }
 }

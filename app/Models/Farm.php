@@ -42,15 +42,5 @@ class Farm extends Model
     {
         return $this->hasMany(Batch::class);
     }
-
-    public function scopeOwn($query)
-    {
-        return $query->whereNull('provider_id');
-    }
-
-    public function scopeExternal($query)
-    {
-        return $query->whereNotNull('provider_id');
-    }
 }
 

@@ -18,13 +18,16 @@ final class CreateProviderUseCase
 
     public function __invoke(CreateProviderDTO $dto): ProviderEntity
     {
-        $farms = array_map(function (array $farmData) {
+        $farms = array_map(function (array $farmData) use ($dto) {
+            $renspa = trim((string) ($farmData['renspa'] ?? ''));
+
             return new FarmEntity(
                 id: null,
                 name: (string) $farmData['name'],
-                renspa: (string) $farmData['renspa'],
+                renspa: $renspa !== '' ? $renspa : null,
                 location: isset($farmData['location']) ? (string) $farmData['location'] : null,
-                providerId: 0 // Will be set in the repository after provider creation
+                providerId: 0, // Set by the repository once the provider exists
+                companyId: $dto->companyId
             );
         }, $dto->farms);
 
@@ -38,7 +41,10 @@ final class CreateProviderUseCase
             phone: $dto->phone,
             isActive: true,
             createdAt: null,
-            farms: $farms
+            farms: $farms,
+            companyId: $dto->companyId,
+            suppliesLivestock: $dto->suppliesLivestock,
+            suppliesItems: $dto->suppliesItems
         );
 
         return $this->repository->save($entity);

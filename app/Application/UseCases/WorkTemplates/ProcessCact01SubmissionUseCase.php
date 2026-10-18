@@ -1174,8 +1174,11 @@ final class ProcessCact01SubmissionUseCase
     {
         $farmId = $batch->getFarmId();
 
+        // An own batch has no farm: its RENSPA is the company's, resolved by the batch mapper (D21).
         if ($farmId === null) {
-            return '';
+            $renspa = $batch->getRenspa();
+
+            return $renspa !== null && $renspa !== 'NO_DEFINIDO' ? $renspa : '';
         }
 
         return $this->farmRepository->findById($farmId)?->getRenspa() ?? '';

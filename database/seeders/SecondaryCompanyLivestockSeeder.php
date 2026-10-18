@@ -191,8 +191,9 @@ class SecondaryCompanyLivestockSeeder extends Seeder
 
     private function seedProvider(int $companyId): void
     {
-        $provider = Provider::updateOrCreate(
-            ['cuit' => self::PROVIDER['cuit']],
+        // Providers are company-scoped; seeders run without model events, so the company goes in the key.
+        $provider = Provider::withoutGlobalScopes()->updateOrCreate(
+            ['company_id' => $companyId, 'cuit' => self::PROVIDER['cuit']],
             [
                 'name' => self::PROVIDER['name'],
                 'commercial_name' => self::PROVIDER['commercial_name'],

@@ -12,6 +12,10 @@ use App\Http\Controllers\Api\RegisterNewCaravansController;
 use App\Http\Controllers\Api\ImportOCRGestationController;
 use App\Http\Controllers\Api\ProviderController;
 use App\Http\Controllers\Api\FarmController;
+use App\Http\Controllers\Api\ItemCategoryController;
+use App\Http\Controllers\Api\ItemController;
+use App\Http\Controllers\Api\ItemPresentationController;
+use App\Http\Controllers\Api\UnitOfMeasureController;
 use App\Http\Controllers\Api\BatchController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ActivityController;
@@ -168,6 +172,35 @@ Route::middleware([
         Route::post('/weaning-orders/{id}/execute', [WeaningOrderController::class, 'execute'])->whereNumber('id');
         Route::post('/weaning-orders/{id}/close-incomplete', [WeaningOrderController::class, 'closeIncomplete'])->whereNumber('id');
         Route::post('/weaning-orders/{id}/cancel', [WeaningOrderController::class, 'cancel'])->whereNumber('id');
+    });
+
+    // Catálogo de artículos y servicios (Entrega B1): por empresa, sin stock todavía.
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/units-of-measure', [UnitOfMeasureController::class, 'index']);
+        Route::post('/units-of-measure', [UnitOfMeasureController::class, 'store']);
+        Route::patch('/units-of-measure/{id}', [UnitOfMeasureController::class, 'update'])->whereNumber('id');
+        Route::patch('/units-of-measure/{id}/active', [UnitOfMeasureController::class, 'setActive'])->whereNumber('id');
+
+        Route::get('/item-categories', [ItemCategoryController::class, 'index']);
+        Route::post('/item-categories', [ItemCategoryController::class, 'store']);
+        Route::patch('/item-categories/{id}', [ItemCategoryController::class, 'update'])->whereNumber('id');
+        Route::patch('/item-categories/{id}/active', [ItemCategoryController::class, 'setActive'])->whereNumber('id');
+
+        Route::get('/items', [ItemController::class, 'index']);
+        Route::post('/items', [ItemController::class, 'store']);
+        Route::get('/items/{id}', [ItemController::class, 'show'])->whereNumber('id');
+        Route::patch('/items/{id}', [ItemController::class, 'update'])->whereNumber('id');
+        Route::patch('/items/{id}/active', [ItemController::class, 'setActive'])->whereNumber('id');
+        Route::put('/items/{id}/providers', [ItemController::class, 'syncProviders'])->whereNumber('id');
+
+        Route::post('/items/{id}/presentations', [ItemPresentationController::class, 'store'])->whereNumber('id');
+        Route::patch('/items/{id}/presentations/{presentationId}', [ItemPresentationController::class, 'update'])
+            ->whereNumber('id')->whereNumber('presentationId');
+        Route::patch('/items/{id}/presentations/{presentationId}/active', [ItemPresentationController::class, 'setActive'])
+            ->whereNumber('id')->whereNumber('presentationId');
+
+        // A provider's roles decide what it may be linked to (D1, DB5).
+        Route::patch('/providers/{id}/roles', [ProviderController::class, 'updateRoles'])->whereNumber('id');
     });
 
     // Órdenes de Ingreso de hacienda externa (ING-02): la compra espera su DTE

@@ -38,8 +38,8 @@ final class Ing01TemplateProcessor
     public function process(Ing01SubmissionDTO $dto): array
     {
         return DB::transaction(function () use ($dto) {
-            // 1. Resolve Primary Own Farm for the company
-            $ownFarm = $this->resolveOwnFarm($dto->companyId);
+            // 1. The company *is* its own farm (D21): own batches carry no farm.
+            $company = Company::find($dto->companyId);
 
             // 2. Resolve Provider by CUIT or Name if provided
             $provider = $this->resolveProvider($dto->providerCuit, $dto->providerName, $dto->companyId);
@@ -50,9 +50,9 @@ final class Ing01TemplateProcessor
             // 4. Resolve Batch (Own Batch vs. External Provider Batch)
             $isExternalBatch = false;
             if (!empty($dto->batchName)) {
-                // Scenario A: Own batch specified -> Find or create on Own Farm (Operational)
-                $batch = $this->resolveBatch($dto->batchName, $dto->companyId, $ownFarm->id, $activityResult->activityId);
-                $farm = $ownFarm;
+                // Scenario A: Own batch specified -> find or create it as an own batch (no farm)
+                $batch = $this->resolveBatch($dto->batchName, $dto->companyId, null, $activityResult->activityId);
+                $farm = null;
             } elseif (!empty($dto->providerBatchName)) {
                 // Scenario B: Own batch empty, Provider batch specified -> Create on Provider Farm (External)
                 $providerFarm = $this->resolveProviderFarm($provider, $dto->providerFarmName, $dto->providerRenspa, $dto->companyId);
@@ -62,12 +62,12 @@ final class Ing01TemplateProcessor
             } else {
                 // Fallback: Default Own Batch
                 $defaultBatchName = 'LOTE ING ' . date('Ymd-His');
-                $batch = $this->resolveBatch($defaultBatchName, $dto->companyId, $ownFarm->id, $activityResult->activityId);
-                $farm = $ownFarm;
+                $batch = $this->resolveBatch($defaultBatchName, $dto->companyId, null, $activityResult->activityId);
+                $farm = null;
             }
 
             $processedCaravans = [];
-            $originRenspa = $dto->providerRenspa ?? $ownFarm->renspa ?? 'NO_DEFINIDO';
+            $originRenspa = $dto->providerRenspa ?? $company?->renspa ?? 'NO_DEFINIDO';
 
             foreach ($dto->caravans as $item) {
                 // 4. Resolve Category, Subcategory, and Sex using deterministic Parent-First resolver
@@ -188,7 +188,7 @@ final class Ing01TemplateProcessor
                     'id' => $batch->id,
                     'name' => $batch->name,
                     'farm_id' => $batch->farm_id,
-                    'farm_name' => $farm->name,
+                    'farm_name' => $farm?->name ?? $company?->name,
                     'activity_id' => $batch->activity_id,
                     'activity_name' => $batch->activity?->name,
                     'activity_code' => $batch->activity?->code,
@@ -202,109 +202,50 @@ final class Ing01TemplateProcessor
     }
 
     /**
-     * Resolve or create the Primary Own Farm for the company.
-     */
-    private function resolveOwnFarm(int $companyId): Farm
-    {
-        $ownFarm = Farm::where('company_id', $companyId)
-            ->whereNull('provider_id')
-            ->first();
-
-        if ($ownFarm) {
-            return $ownFarm;
-        }
-
-        $company = Company::find($companyId);
-        $companyName = $company?->name ?? 'Establecimiento';
-
-        return Farm::create([
-            'company_id' => $companyId,
-            'name' => "{$companyName} (Principal)",
-            'renspa' => $company?->renspa ?? 'NO_DEFINIDO',
-            'location' => $company?->location ?? 'Establecimiento Principal',
-            'provider_id' => null,
-            'is_active' => true,
-        ]);
-    }
-
-    /**
-     * Resolve or create an External Farm for the provider.
+     * Resolve or create the provider's origin farm for an external batch. Every farm belongs to a
+     * provider of the same company (D21): without a provider, only an existing farm can be used.
      */
     private function resolveProviderFarm(?Provider $provider, ?string $farmName, ?string $renspa, int $companyId): Farm
     {
         $cleanFarmName = $farmName !== null && trim($farmName) !== '' ? trim($farmName) : null;
+        $cleanRenspa = $renspa !== null && trim($renspa) !== '' ? trim($renspa) : null;
+
+        $query = Farm::withoutGlobalScopes()->where('company_id', $companyId);
+        if ($provider) {
+            $query->where('provider_id', $provider->id);
+        }
+
+        $existing = $cleanFarmName !== null
+            ? (clone $query)->where('name', 'LIKE', "%{$cleanFarmName}%")->first()
+            : ($provider ? (clone $query)->first() : null);
+
+        if ($existing) {
+            if ($cleanRenspa !== null && $existing->renspa === null) {
+                $existing->update(['renspa' => $cleanRenspa]);
+            }
+            return $existing;
+        }
 
         if ($provider) {
-            $query = Farm::where('company_id', $companyId)
-                ->where('provider_id', $provider->id);
-
-            if ($cleanFarmName !== null) {
-                $existing = (clone $query)->where('name', 'LIKE', "%{$cleanFarmName}%")->first();
-                if ($existing) {
-                    if ($renspa && $existing->renspa === 'NO_DEFINIDO') {
-                        $existing->update(['renspa' => $renspa]);
-                    }
-                    return $existing;
-                }
-            } else {
-                $existing = (clone $query)->first();
-                if ($existing) {
-                    if ($renspa && $existing->renspa === 'NO_DEFINIDO') {
-                        $existing->update(['renspa' => $renspa]);
-                    }
-                    return $existing;
-                }
-            }
-
             return Farm::create([
                 'company_id'  => $companyId,
                 'provider_id' => $provider->id,
                 'name'        => $cleanFarmName ?? "Establecimiento {$provider->name}",
-                'renspa'      => $renspa ?? 'NO_DEFINIDO',
+                'renspa'      => $cleanRenspa,
                 'location'    => 'Origen Proveedor',
                 'is_active'   => true,
             ]);
         }
 
-        // Provider is null, search or create farm by name if provided
-        if ($cleanFarmName !== null) {
-            $existing = Farm::where('company_id', $companyId)
-                ->where('name', 'LIKE', "%{$cleanFarmName}%")
-                ->first();
-            if ($existing) {
-                if ($renspa && $existing->renspa === 'NO_DEFINIDO') {
-                    $existing->update(['renspa' => $renspa]);
-                }
-                return $existing;
-            }
-
-            return Farm::create([
-                'company_id'  => $companyId,
-                'provider_id' => null,
-                'name'        => $cleanFarmName,
-                'renspa'      => $renspa ?? 'NO_DEFINIDO',
-                'location'    => 'Origen Proveedor',
-                'is_active'   => true,
-            ]);
-        }
-
-        // Generic external farm fallback
-        $genericFarm = Farm::where('company_id', $companyId)
-            ->whereNotNull('provider_id')
-            ->first();
-
+        // No provider: fall back to any origin farm of the company; none means there is no origin to use.
+        $genericFarm = (clone $query)->first();
         if ($genericFarm) {
             return $genericFarm;
         }
 
-        return Farm::create([
-            'company_id'  => $companyId,
-            'name'        => 'Establecimiento de Origen (Externo)',
-            'renspa'      => $renspa ?? 'NO_DEFINIDO',
-            'location'    => 'Origen Proveedor',
-            'provider_id' => null,
-            'is_active'   => true,
-        ]);
+        throw new \App\Core\Exceptions\DomainException(
+            'Para cargar el lote en el campo del proveedor, la planilla tiene que indicar el proveedor (CUIT o nombre).'
+        );
     }
 
     /**
@@ -315,7 +256,10 @@ final class Ing01TemplateProcessor
         if ($cuit !== null && trim($cuit) !== '') {
             $cleanCuit = preg_replace('/[^0-9]/', '', $cuit);
             if ($cleanCuit !== '' && strlen($cleanCuit) >= 8) {
-                $provider = Provider::whereRaw("REPLACE(cuit, '-', '') = ?", [$cleanCuit])->first();
+                $provider = Provider::withoutGlobalScopes()
+                    ->where('company_id', $companyId)
+                    ->whereRaw("REPLACE(cuit, '-', '') = ?", [$cleanCuit])
+                    ->first();
                 if ($provider) {
                     return $provider;
                 }
@@ -324,7 +268,10 @@ final class Ing01TemplateProcessor
 
         if ($name !== null && trim($name) !== '') {
             $cleanName = trim($name);
-            $provider = Provider::where('name', 'LIKE', "%{$cleanName}%")->first();
+            $provider = Provider::withoutGlobalScopes()
+                ->where('company_id', $companyId)
+                ->where('name', 'LIKE', "%{$cleanName}%")
+                ->first();
             if ($provider) {
                 return $provider;
             }
@@ -334,9 +281,9 @@ final class Ing01TemplateProcessor
     }
 
     /**
-     * Resolve or create the Batch on the given farm.
+     * Resolve or create the batch: an own batch when $farmId is null, an external one on that farm.
      */
-    private function resolveBatch(string $batchName, int $companyId, int $farmId, ?int $activityId = null): Batch
+    private function resolveBatch(string $batchName, int $companyId, ?int $farmId, ?int $activityId = null): Batch
     {
         $cleanBatchName = trim($batchName);
         if ($cleanBatchName === '') {
