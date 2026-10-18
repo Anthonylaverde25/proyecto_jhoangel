@@ -21,7 +21,12 @@ final class GetBatchConsumptionHistoryUseCase
     ) {
     }
 
-    /** @return array{rows: list<array<string, mixed>>, total_cost: string, cost_per_head: string, by_category: list<array{category: string, cost: string}>} */
+    /**
+     * has_pending_cost: some consumption took units still waiting for their invoice (delivery C); the
+     * totals add only what is known.
+     *
+     * @return array{rows: list<array<string, mixed>>, total_cost: string, cost_per_head: string, by_category: list<array{category: string, cost: string}>, has_pending_cost: bool}
+     */
     public function __invoke(int $batchId, int $companyId): array
     {
         $this->batches->find($batchId, $companyId) ?? throw new ModelNotFoundException("Batch {$batchId} not found.");
@@ -30,9 +35,11 @@ final class GetBatchConsumptionHistoryUseCase
         $perHead = '0';
         $byCategory = [];
         $rows = [];
+        $pending = false;
         foreach ($this->documents->batchHistory($batchId, $companyId) as $row) {
             $row['cost_per_head'] = $row['heads_treated'] > 0 ? bcdiv($row['cost'], (string) $row['heads_treated'], 4) : null;
             if ($row['voided'] === null) {
+                $pending = $pending || bccomp((string) $row['pending_cost_quantity'], '0', 4) > 0;
                 $total = bcadd($total, $row['cost'], 4);
                 $perHead = bcadd($perHead, (string) $row['cost_per_head'], 4);
                 $category = $row['category'] ?? 'Sin categoría';
@@ -47,6 +54,7 @@ final class GetBatchConsumptionHistoryUseCase
             'total_cost' => $total,
             'cost_per_head' => $perHead,
             'by_category' => array_map(fn (string $name, string $cost) => ['category' => $name, 'cost' => $cost], array_keys($byCategory), $byCategory),
+            'has_pending_cost' => $pending,
         ];
     }
 }

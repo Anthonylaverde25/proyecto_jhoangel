@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Application\DTOs\Stock\FiscalDocumentDTO;
+use App\Application\UseCases\DeliveryNotes\DeliveryNoteUseCases;
 use App\Application\UseCases\FiscalDocuments\FiscalDocumentUseCases;
 use App\Core\Entities\FiscalDocumentEntity;
 use App\Core\ValueObjects\FiscalDocumentFilters;
@@ -24,7 +25,8 @@ class FiscalDocumentController extends Controller
     use ResolvesActiveCompany;
 
     public function __construct(
-        private readonly FiscalDocumentUseCases $documents
+        private readonly FiscalDocumentUseCases $documents,
+        private readonly DeliveryNoteUseCases $deliveryNotes,
     ) {
     }
 
@@ -45,7 +47,9 @@ class FiscalDocumentController extends Controller
     {
         $document = ($this->documents->find)($id, $this->activeCompanyId());
 
-        return response()->json((new FiscalDocumentResource($document))->detailed()->resolve($request));
+        $counts = ($this->deliveryNotes->countDiscrepancies)($id, $this->activeCompanyId());
+
+        return response()->json((new FiscalDocumentResource($document))->detailed([], $counts)->resolve($request));
     }
 
     public function store(StoreFiscalDocumentRequest $request): JsonResponse
@@ -56,7 +60,10 @@ class FiscalDocumentController extends Controller
         );
 
         return response()->json(
-            (new FiscalDocumentResource($registration->document))->detailed($registration->incidents)->resolve($request),
+            (new FiscalDocumentResource($registration->document))->detailed(
+                $registration->incidents,
+                ($this->deliveryNotes->countDiscrepancies)((int) $registration->document->getId(), $this->activeCompanyId()),
+            )->resolve($request),
             $registration->created ? 201 : 200,
         );
     }
@@ -64,7 +71,8 @@ class FiscalDocumentController extends Controller
     public function void(ReasonRequest $request, int $id): JsonResponse
     {
         $document = ($this->documents->void)($id, (string) $request->validated('reason'), $this->activeCompanyId(), $request->user()?->id);
+        $counts = ($this->deliveryNotes->countDiscrepancies)($id, $this->activeCompanyId());
 
-        return response()->json((new FiscalDocumentResource($document))->detailed()->resolve($request));
+        return response()->json((new FiscalDocumentResource($document))->detailed([], $counts)->resolve($request));
     }
 }

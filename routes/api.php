@@ -13,6 +13,8 @@ use App\Http\Controllers\Api\ImportOCRGestationController;
 use App\Http\Controllers\Api\ProviderController;
 use App\Http\Controllers\Api\FarmController;
 use App\Http\Controllers\Api\FiscalCatalogController;
+use App\Http\Controllers\Api\DeliveryNoteController;
+use App\Http\Controllers\Api\FiscalDiscrepancyController;
 use App\Http\Controllers\Api\FiscalDocumentController;
 use App\Http\Controllers\Api\ItemCategoryController;
 use App\Http\Controllers\Api\ItemController;
@@ -219,6 +221,11 @@ Route::middleware([
         Route::post('/fiscal-documents', [FiscalDocumentController::class, 'store']);
         Route::get('/fiscal-documents/{id}', [FiscalDocumentController::class, 'show'])->whereNumber('id');
         Route::post('/fiscal-documents/{id}/void', [FiscalDocumentController::class, 'void'])->whereNumber('id');
+        // Delivery C: delivery notes waiting for their invoice, the invoice they convert into, and their differences.
+        Route::get('/delivery-notes/pending', [DeliveryNoteController::class, 'pending']);
+        Route::get('/delivery-notes/invoice-draft', [DeliveryNoteController::class, 'invoiceDraft']);
+        Route::get('/fiscal-discrepancies', [FiscalDiscrepancyController::class, 'index']);
+        Route::patch('/fiscal-discrepancies/{id}/resolve', [FiscalDiscrepancyController::class, 'resolve'])->whereNumber('id');
 
         Route::get('/warehouses', [WarehouseController::class, 'index']);
 

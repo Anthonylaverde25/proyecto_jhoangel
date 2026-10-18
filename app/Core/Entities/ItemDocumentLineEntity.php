@@ -7,6 +7,8 @@ namespace App\Core\Entities;
 /**
  * A line of a stock operation: always a stock-tracked article. Its cost is known only once the
  * ledger holds the balance row locked (the average of that moment), so valuate() comes from there.
+ * unvaluedQuantity is the part without cost yet (delivery C, model 2.4): totalCost is the known part
+ * and unitCost is null when nothing is valued.
  */
 final class ItemDocumentLineEntity
 {
@@ -28,13 +30,22 @@ final class ItemDocumentLineEntity
         private readonly ?string $itemName = null,
         private readonly ?string $itemUnitSymbol = null,
         private readonly ?string $inputLabel = null,
+        private string $unvaluedQuantity = '0',
+        private ?string $unabsorbedCost = null,
     ) {
     }
 
-    public function valuate(string $unitCost, string $totalCost): void
+    public function valuate(?string $unitCost, string $totalCost, string $unvaluedQuantity = '0'): void
     {
         $this->unitCost = $unitCost;
         $this->totalCost = $totalCost;
+        $this->unvaluedQuantity = $unvaluedQuantity;
+    }
+
+    /** Q3: the share of a valuation that no valued stock could take. */
+    public function leaveUnabsorbed(string $amount): void
+    {
+        $this->unabsorbedCost = $amount;
     }
 
     public function attachMovement(StockMovementEntity $movement): void
@@ -51,7 +62,15 @@ final class ItemDocumentLineEntity
     public function getInputUnitPrice(): ?string { return $this->inputUnitPrice; }
     public function getUnitCost(): string { return $this->unitCost ?? '0'; }
     public function getTotalCost(): string { return $this->totalCost ?? '0'; }
+    public function getUnitCostOrNull(): ?string { return $this->unitCost; }
     public function isValuated(): bool { return $this->unitCost !== null; }
+    public function getUnvaluedQuantity(): string { return $this->unvaluedQuantity; }
+    public function getUnabsorbedCost(): ?string { return $this->unabsorbedCost; }
+    /** Every unit of it waits for its invoice: it carries no unit cost. */
+    public function isFullyUnvalued(): bool
+    {
+        return bccomp($this->quantity, '0', 4) > 0 && bccomp($this->unvaluedQuantity, $this->quantity, 4) === 0;
+    }
     public function getFiscalDocumentLineId(): ?int { return $this->fiscalDocumentLineId; }
     public function getCountedQuantity(): ?string { return $this->countedQuantity; }
     public function getReversesLineId(): ?int { return $this->reversesLineId; }

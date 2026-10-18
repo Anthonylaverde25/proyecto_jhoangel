@@ -24,11 +24,18 @@ class FiscalDocumentResource extends JsonResource
     /** @var list<StockIncidentEntity> */
     private array $incidents = [];
 
-    /** @param list<StockIncidentEntity> $incidents */
-    public function detailed(array $incidents = []): self
+    /** @var array{open: int, resolved: int, cancelled: int}|null */
+    private ?array $discrepancies = null;
+
+    /**
+     * @param list<StockIncidentEntity> $incidents
+     * @param array{open: int, resolved: int, cancelled: int}|null $discrepancies differences with delivery notes (DC7)
+     */
+    public function detailed(array $incidents = [], ?array $discrepancies = null): self
     {
         $this->detailed = true;
         $this->incidents = $incidents;
+        $this->discrepancies = $discrepancies;
 
         return $this;
     }
@@ -62,6 +69,12 @@ class FiscalDocumentResource extends JsonResource
                 : ['id' => $document->getRelatedFiscalDocumentId(), 'label' => $document->getRelatedLabel()],
             'stock_operation' => $document->getStockOperationId() === null ? null
                 : ['id' => $document->getStockOperationId(), 'number' => $document->getStockOperationNumber()],
+            // Delivery C: whether a delivery note is priced, where it went, and what an invoice came from.
+            'is_valued' => $document->isValued(),
+            'delivery_note_status' => self::deliveryNoteStatus($document),
+            'invoiced_by' => $document->getInvoicedByDocumentId() === null ? null
+                : ['id' => $document->getInvoicedByDocumentId(), 'label' => $document->getInvoicedByLabel()],
+            'delivery_notes' => $document->getDeliveryNotes(),
         ];
         if (!$this->detailed) {
             return $data;
@@ -88,11 +101,31 @@ class FiscalDocumentResource extends JsonResource
                 'batch' => $line->batchId === null ? null : ['id' => $line->batchId, 'name' => $line->batchName],
                 'heads_treated' => $line->headsTreated,
                 'taxes' => array_map(fn (FiscalDocumentTaxEntity $tax) => self::tax($tax), $line->taxes),
+                'delivery_note_line_id' => $line->deliveryNoteLineId,
+                'delivery_note_label' => $line->deliveryNoteLabel,
+                'unvalued_lot' => $line->unvaluedLot === null ? null : $line->unvaluedLot + [
+                    'consumed_quantity' => bcsub($line->unvaluedLot['quantity'], $line->unvaluedLot['remaining_quantity'], 4),
+                ],
             ], $document->getLines()),
             'document_taxes' => array_map(fn (FiscalDocumentTaxEntity $tax) => self::tax($tax), $document->getDocumentTaxes()),
             'tax_summary' => self::summary($document),
             'incidents_raised' => array_map(fn (StockIncidentEntity $i) => StockIncidentResource::shape($i), $this->incidents),
+            'discrepancies' => $this->discrepancies,
         ];
+    }
+
+    /** PENDING_INVOICE, INVOICED or VOIDED for a delivery note (DC10); null for any other document. */
+    private static function deliveryNoteStatus(FiscalDocumentEntity $document): ?array
+    {
+        if (!$document->isDeliveryNote()) {
+            return null;
+        }
+
+        return match (true) {
+            $document->isVoided() => ['code' => 'VOIDED', 'label' => 'Anulado'],
+            $document->getInvoicedByDocumentId() !== null => ['code' => 'INVOICED', 'label' => 'Facturado'],
+            default => ['code' => 'PENDING_INVOICE', 'label' => 'Pendiente de factura'],
+        };
     }
 
     /** @return array<string, mixed> */

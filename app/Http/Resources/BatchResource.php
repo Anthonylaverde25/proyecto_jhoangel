@@ -74,6 +74,10 @@ class BatchResource extends JsonResource
             // What the stock views count: caravans plus head pending identification.
             'head_count'    => $this->resource->getHeadCount(),
             'weighed_count' => $this->resource->getWeighedCount(),
+            // Calves at foot inside head_count / weighed_count / total_weight: the adults are the rest.
+            'nursing_count'         => $this->resource->getNursingCount(),
+            'nursing_weighed_count' => $this->resource->getNursingWeighedCount(),
+            'nursing_total_weight'  => $this->resource->getNursingTotalWeight(),
             'is_active'     => $this->resource->isActive(),
             'is_system'    => $this->resource->isSystem(),
             'min_weight'     => $this->resource->getMinWeight(),

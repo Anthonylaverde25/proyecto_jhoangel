@@ -33,6 +33,9 @@ class StoreFiscalDocumentRequest extends FormRequest
             'issued_at' => ['required', 'date_format:Y-m-d'],
             'declared_total' => ['nullable', 'decimal:0,4', 'min:0'],
             'related_fiscal_document_id' => ['nullable', 'integer'],
+            'is_valued' => ['nullable', 'boolean'],
+            'delivery_note_ids' => ['sometimes', 'array', 'min:1', 'max:20'],
+            'delivery_note_ids.*' => ['integer', 'distinct'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'idempotency_key' => ['required', 'string', 'max:64'],
 
@@ -41,7 +44,9 @@ class StoreFiscalDocumentRequest extends FormRequest
             'lines.*.input_quantity' => ['required', 'decimal:0,4', 'gt:0'],
             'lines.*.input_unit_id' => ['nullable', 'integer'],
             'lines.*.input_presentation_id' => ['nullable', 'integer'],
-            'lines.*.unit_price' => ['required', 'decimal:0,6', 'min:0'],
+            // Null only on an unvalued delivery note; the builder says when it is missing (RM4).
+            'lines.*.unit_price' => ['nullable', 'decimal:0,6', 'min:0'],
+            'lines.*.delivery_note_line_id' => ['nullable', 'integer'],
             'lines.*.batch_id' => ['nullable', 'integer'],
             'lines.*.heads_treated' => ['nullable', 'integer', 'min:1'],
             'lines.*.taxes' => ['sometimes', 'array', 'max:5'],
@@ -69,6 +74,8 @@ class StoreFiscalDocumentRequest extends FormRequest
             'lines.*.input_quantity.decimal' => 'La cantidad admite hasta 4 decimales.',
             'lines.*.unit_price.required' => 'Falta el precio.',
             'lines.*.unit_price.decimal' => 'El precio admite hasta 6 decimales.',
+            'delivery_note_ids.min' => 'Elegí al menos un remito.',
+            'delivery_note_ids.*.distinct' => 'El remito está repetido.',
             'issued_at.date_format' => 'La fecha tiene que tener el formato AAAA-MM-DD.',
         ];
     }

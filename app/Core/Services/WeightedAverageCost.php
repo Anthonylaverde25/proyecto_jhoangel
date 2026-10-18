@@ -63,4 +63,35 @@ final class WeightedAverageCost
 
         return ['balance' => $after, 'average' => $value->div($after)->round(self::COST_SCALE)];
     }
+
+    /**
+     * Value without units (delivery C, Q3): spread over the valued balance. Null when there is nothing
+     * valued to take it; the caller keeps it as unabsorbed.
+     */
+    public function addValue(Decimal $valued, Decimal $average, Decimal $amount): ?Decimal
+    {
+        if (!$valued->isPositive()) {
+            return null;
+        }
+
+        return $average->add($amount->div($valued))->round(self::COST_SCALE);
+    }
+
+    /**
+     * Undoing addValue. With nothing valued left there is nothing to take it from and the average stays;
+     * null when the rest would be worth less than nothing (the block of plan 4.7).
+     */
+    public function removeValue(Decimal $valued, Decimal $average, Decimal $amount): ?Decimal
+    {
+        if (!$valued->isPositive()) {
+            return $average;
+        }
+
+        $value = $valued->mul($average)->sub($amount);
+        if ($value->isNegative()) {
+            return null;
+        }
+
+        return $value->div($valued)->round(self::COST_SCALE);
+    }
 }

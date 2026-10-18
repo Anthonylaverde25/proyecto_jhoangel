@@ -21,8 +21,14 @@ enum FiscalDocumentKind: string
         return match ($this) {
             self::INVOICE, self::TICKET => ItemDocumentType::PURCHASE,
             self::CREDIT_NOTE => ItemDocumentType::RETURN_TO_PROVIDER,
-            self::DELIVERY_NOTE => null,
+            self::DELIVERY_NOTE => ItemDocumentType::DELIVERY_RECEIPT,
         };
+    }
+
+    /** Only an invoice is converted from delivery notes (DC5, RF1): a ticket has no number to tie them. */
+    public function isConvertible(): bool
+    {
+        return $this === self::INVOICE;
     }
 
     /** Invoices and credit notes carry point of sale and number; a ticket a free reference. */

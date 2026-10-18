@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace App\Core\Enums;
 
 /**
- * Stock operations (DS14). PURCHASE and RETURN_TO_PROVIDER come from a provider document; the rest
- * are loaded by the operator. Every line of every operation is a stock-tracked article.
+ * Stock operations (DS14). PURCHASE, RETURN_TO_PROVIDER, DELIVERY_RECEIPT and VALUATION come from a
+ * provider document; the rest are loaded by the operator. Every line of every operation is a
+ * stock-tracked article. VALUATION adds value without moving quantities (delivery C, DC15).
  */
 enum ItemDocumentType: string
 {
@@ -16,6 +17,8 @@ enum ItemDocumentType: string
     case COUNT_ADJUSTMENT = 'COUNT_ADJUSTMENT';
     case RETURN_TO_PROVIDER = 'RETURN_TO_PROVIDER';
     case REVERSAL = 'REVERSAL';
+    case DELIVERY_RECEIPT = 'DELIVERY_RECEIPT';
+    case VALUATION = 'VALUATION';
 
     public function label(): string
     {
@@ -26,14 +29,17 @@ enum ItemDocumentType: string
             self::COUNT_ADJUSTMENT => 'Conteo',
             self::RETURN_TO_PROVIDER => 'Devolución al proveedor',
             self::REVERSAL => 'Anulación',
+            self::DELIVERY_RECEIPT => 'Ingreso por remito',
+            self::VALUATION => 'Valorización',
         };
     }
 
-    /** +1 inbound, -1 outbound; null when it depends on the line (count, reversal). */
+    /** +1 inbound, -1 outbound, 0 value only; null when it depends on the line (count, reversal). */
     public function direction(): ?int
     {
         return match ($this) {
-            self::PURCHASE, self::INITIAL => 1,
+            self::PURCHASE, self::INITIAL, self::DELIVERY_RECEIPT => 1,
+            self::VALUATION => 0,
             self::CONSUMPTION, self::RETURN_TO_PROVIDER => -1,
             self::COUNT_ADJUSTMENT, self::REVERSAL => null,
         };
@@ -42,6 +48,6 @@ enum ItemDocumentType: string
     /** Backed by a provider document: only voiding that document reverses it (DS20). */
     public function comesFromFiscalDocument(): bool
     {
-        return $this === self::PURCHASE || $this === self::RETURN_TO_PROVIDER;
+        return in_array($this, [self::PURCHASE, self::RETURN_TO_PROVIDER, self::DELIVERY_RECEIPT, self::VALUATION], true);
     }
 }

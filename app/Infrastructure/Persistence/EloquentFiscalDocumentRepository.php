@@ -30,6 +30,7 @@ class EloquentFiscalDocumentRepository implements IFiscalDocumentRepository
         'type', 'provider', 'creator', 'related.type', 'stockOperation',
         'lines.item.unit', 'lines.inputUnit', 'lines.inputPresentation', 'lines.batch',
         'lines.taxes.tax', 'lines.taxes.taxRate', 'documentTaxes.tax',
+        'invoicedBy.type', 'deliveryNotes.type', 'lines.deliveryNoteLine.document.type', 'lines.unvaluedLot',
     ];
 
     public function findByIdempotencyKey(string $key, int $companyId): ?FiscalDocumentEntity
@@ -112,6 +113,7 @@ class EloquentFiscalDocumentRepository implements IFiscalDocumentRepository
             'notes' => $document->getNotes(),
             'idempotency_key' => $document->getIdempotencyKey(),
             'created_by' => $document->getCreatedBy(),
+            'is_valued' => $document->isValued(),
         ]);
 
         foreach ($document->getLines() as $line) {
@@ -131,6 +133,7 @@ class EloquentFiscalDocumentRepository implements IFiscalDocumentRepository
                 'unit_cost' => $line->unitCost,
                 'batch_id' => $line->batchId,
                 'heads_treated' => $line->headsTreated,
+                'delivery_note_line_id' => $line->deliveryNoteLineId,
             ]);
             foreach ($line->taxes as $tax) {
                 FiscalDocumentLineTax::withoutGlobalScopes()->create(
@@ -159,6 +162,81 @@ class EloquentFiscalDocumentRepository implements IFiscalDocumentRepository
                 'voided_at' => now(),
                 'updated_at' => now(),
             ]);
+    }
+
+    public function lockDeliveryNotes(array $ids, int $companyId): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        $locked = $this->query($companyId)->whereIn('id', $ids)->orderBy('id')->lockForUpdate()->pluck('id')->all();
+
+        return $this->query($companyId)
+            ->with(self::RELATIONS)
+            ->whereIn('id', $locked)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (FiscalDocument $m) => FiscalDocumentMapper::toEntity($m))
+            ->all();
+    }
+
+    public function markInvoiced(array $ids, ?int $invoiceId, int $companyId): void
+    {
+        if ($ids === []) {
+            return;
+        }
+
+        $this->query($companyId)->whereIn('id', $ids)->update(['invoiced_by_document_id' => $invoiceId, 'updated_at' => now()]);
+    }
+
+    public function deliveryNoteIdsOf(int $invoiceId, int $companyId): array
+    {
+        return $this->query($companyId)->where('invoiced_by_document_id', $invoiceId)->orderBy('id')->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    public function pendingDeliveryNotes(?int $providerId, int $companyId): array
+    {
+        $notes = $this->query($companyId)
+            ->with(['type', 'provider'])
+            ->withCount('lines')
+            ->whereHas('type', fn (Builder $t) => $t->where('kind', FiscalDocumentKind::DELIVERY_NOTE->value))
+            ->where('status', FiscalDocumentStatus::REGISTERED->value)
+            ->whereNull('invoiced_by_document_id')
+            ->when($providerId !== null, fn (Builder $q) => $q->where('provider_id', $providerId))
+            ->orderBy('issued_at')
+            ->orderBy('id')
+            ->get();
+
+        $lots = DB::table('stock_unvalued_lots as s')
+            ->join('fiscal_document_lines as l', 'l.id', '=', 's.delivery_note_line_id')
+            ->where('s.company_id', $companyId)
+            ->whereIn('l.fiscal_document_id', $notes->pluck('id')->all() ?: [0])
+            ->groupBy('l.fiscal_document_id')
+            ->selectRaw('l.fiscal_document_id, SUM(s.remaining_quantity) as pending, SUM(s.quantity - s.remaining_quantity) as issued, SUM(CASE WHEN s.remaining_quantity < s.quantity THEN 1 ELSE 0 END) as lines_with_issues')
+            ->get()
+            ->keyBy('fiscal_document_id');
+
+        $today = now()->startOfDay();
+
+        return $notes->map(function (FiscalDocument $note) use ($lots, $today) {
+            $lot = $lots->get($note->id);
+
+            return [
+                'id' => (int) $note->id,
+                'label' => FiscalDocumentMapper::label($note),
+                'provider_id' => (int) $note->provider_id,
+                'provider_name' => $note->provider?->name,
+                'issued_at' => $note->issued_at->format('Y-m-d'),
+                'age_days' => (int) $note->issued_at->copy()->startOfDay()->diffInDays($today),
+                'is_valued' => (bool) $note->is_valued,
+                'lines_count' => (int) $note->lines_count,
+                'lines_amount' => DecimalColumn::readNullable($note->lines_amount, 4),
+                'unvalued_pending' => $lot === null ? null : DecimalColumn::read($lot->pending, 4),
+                'unvalued_issued' => $lot === null ? null : DecimalColumn::read($lot->issued, 4),
+                'lines_with_issues' => $lot === null ? 0 : (int) $lot->lines_with_issues,
+            ];
+        })->all();
     }
 
     public function lastPurchasesByProvider(int $itemId, int $companyId): array

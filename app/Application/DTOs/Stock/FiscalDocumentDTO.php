@@ -27,6 +27,10 @@ final readonly class FiscalDocumentDTO
         public array $lines,
         public array $documentTaxes,
         public ?int $createdBy = null,
+        /** Delivery notes only: whether the paper carries prices (DC14, RM2). */
+        public ?bool $isValued = null,
+        /** Invoices only: the delivery notes it is converted from (DC5). @var list<int> */
+        public array $deliveryNoteIds = [],
     ) {
     }
 
@@ -49,6 +53,8 @@ final readonly class FiscalDocumentDTO
             array_map(fn (array $line) => FiscalLineDTO::fromArray($line), array_values($data['lines'] ?? [])),
             array_map(fn (array $tax) => TaxInputDTO::fromArray($tax), array_values($data['document_taxes'] ?? [])),
             $createdBy,
+            isset($data['is_valued']) ? (bool) $data['is_valued'] : null,
+            array_values(array_map('intval', $data['delivery_note_ids'] ?? [])),
         );
     }
 }

@@ -25,6 +25,8 @@ class StockMovement extends Model
         'total_cost',
         'balance_after',
         'average_cost_after',
+        'unvalued_quantity',
+        'unvalued_balance_after',
     ];
 
     protected $casts = [

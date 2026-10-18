@@ -28,7 +28,7 @@ interface IItemStockRepository
      * Totals for the item list, keyed by item id.
      *
      * @param list<int> $itemIds
-     * @return array<int, array{quantity: string, value: string, has_negative: bool, has_critical: bool}>
+     * @return array<int, array{quantity: string, unvalued_quantity: string, value: string, has_negative: bool, has_critical: bool}>
      */
     public function summaries(array $itemIds, int $companyId): array;
 

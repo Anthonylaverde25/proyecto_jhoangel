@@ -21,6 +21,8 @@ final readonly class ItemStockView
         public ItemEntity $item,
         public array $stocks,
         public array $openIncidents,
+        /** Units waiting for their invoice, by delivery note (delivery C). @var list<array<string, mixed>> */
+        public array $pendingLots = [],
     ) {
     }
 }

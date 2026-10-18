@@ -18,8 +18,9 @@ class StockReadingsTest extends StockTestCase
     public function test_the_fiscal_catalog_is_seeded_and_read_only(): void
     {
         $types = $this->apiAs('GET', '/fiscal-document-types')->assertOk()->json();
-        $this->assertCount(7, $types);
-        $this->assertNotContains('DELIVERY_NOTE', array_column($types, 'code'));
+        // Delivery notes are loaded since delivery C (M24).
+        $this->assertCount(8, $types);
+        $this->assertContains('DELIVERY_NOTE', array_column($types, 'code'));
 
         $taxes = $this->apiAs('GET', '/taxes')->assertOk()->json();
         $this->assertCount(28, $taxes);

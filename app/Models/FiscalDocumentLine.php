@@ -32,6 +32,7 @@ class FiscalDocumentLine extends Model
         'unit_cost',
         'batch_id',
         'heads_treated',
+        'delivery_note_line_id',
     ];
 
     protected $casts = [
@@ -43,6 +44,7 @@ class FiscalDocumentLine extends Model
         'input_presentation_id' => 'integer',
         'batch_id' => 'integer',
         'heads_treated' => 'integer',
+        'delivery_note_line_id' => 'integer',
     ];
 
     public function item(): BelongsTo
@@ -63,6 +65,23 @@ class FiscalDocumentLine extends Model
     public function batch(): BelongsTo
     {
         return $this->belongsTo(Batch::class)->withoutGlobalScopes();
+    }
+
+    /** The delivery-note line an invoice line was converted from (delivery C, DC5). */
+    public function deliveryNoteLine(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'delivery_note_line_id')->withoutGlobalScopes();
+    }
+
+    public function document(): BelongsTo
+    {
+        return $this->belongsTo(FiscalDocument::class, 'fiscal_document_id')->withoutGlobalScopes();
+    }
+
+    /** The lot an unvalued delivery-note line opened (delivery C, model 2.2). */
+    public function unvaluedLot(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(StockUnvaluedLot::class, 'delivery_note_line_id')->withoutGlobalScopes();
     }
 
     public function taxes(): HasMany

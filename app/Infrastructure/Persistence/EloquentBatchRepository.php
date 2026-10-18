@@ -20,7 +20,7 @@ class EloquentBatchRepository implements IBatchRepository
 
     public function findAll(?string $batchType = null, ?string $scope = null): array
     {
-        $query = Batch::with($this->relations)->withPendingIdentification();
+        $query = Batch::with($this->relations)->withPendingIdentification()->withNursingCalves();
         
         // Every farm is a provider's (D21): own batches have no farm, external ones do.
         if ($scope === 'own') {
@@ -43,7 +43,7 @@ class EloquentBatchRepository implements IBatchRepository
 
     public function findById(int $id): ?BatchEntity
     {
-        $model = Batch::with($this->relations)->withPendingIdentification()->find($id);
+        $model = Batch::with($this->relations)->withPendingIdentification()->withNursingCalves()->find($id);
         return $model ? BatchMapper::toEntity($model) : null;
     }
 
@@ -77,7 +77,7 @@ class EloquentBatchRepository implements IBatchRepository
 
     public function findByFarmId(int $farmId, ?string $batchType = null): array
     {
-        $query = Batch::with($this->relations)->withPendingIdentification()->where('farm_id', $farmId);
+        $query = Batch::with($this->relations)->withPendingIdentification()->withNursingCalves()->where('farm_id', $farmId);
 
         if ($batchType !== null) {
             $query->whereHas('batchType', function ($q) use ($batchType) {

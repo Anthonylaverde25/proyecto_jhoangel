@@ -135,6 +135,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(\App\Core\Interfaces\IItemDocumentRepository::class, \App\Infrastructure\Persistence\EloquentItemDocumentRepository::class);
         $this->app->bind(\App\Core\Interfaces\IItemStockRepository::class, \App\Infrastructure\Persistence\EloquentItemStockRepository::class);
         $this->app->bind(\App\Core\Interfaces\IStockIncidentRepository::class, \App\Infrastructure\Persistence\EloquentStockIncidentRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IUnvaluedLotRepository::class, \App\Infrastructure\Persistence\EloquentUnvaluedLotRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IFiscalDiscrepancyRepository::class, \App\Infrastructure\Persistence\EloquentFiscalDiscrepancyRepository::class);
         $this->app->bind(\App\Core\Interfaces\IItemUsageReader::class, \App\Infrastructure\Persistence\EloquentItemUsageReader::class);
         $this->app->bind(\App\Core\Interfaces\IConsumableBatchReader::class, \App\Infrastructure\Persistence\EloquentConsumableBatchReader::class);
     }

@@ -38,6 +38,8 @@ class FiscalDocument extends Model
         'notes',
         'idempotency_key',
         'created_by',
+        'is_valued',
+        'invoiced_by_document_id',
     ];
 
     protected $casts = [
@@ -49,6 +51,8 @@ class FiscalDocument extends Model
         'related_fiscal_document_id' => 'integer',
         'voided_by' => 'integer',
         'created_by' => 'integer',
+        'is_valued' => 'boolean',
+        'invoiced_by_document_id' => 'integer',
         'issued_at' => 'date:Y-m-d',
         'voided_at' => 'datetime',
     ];
@@ -82,6 +86,18 @@ class FiscalDocument extends Model
     public function stockOperation(): HasOne
     {
         return $this->hasOne(ItemDocument::class)->withoutGlobalScopes()->where('type', '!=', 'REVERSAL');
+    }
+
+    /** A delivery note: the invoice it was converted into (delivery C, DC10). */
+    public function invoicedBy(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'invoiced_by_document_id')->withoutGlobalScopes();
+    }
+
+    /** An invoice: the delivery notes converted into it (DC5). */
+    public function deliveryNotes(): HasMany
+    {
+        return $this->hasMany(self::class, 'invoiced_by_document_id')->withoutGlobalScopes();
     }
 
     public function creator(): BelongsTo

@@ -81,7 +81,7 @@ final class StockMapper
             $model->input_presentation_id,
             DecimalColumn::read($model->quantity, 4),
             DecimalColumn::readNullable($model->input_unit_price, 6),
-            DecimalColumn::read($model->unit_cost, 6),
+            DecimalColumn::readNullable($model->unit_cost, 6),
             DecimalColumn::read($model->total_cost, 4),
             $model->fiscal_document_line_id,
             DecimalColumn::readNullable($model->counted_quantity, 4),
@@ -91,6 +91,8 @@ final class StockMapper
             $item?->name,
             $item !== null && $item->relationLoaded('unit') ? $item->unit?->symbol : null,
             FiscalDocumentMapper::inputLabel($model),
+            DecimalColumn::read($model->unvalued_quantity ?? '0', 4),
+            DecimalColumn::readNullable($model->unabsorbed_cost, 4),
         );
     }
 
@@ -101,12 +103,14 @@ final class StockMapper
             (int) $model->item_id,
             (int) $model->direction,
             DecimalColumn::read($model->quantity, 4),
-            DecimalColumn::read($model->unit_cost, 6),
+            DecimalColumn::readNullable($model->unit_cost, 6),
             DecimalColumn::read($model->total_cost, 4),
             DecimalColumn::read($model->balance_after, 4),
             DecimalColumn::read($model->average_cost_after, 6),
             (int) $model->id,
             (int) $model->item_document_line_id,
+            DecimalColumn::read($model->unvalued_quantity ?? '0', 4),
+            DecimalColumn::read($model->unvalued_balance_after ?? '0', 4),
         );
     }
 
@@ -122,6 +126,7 @@ final class StockMapper
             DecimalColumn::readNullable($model->critical_stock, 4),
             $model->last_movement_id,
             $model->relationLoaded('warehouse') ? $model->warehouse?->name : null,
+            DecimalColumn::read($model->unvalued_quantity ?? '0', 4),
         );
     }
 

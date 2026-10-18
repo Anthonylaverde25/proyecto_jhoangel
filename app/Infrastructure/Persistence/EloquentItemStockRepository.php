@@ -62,6 +62,8 @@ class EloquentItemStockRepository implements IItemStockRepository
             'total_cost' => $movement->totalCost,
             'balance_after' => $movement->balanceAfter,
             'average_cost_after' => $movement->averageCostAfter,
+            'unvalued_quantity' => $movement->unvaluedQuantity,
+            'unvalued_balance_after' => $movement->unvaluedBalanceAfter,
         ]);
         $saved = StockMapper::movementToEntity($model);
         $stock->apply($saved);
@@ -72,6 +74,7 @@ class EloquentItemStockRepository implements IItemStockRepository
             ->update([
                 'quantity' => $stock->getQuantity(),
                 'average_unit_cost' => $stock->getAverageUnitCost(),
+                'unvalued_quantity' => $stock->getUnvaluedQuantity(),
                 'last_movement_id' => $stock->getLastMovementId(),
                 'updated_at' => now(),
             ]);
@@ -112,9 +115,11 @@ class EloquentItemStockRepository implements IItemStockRepository
             ->get();
         foreach ($rows as $row) {
             $stock = StockMapper::stockToEntity($row);
-            $current = $summaries[$stock->getItemId()] ?? ['quantity' => '0.0000', 'value' => '0.0000', 'has_negative' => false, 'has_critical' => false];
+            $current = $summaries[$stock->getItemId()] ?? ['quantity' => '0.0000', 'unvalued_quantity' => '0.0000', 'value' => '0.0000', 'has_negative' => false, 'has_critical' => false];
             $summaries[$stock->getItemId()] = [
                 'quantity' => bcadd($current['quantity'], $stock->getQuantity(), 4),
+                // Delivery C: units waiting for their invoice are in the balance, not in the value.
+                'unvalued_quantity' => bcadd($current['unvalued_quantity'], $stock->getUnvaluedQuantity(), 4),
                 'value' => bcadd($current['value'], $stock->value(), 4),
                 'has_negative' => $current['has_negative'],
                 'has_critical' => $current['has_critical'],
@@ -159,6 +164,7 @@ class EloquentItemStockRepository implements IItemStockRepository
             ->forPage($filters->page, $filters->perPage)
             ->get([
                 'm.id', 'm.direction', 'm.quantity', 'm.unit_cost', 'm.total_cost', 'm.balance_after', 'm.average_cost_after',
+                'm.unvalued_quantity', 'm.unvalued_balance_after',
                 'w.name as warehouse_name', 'd.id as document_id', 'd.number as document_number', 'd.type as document_type',
                 'd.occurred_at', 'b.name as batch_name', 'f.id as fiscal_document_id', 'f.point_of_sale', 'f.number as fiscal_number',
                 'f.reference', 'ft.name as fiscal_type_name', 'p.name as provider_name',
@@ -185,10 +191,12 @@ class EloquentItemStockRepository implements IItemStockRepository
                 ],
                 'direction' => (int) $row->direction,
                 'quantity' => DecimalColumn::read($row->quantity, 4),
-                'unit_cost' => DecimalColumn::read($row->unit_cost, 6),
+                'unit_cost' => DecimalColumn::readNullable($row->unit_cost, 6),
                 'total_cost' => DecimalColumn::read($row->total_cost, 4),
                 'balance_after' => DecimalColumn::read($row->balance_after, 4),
                 'average_cost_after' => DecimalColumn::read($row->average_cost_after, 6),
+                'unvalued_quantity' => DecimalColumn::read($row->unvalued_quantity, 4),
+                'unvalued_balance_after' => DecimalColumn::read($row->unvalued_balance_after, 4),
             ])->all(),
             'total' => $total,
         ];
@@ -219,6 +227,9 @@ class EloquentItemStockRepository implements IItemStockRepository
             }
             if ($last !== null && bccomp($last->averageCostAfter, $stock->getAverageUnitCost(), 6) !== 0) {
                 $problems[] = "promedio {$stock->getAverageUnitCost()} y último movimiento {$last->averageCostAfter}";
+            }
+            if ($last !== null && bccomp($last->unvaluedBalanceAfter, $stock->getUnvaluedQuantity(), 4) !== 0) {
+                $problems[] = "sin valorizar {$stock->getUnvaluedQuantity()} y último movimiento {$last->unvaluedBalanceAfter}";
             }
             if ($problems !== []) {
                 $differences[] = [

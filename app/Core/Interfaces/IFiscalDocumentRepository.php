@@ -30,6 +30,31 @@ interface IFiscalDocumentRepository
     public function markVoided(FiscalDocumentEntity $document, ?int $userId): void;
 
     /**
+     * Delivery notes by id, locked (RF2), with their lines.
+     *
+     * @param list<int> $ids
+     * @return list<FiscalDocumentEntity>
+     */
+    public function lockDeliveryNotes(array $ids, int $companyId): array;
+
+    /**
+     * Ties the delivery notes to the invoice they went into, or frees them (null) when it is voided.
+     *
+     * @param list<int> $ids
+     */
+    public function markInvoiced(array $ids, ?int $invoiceId, int $companyId): void;
+
+    /** Delivery notes tied to an invoice. @return list<int> */
+    public function deliveryNoteIdsOf(int $invoiceId, int $companyId): array;
+
+    /**
+     * Registered delivery notes without invoice (DC12), oldest first, with the state of their lots.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function pendingDeliveryNotes(?int $providerId, int $companyId): array;
+
+    /**
      * Last registered invoice or ticket line of an item per provider (DS2).
      *
      * @return array<int, array{fiscal_document_id: int, label: string, issued_at: string, unit_price: string, input_label: string}>

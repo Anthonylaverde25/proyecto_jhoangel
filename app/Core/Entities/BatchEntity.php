@@ -38,6 +38,37 @@ final class BatchEntity
     ) {
     }
 
+    /** Calves at foot in the batch; null when not read. */
+    private ?int $nursingCount = null;
+
+    /** Calves at foot with a current weight. */
+    private ?int $nursingWeighedCount = null;
+
+    /** Kilos of the calves at foot with a current weight. */
+    private ?float $nursingTotalWeight = null;
+
+    public function setNursingCalves(int $count, int $weighedCount, float $totalWeight): void
+    {
+        $this->nursingCount = $count;
+        $this->nursingWeighedCount = $weighedCount;
+        $this->nursingTotalWeight = $totalWeight;
+    }
+
+    public function getNursingCount(): ?int
+    {
+        return $this->nursingCount;
+    }
+
+    public function getNursingWeighedCount(): ?int
+    {
+        return $this->nursingWeighedCount;
+    }
+
+    public function getNursingTotalWeight(): ?float
+    {
+        return $this->nursingTotalWeight;
+    }
+
     /**
      * Head of entry orders received by count on this batch whose caravans are still to write: they
      * are in the batch, but no caravan of the batch stands for them yet. Null when not read.

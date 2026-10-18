@@ -19,11 +19,12 @@ final readonly class FiscalDocumentLineEntity
         public ?int $inputUnitId,
         public ?int $inputPresentationId,
         public string $quantity,
-        public string $unitPrice,
-        public string $lineAmount,
+        /** The four amounts are null together, only on an unvalued delivery note (delivery C, H1). */
+        public ?string $unitPrice,
+        public ?string $lineAmount,
         public string $nonRecoverableTaxAmount,
-        public string $costAmount,
-        public string $unitCost,
+        public ?string $costAmount,
+        public ?string $unitCost,
         public ?int $batchId,
         public ?int $headsTreated,
         public array $taxes,
@@ -34,6 +35,12 @@ final readonly class FiscalDocumentLineEntity
         public ?string $itemUnitSymbol = null,
         public ?string $inputLabel = null,
         public ?string $batchName = null,
+        /** The delivery-note line an invoice line was converted from (DC5). */
+        public ?int $deliveryNoteLineId = null,
+        /** "Remito 0001-00000123", for that line. */
+        public ?string $deliveryNoteLabel = null,
+        /** Delivery-note lines without price: their lot, as array{status, quantity, remaining_quantity}. */
+        public ?array $unvaluedLot = null,
     ) {
     }
 

@@ -9,7 +9,8 @@ use App\Core\Exceptions\ItemDocumentException;
 /**
  * Materialised balance and weighted average cost of an item in a warehouse. Quantity, average and
  * last movement change only by applying a movement (S2); the critical level is the only value the
- * operator edits.
+ * operator edits. unvaluedQuantity are units waiting for their invoice (delivery C, model 2.1): the
+ * average is over the rest.
  */
 final class ItemStockEntity
 {
@@ -23,6 +24,7 @@ final class ItemStockEntity
         private ?string $criticalStock,
         private ?int $lastMovementId,
         private readonly ?string $warehouseName = null,
+        private string $unvaluedQuantity = '0',
     ) {
     }
 
@@ -34,6 +36,7 @@ final class ItemStockEntity
         }
         $this->quantity = $movement->balanceAfter;
         $this->averageUnitCost = $movement->averageCostAfter;
+        $this->unvaluedQuantity = $movement->unvaluedBalanceAfter;
         $this->lastMovementId = $movement->id;
     }
 
@@ -45,10 +48,18 @@ final class ItemStockEntity
         $this->criticalStock = $level;
     }
 
-    /** Average times balance; a negative balance is worth nothing until it is counted. */
+    /** Units with a cost: the balance minus what waits for its invoice. */
+    public function valuedQuantity(): string
+    {
+        return bcsub($this->quantity, $this->unvaluedQuantity, 4);
+    }
+
+    /** Average times valued balance; a negative balance is worth nothing until it is counted. */
     public function value(): string
     {
-        return bccomp($this->quantity, '0', 4) > 0 ? bcmul($this->quantity, $this->averageUnitCost, 4) : '0.0000';
+        $valued = $this->valuedQuantity();
+
+        return bccomp($valued, '0', 4) > 0 ? bcmul($valued, $this->averageUnitCost, 4) : '0.0000';
     }
 
     public function isBelowCritical(): bool
@@ -63,6 +74,7 @@ final class ItemStockEntity
     public function getQuantity(): string { return $this->quantity; }
     public function getAverageUnitCost(): string { return $this->averageUnitCost; }
     public function getCriticalStock(): ?string { return $this->criticalStock; }
+    public function getUnvaluedQuantity(): string { return $this->unvaluedQuantity; }
     public function getLastMovementId(): ?int { return $this->lastMovementId; }
     public function getWarehouseName(): ?string { return $this->warehouseName; }
 }

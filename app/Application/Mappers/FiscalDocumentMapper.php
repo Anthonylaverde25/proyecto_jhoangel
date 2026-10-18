@@ -25,6 +25,7 @@ final class FiscalDocumentMapper
             : [];
         $operation = $model->relationLoaded('stockOperation') ? $model->stockOperation : null;
         $related = $model->relationLoaded('related') ? $model->related : null;
+        $invoicedBy = $model->relationLoaded('invoicedBy') ? $model->invoicedBy : null;
 
         return new FiscalDocumentEntity(
             (int) $model->id,
@@ -36,10 +37,10 @@ final class FiscalDocumentMapper
             $model->reference,
             $model->issued_at->format('Y-m-d'),
             $model->related_fiscal_document_id,
-            DecimalColumn::read($model->lines_amount, 4),
-            DecimalColumn::read($model->line_taxes_amount, 4),
-            DecimalColumn::read($model->document_taxes_amount, 4),
-            DecimalColumn::read($model->total_amount, 4),
+            DecimalColumn::readNullable($model->lines_amount, 4),
+            DecimalColumn::readNullable($model->line_taxes_amount, 4),
+            DecimalColumn::readNullable($model->document_taxes_amount, 4),
+            DecimalColumn::readNullable($model->total_amount, 4),
             DecimalColumn::readNullable($model->declared_total, 4),
             $lines,
             $documentTaxes,
@@ -55,13 +56,32 @@ final class FiscalDocumentMapper
             $related === null ? null : $related->type->name . ' ' . FiscalDocumentEntity::formatNumber($related->point_of_sale, $related->number, $related->reference),
             $operation?->id,
             $operation?->number,
+            $model->is_valued,
+            $model->invoiced_by_document_id,
+            $invoicedBy === null ? null : self::label($invoicedBy),
+            $model->relationLoaded('deliveryNotes')
+                ? $model->deliveryNotes->sortBy('id')->map(fn (FiscalDocument $note) => [
+                    'id' => (int) $note->id,
+                    'label' => self::label($note),
+                    'issued_at' => $note->issued_at->format('Y-m-d'),
+                    'is_valued' => (bool) $note->is_valued,
+                ])->values()->all()
+                : [],
         );
+    }
+
+    /** "Remito 0001-00000123". */
+    public static function label(FiscalDocument $model): string
+    {
+        return $model->type->name . ' ' . FiscalDocumentEntity::formatNumber($model->point_of_sale, $model->number, $model->reference);
     }
 
     public static function lineToEntity(FiscalDocumentLine $model): FiscalDocumentLineEntity
     {
         $item = $model->relationLoaded('item') ? $model->item : null;
         $unit = $item !== null && $item->relationLoaded('unit') ? $item->unit : null;
+        $deliveryLine = $model->relationLoaded('deliveryNoteLine') ? $model->deliveryNoteLine : null;
+        $lot = $model->relationLoaded('unvaluedLot') ? $model->unvaluedLot : null;
         $taxes = $model->relationLoaded('taxes')
             ? $model->taxes->map(fn (FiscalDocumentLineTax $tax) => self::lineTaxToEntity($tax))->values()->all()
             : [];
@@ -73,11 +93,11 @@ final class FiscalDocumentMapper
             $model->input_unit_id,
             $model->input_presentation_id,
             DecimalColumn::read($model->quantity, 4),
-            DecimalColumn::read($model->unit_price, 6),
-            DecimalColumn::read($model->line_amount, 4),
+            DecimalColumn::readNullable($model->unit_price, 6),
+            DecimalColumn::readNullable($model->line_amount, 4),
             DecimalColumn::read($model->non_recoverable_tax_amount, 4),
-            DecimalColumn::read($model->cost_amount, 4),
-            DecimalColumn::read($model->unit_cost, 6),
+            DecimalColumn::readNullable($model->cost_amount, 4),
+            DecimalColumn::readNullable($model->unit_cost, 6),
             $model->batch_id,
             $model->heads_treated,
             $taxes,
@@ -87,6 +107,14 @@ final class FiscalDocumentMapper
             $unit?->symbol,
             self::inputLabel($model),
             $model->relationLoaded('batch') ? $model->batch?->name : null,
+            $model->delivery_note_line_id,
+            $deliveryLine !== null && $deliveryLine->relationLoaded('document') ? self::label($deliveryLine->document) : null,
+            $lot === null ? null : [
+                'status' => $lot->status,
+                'quantity' => DecimalColumn::read($lot->quantity, 4),
+                'remaining_quantity' => DecimalColumn::read($lot->remaining_quantity, 4),
+                'valued_unit_cost' => DecimalColumn::readNullable($lot->valued_unit_cost, 6),
+            ],
         );
     }
 

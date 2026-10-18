@@ -31,6 +31,8 @@ class ItemDocumentLine extends Model
         'total_cost',
         'counted_quantity',
         'reverses_line_id',
+        'unvalued_quantity',
+        'unabsorbed_cost',
     ];
 
     protected $casts = [

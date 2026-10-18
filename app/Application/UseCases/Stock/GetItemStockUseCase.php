@@ -8,6 +8,7 @@ use App\Core\Enums\StockIncidentStatus;
 use App\Core\Interfaces\IItemRepository;
 use App\Core\Interfaces\IItemStockRepository;
 use App\Core\Interfaces\IStockIncidentRepository;
+use App\Core\Interfaces\IUnvaluedLotRepository;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 final class GetItemStockUseCase
@@ -16,6 +17,7 @@ final class GetItemStockUseCase
         private readonly IItemRepository $items,
         private readonly IItemStockRepository $stocks,
         private readonly IStockIncidentRepository $incidents,
+        private readonly IUnvaluedLotRepository $lots,
     ) {
     }
 
@@ -28,6 +30,7 @@ final class GetItemStockUseCase
             $item,
             $this->stocks->findByItem($itemId, $companyId),
             $this->incidents->search($companyId, StockIncidentStatus::OPEN, $itemId),
+            $this->lots->pendingOfItem($itemId, $companyId),
         );
     }
 }

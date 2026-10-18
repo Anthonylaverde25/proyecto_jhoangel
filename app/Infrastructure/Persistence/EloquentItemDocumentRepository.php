@@ -112,8 +112,11 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
                 'input_presentation_id' => $line->getInputPresentationId(),
                 'quantity' => $line->getQuantity(),
                 'input_unit_price' => $line->getInputUnitPrice(),
-                'unit_cost' => $line->getUnitCost(),
+                // Fully unvalued, it has no unit cost yet (delivery C); otherwise as valued by the ledger.
+                'unit_cost' => $line->isFullyUnvalued() ? null : $line->getUnitCost(),
                 'total_cost' => $line->getTotalCost(),
+                'unvalued_quantity' => $line->getUnvaluedQuantity(),
+                'unabsorbed_cost' => $line->getUnabsorbedCost(),
                 'counted_quantity' => $line->getCountedQuantity(),
                 'reverses_line_id' => $line->getReversesLineId(),
             ]);
@@ -126,8 +129,16 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
     {
         $roots = $this->rootCategories($companyId);
 
+        // Units taken from unvalued lots (delivery C): their cost counts once the invoice values them.
+        $issues = DB::table('stock_unvalued_issues')
+            ->where('company_id', $companyId)
+            ->whereNull('reversed_by_line_id')
+            ->groupBy('item_document_line_id')
+            ->selectRaw('item_document_line_id, COALESCE(SUM(total_cost), 0) as valued_cost, SUM(CASE WHEN unit_cost IS NULL THEN quantity ELSE 0 END) as pending_quantity');
+
         $consumptions = DB::table('item_document_lines as l')
             ->join('item_documents as d', 'd.id', '=', 'l.item_document_id')
+            ->leftJoinSub($issues, 'iss', 'iss.item_document_line_id', '=', 'l.id')
             ->join('items as i', 'i.id', '=', 'l.item_id')
             ->join('units_of_measure as u', 'u.id', '=', 'i.unit_of_measure_id')
             ->leftJoin('item_documents as r', 'r.reverses_document_id', '=', 'd.id')
@@ -137,7 +148,7 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
             ->get([
                 'l.id', 'd.id as document_id', 'd.number', 'd.occurred_at', 'd.heads_treated', 'i.id as item_id', 'i.name as item_name',
                 'i.type as item_type', 'i.track_stock', 'i.item_category_id', 'u.symbol', 'l.quantity', 'l.total_cost',
-                'r.id as reversal_id', 'r.number as reversal_number',
+                'r.id as reversal_id', 'r.number as reversal_number', 'iss.valued_cost', 'iss.pending_quantity',
             ])
             ->map(fn (object $row) => [
                 'source' => 'CONSUMPTION',
@@ -150,7 +161,8 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
                 'quantity' => DecimalColumn::read($row->quantity, 4),
                 'unit_symbol' => $row->symbol,
                 'heads_treated' => (int) $row->heads_treated,
-                'cost' => DecimalColumn::read($row->total_cost, 4),
+                'cost' => bcadd(DecimalColumn::read($row->total_cost, 4), DecimalColumn::read($row->valued_cost ?? '0', 4), 4),
+                'pending_cost_quantity' => DecimalColumn::read($row->pending_quantity ?? '0', 4),
                 'reference' => ['kind' => 'item_document', 'id' => (int) $row->document_id, 'label' => "Consumo N.º {$row->number}"],
                 'voided' => $row->reversal_id === null ? null : "Anulado por el movimiento N.º {$row->reversal_number}",
             ]);
@@ -183,6 +195,7 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
                     'heads_treated' => (int) $row->heads_treated,
                     // A credit note gives back what an invoice charged.
                     'cost' => (int) $row->sign < 0 ? bcmul($cost, '-1', 4) : $cost,
+                    'pending_cost_quantity' => '0.0000',
                     'reference' => [
                         'kind' => 'fiscal_document',
                         'id' => (int) $row->document_id,

@@ -57,6 +57,15 @@ class BatchMapper
             $entity->setPendingIdentificationCount((int) $model->pending_identification_count);
         }
 
+        // Read with Batch::withNursingCalves().
+        if (array_key_exists('nursing_count', $model->getAttributes())) {
+            $entity->setNursingCalves(
+                (int) $model->nursing_count,
+                (int) $model->nursing_weighed_count,
+                (float) $model->nursing_total_weight
+            );
+        }
+
         if ($model->relationLoaded('farm') && $model->farm) {
             $entity->setFarmName($model->farm->name);
             

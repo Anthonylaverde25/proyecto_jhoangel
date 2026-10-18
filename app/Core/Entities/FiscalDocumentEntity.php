@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace App\Core\Entities;
 
+use App\Core\Enums\FiscalDocumentKind;
 use App\Core\Enums\FiscalDocumentStatus;
 use App\Core\Exceptions\FiscalDocumentException;
 
 /**
- * A provider document as it is on paper (DS14): invoice, credit note or ticket. Immutable once
+ * A provider document as it is on paper (DS14): invoice, credit note, ticket or delivery note. Immutable once
  * registered; voiding it is the only later change (DS20). Amounts are always positive: the type's
  * sign says whether it is a cost or a credit.
  */
@@ -28,10 +29,10 @@ final class FiscalDocumentEntity
         private readonly ?string $reference,
         private readonly string $issuedAt,
         private readonly ?int $relatedFiscalDocumentId,
-        private readonly string $linesAmount,
-        private readonly string $lineTaxesAmount,
-        private readonly string $documentTaxesAmount,
-        private readonly string $totalAmount,
+        private readonly ?string $linesAmount,
+        private readonly ?string $lineTaxesAmount,
+        private readonly ?string $documentTaxesAmount,
+        private readonly ?string $totalAmount,
         private readonly ?string $declaredTotal,
         private readonly array $lines,
         private readonly array $documentTaxes,
@@ -47,6 +48,14 @@ final class FiscalDocumentEntity
         private readonly ?string $relatedLabel = null,
         private readonly ?int $stockOperationId = null,
         private readonly ?int $stockOperationNumber = null,
+        /** Delivery notes only (DC14): null on any other document. */
+        private readonly ?bool $isValued = null,
+        private readonly ?int $invoicedByDocumentId = null,
+        private readonly ?string $invoicedByLabel = null,
+        /** An invoice converted from delivery notes: array{id, label, issued_at} each. @var list<array<string, mixed>> */
+        private readonly array $deliveryNotes = [],
+        /** The delivery notes the invoice is converted from, when it is being registered (DC5). @var list<int> */
+        private readonly array $deliveryNoteIds = [],
     ) {
         if ($lines === []) {
             throw FiscalDocumentException::on('lines', 'El comprobante no tiene renglones.');
@@ -85,7 +94,7 @@ final class FiscalDocumentEntity
     /** Declared total minus computed total, when the operator copied it from the paper (DS19). */
     public function totalDifference(): ?string
     {
-        if ($this->declaredTotal === null) {
+        if ($this->declaredTotal === null || $this->totalAmount === null) {
             return null;
         }
 
@@ -101,10 +110,18 @@ final class FiscalDocumentEntity
     public function getReference(): ?string { return $this->reference; }
     public function getIssuedAt(): string { return $this->issuedAt; }
     public function getRelatedFiscalDocumentId(): ?int { return $this->relatedFiscalDocumentId; }
-    public function getLinesAmount(): string { return $this->linesAmount; }
-    public function getLineTaxesAmount(): string { return $this->lineTaxesAmount; }
-    public function getDocumentTaxesAmount(): string { return $this->documentTaxesAmount; }
-    public function getTotalAmount(): string { return $this->totalAmount; }
+    public function getLinesAmount(): ?string { return $this->linesAmount; }
+    public function getLineTaxesAmount(): ?string { return $this->lineTaxesAmount; }
+    public function getDocumentTaxesAmount(): ?string { return $this->documentTaxesAmount; }
+    public function getTotalAmount(): ?string { return $this->totalAmount; }
+    public function isValued(): ?bool { return $this->isValued; }
+    public function isDeliveryNote(): bool { return $this->type->kind === FiscalDocumentKind::DELIVERY_NOTE; }
+    public function getInvoicedByDocumentId(): ?int { return $this->invoicedByDocumentId; }
+    public function getInvoicedByLabel(): ?string { return $this->invoicedByLabel; }
+    /** @return list<array<string, mixed>> */
+    public function getDeliveryNotes(): array { return $this->deliveryNotes; }
+    /** @return list<int> */
+    public function getDeliveryNoteIds(): array { return $this->deliveryNoteIds; }
     public function getDeclaredTotal(): ?string { return $this->declaredTotal; }
     /** @return list<FiscalDocumentLineEntity> */
     public function getLines(): array { return $this->lines; }

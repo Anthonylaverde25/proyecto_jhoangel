@@ -37,6 +37,7 @@ final class FiscalDocumentBuilder
         private readonly ItemLineResolver $lines,
         private readonly BatchConsumptionGuard $batches,
         private readonly FiscalDocumentCalculator $calculator,
+        private readonly DeliveryNoteRules $deliveryNotes,
     ) {
     }
 
@@ -55,6 +56,13 @@ final class FiscalDocumentBuilder
             $this->taxes[$tax->id] = $tax;
         }
 
+        $isDeliveryNote = $type->kind === FiscalDocumentKind::DELIVERY_NOTE;
+        if ($isDeliveryNote) {
+            $this->deliveryNotes->checkDeliveryNoteHeader($dto, $errors);
+        }
+        // RF1–RF2: the delivery notes an invoice is converted from, locked until the transaction ends.
+        $sources = $isDeliveryNote ? [] : $this->deliveryNotes->lockSources($dto, $type, $companyId, $errors);
+
         $providerName = $this->checkProvider($dto, $companyId, $errors);
         $this->checkNumber($dto, $type, $companyId, $providerName, $errors);
         if ($dto->issuedAt > $today) {
@@ -67,24 +75,30 @@ final class FiscalDocumentBuilder
 
         $lines = [];
         foreach ($dto->lines as $index => $line) {
-            $built = $this->line($index, $line, $type, $dto->issuedAt, $companyId, $errors);
+            $built = $this->line($index, $line, $type, $dto->issuedAt, $companyId, $errors, $isDeliveryNote ? $dto->isValued : null);
             if ($built !== null) {
                 $lines[] = $built;
             }
         }
-        $documentTaxes = $this->documentTaxes($dto->documentTaxes, $type, $errors);
+        $this->deliveryNotes->checkConvertedLines($dto, $sources, $errors);
+        $documentTaxes = $isDeliveryNote ? [] : $this->documentTaxes($dto->documentTaxes, $type, $errors);
 
         $errors->throwIfAny(FiscalDocumentException::class);
 
         $linesAmount = Decimal::zero();
         $lineTaxes = Decimal::zero();
         foreach ($lines as $line) {
+            if ($line->lineAmount === null) {
+                continue; // an unvalued delivery note has no amounts to add
+            }
             $linesAmount = $linesAmount->add(Decimal::of($line->lineAmount));
             foreach ($line->taxes as $tax) {
                 $lineTaxes = $lineTaxes->add(Decimal::of($tax->amount));
             }
         }
         $docTaxes = array_reduce($documentTaxes, fn (Decimal $sum, FiscalDocumentTaxEntity $t) => $sum->add(Decimal::of($t->amount)), Decimal::zero());
+        // An unvalued delivery note has no amounts at all: NULL, never a fabricated 0 (H2).
+        $unpriced = $isDeliveryNote && $dto->isValued === false;
 
         return new FiscalDocumentEntity(
             null,
@@ -96,16 +110,18 @@ final class FiscalDocumentBuilder
             $type->kind->requiresNumber() ? null : $dto->reference,
             $dto->issuedAt,
             $dto->relatedFiscalDocumentId,
-            $linesAmount->toScale(4),
-            $lineTaxes->toScale(4),
-            $docTaxes->toScale(4),
-            $linesAmount->add($lineTaxes)->add($docTaxes)->toScale(4),
+            $unpriced ? null : $linesAmount->toScale(4),
+            $unpriced ? null : $lineTaxes->toScale(4),
+            $unpriced ? null : $docTaxes->toScale(4),
+            $unpriced ? null : $linesAmount->add($lineTaxes)->add($docTaxes)->toScale(4),
             $dto->declaredTotal === null ? null : Decimal::of($dto->declaredTotal)->toScale(4),
             $lines,
             $documentTaxes,
             notes: $dto->notes,
             idempotencyKey: $dto->idempotencyKey,
             createdBy: $dto->createdBy,
+            isValued: $isDeliveryNote ? $dto->isValued : null,
+            deliveryNoteIds: $isDeliveryNote ? [] : array_values(array_unique($dto->deliveryNoteIds)),
         );
     }
 
@@ -167,10 +183,19 @@ final class FiscalDocumentBuilder
         }
     }
 
-    private function line(int $index, FiscalLineDTO $dto, FiscalDocumentTypeEntity $type, string $issuedAt, int $companyId, FieldErrorBag $errors): ?FiscalDocumentLineEntity
+    private function line(int $index, FiscalLineDTO $dto, FiscalDocumentTypeEntity $type, string $issuedAt, int $companyId, FieldErrorBag $errors, ?bool $deliveryNoteIsValued): ?FiscalDocumentLineEntity
     {
         $prefix = "lines.{$index}";
         $resolved = $this->lines->resolve($prefix, $companyId, $dto->itemId, $dto->inputQuantity, $dto->inputUnitId, $dto->inputPresentationId, $errors, false);
+
+        if ($type->kind === FiscalDocumentKind::DELIVERY_NOTE) {
+            return $this->deliveryNoteLine($index, $dto, $resolved, $deliveryNoteIsValued, $errors);
+        }
+        if ($dto->unitPrice === null) {
+            $errors->add("{$prefix}.unit_price", 'Falta el precio.');
+
+            return null;
+        }
 
         // L4: the batch goes on services and non-stock articles; stocked ones are charged on consumption.
         if ($dto->batchId !== null) {
@@ -211,6 +236,39 @@ final class FiscalDocumentBuilder
             $dto->batchId === null ? null : $dto->headsTreated,
             $taxes,
             $resolved->item->tracksStock(),
+            deliveryNoteLineId: $dto->deliveryNoteLineId,
+        );
+    }
+
+    /** RM3–RM6: a stocked article, without taxes or batch, priced or not as the header says. */
+    private function deliveryNoteLine(int $index, FiscalLineDTO $dto, ?ResolvedLine $resolved, ?bool $isValued, FieldErrorBag $errors): ?FiscalDocumentLineEntity
+    {
+        if ($resolved === null) {
+            return null;
+        }
+        $ok = $this->deliveryNotes->checkDeliveryNoteLine("lines.{$index}", $dto, $resolved->item->tracksStock(), (string) $resolved->item->getName(), $isValued, $errors);
+        if (!$ok || $isValued === null) {
+            return null;
+        }
+
+        $amount = $dto->unitPrice === null ? null : $this->calculator->lineAmount(Decimal::of($dto->inputQuantity), Decimal::of($dto->unitPrice));
+
+        return new FiscalDocumentLineEntity(
+            $index + 1,
+            $dto->itemId,
+            $resolved->inputQuantity->toScale(4),
+            $resolved->inputUnitId,
+            $resolved->inputPresentationId,
+            $resolved->quantity->toScale(4),
+            $dto->unitPrice === null ? null : Decimal::of($dto->unitPrice)->toScale(6),
+            $amount?->toScale(4),
+            '0.0000',
+            $amount?->toScale(4),
+            $amount === null ? null : $this->calculator->unitCost($amount, $resolved->quantity)->toScale(6),
+            null,
+            null,
+            [],
+            true,
         );
     }
 

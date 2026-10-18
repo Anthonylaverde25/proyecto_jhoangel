@@ -27,12 +27,16 @@ class ItemStockResource extends JsonResource
             'warehouses' => array_map(fn (ItemStockEntity $stock) => [
                 'warehouse' => ['id' => $stock->getWarehouseId(), 'name' => $stock->getWarehouseName()],
                 'quantity' => $stock->getQuantity(),
+                // Delivery C: units without cost yet; the value is of the valued ones only.
+                'unvalued_quantity' => $stock->getUnvaluedQuantity(),
+                'valued_quantity' => $stock->valuedQuantity(),
                 'average_unit_cost' => $stock->getAverageUnitCost(),
                 'value' => $stock->value(),
                 'critical_stock' => $stock->getCriticalStock(),
                 'is_below_critical' => $stock->isBelowCritical(),
             ], $this->resource->stocks),
             'open_incidents' => array_map(fn (StockIncidentEntity $i) => StockIncidentResource::shape($i), $this->resource->openIncidents),
+            'pending_lots' => $this->resource->pendingLots,
         ];
     }
 }

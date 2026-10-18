@@ -64,8 +64,11 @@ class ItemDocumentResource extends JsonResource
                 'input_label' => $line->getInputLabel(),
                 'quantity' => $line->getQuantity(),
                 'input_unit_price' => $line->getInputUnitPrice(),
-                'unit_cost' => $line->getUnitCost(),
+                'unit_cost' => $line->getUnitCostOrNull(),
                 'total_cost' => $line->getTotalCost(),
+                // Delivery C: units without cost yet, and the share of a valuation no stock could take.
+                'unvalued_quantity' => $line->getUnvaluedQuantity(),
+                'unabsorbed_cost' => $line->getUnabsorbedCost(),
                 'counted_quantity' => $line->getCountedQuantity(),
                 'movement' => $line->getMovement() === null ? null : [
                     'id' => $line->getMovement()->id,
@@ -73,6 +76,7 @@ class ItemDocumentResource extends JsonResource
                     'quantity' => $line->getMovement()->quantity,
                     'balance_after' => $line->getMovement()->balanceAfter,
                     'average_cost_after' => $line->getMovement()->averageCostAfter,
+                    'unvalued_balance_after' => $line->getMovement()->unvaluedBalanceAfter,
                 ],
             ], $document->getLines()),
             'incidents_raised' => array_map(fn (StockIncidentEntity $i) => StockIncidentResource::shape($i), $this->incidents),

@@ -24,6 +24,7 @@ class ItemStock extends Model
         'average_unit_cost',
         'critical_stock',
         'last_movement_id',
+        'unvalued_quantity',
     ];
 
     protected $casts = [

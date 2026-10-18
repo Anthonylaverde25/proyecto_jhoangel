@@ -98,6 +98,34 @@ class Batch extends Model
         ]);
     }
 
+    /**
+     * Calves at foot (unweaned, `caravan_lineage.is_nursing`) the batch holds: they are born into
+     * their mother's batch, so its head and its mean weight mix them with the adults. Adds
+     * `nursing_count`, `nursing_weighed_count` and `nursing_total_weight`, read with the same
+     * definition as the batch aggregates (caravans in possession, their current weight), so the
+     * adults are exactly the rest.
+     */
+    public function scopeWithNursingCalves(Builder $query): Builder
+    {
+        if ($query->getQuery()->columns === null) {
+            $query->select($this->getTable() . '.*');
+        }
+
+        $nursing = fn () => Caravan::query()->inPossession()
+            ->join('caravan_lineage', 'caravan_lineage.caravan_id', '=', 'caravans.id')
+            ->where('caravan_lineage.is_nursing', true)
+            ->whereColumn('caravans.batch_id', $this->getTable() . '.id');
+        $weighed = fn () => $nursing()
+            ->join('caravan_weights', 'caravan_weights.caravan_id', '=', 'caravans.id')
+            ->where('caravan_weights.current', true);
+
+        return $query->addSelect([
+            'nursing_count' => $nursing()->selectRaw('COUNT(*)'),
+            'nursing_weighed_count' => $weighed()->selectRaw('COUNT(*)'),
+            'nursing_total_weight' => $weighed()->selectRaw('COALESCE(SUM(caravan_weights.weight), 0)'),
+        ]);
+    }
+
     public function pendingHeads(): HasMany
     {
         return $this->hasMany(EntryOrderPendingHead::class);

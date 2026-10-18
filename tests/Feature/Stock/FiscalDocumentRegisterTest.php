@@ -119,14 +119,6 @@ class FiscalDocumentRegisterTest extends StockTestCase
         ])->assertStatus(422)->assertJsonValidationErrors('related_fiscal_document_id');
     }
 
-    public function test_a_delivery_note_is_not_loaded_yet(): void
-    {
-        [$item] = $this->stockedItem();
-
-        $this->invoice([$this->line($item, '1', '10')], ['fiscal_document_type_id' => $this->typeId('DELIVERY_NOTE')])
-            ->assertStatus(422)->assertJsonValidationErrors('fiscal_document_type_id');
-    }
-
     public function test_another_company_does_not_see_the_document(): void
     {
         [$item] = $this->stockedItem();
