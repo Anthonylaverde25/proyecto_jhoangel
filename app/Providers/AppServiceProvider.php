@@ -127,6 +127,16 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(\App\Core\Interfaces\IItemCategoryRepository::class, \App\Infrastructure\Persistence\EloquentItemCategoryRepository::class);
         $this->app->bind(\App\Core\Interfaces\IItemRepository::class, \App\Infrastructure\Persistence\EloquentItemRepository::class);
         $this->app->bind(\App\Core\Interfaces\ICompanyItemCatalogRepository::class, \App\Infrastructure\Persistence\EloquentCompanyItemCatalogRepository::class);
+
+        // Provider documents and stock (Entrega B2).
+        $this->app->bind(\App\Core\Interfaces\IFiscalCatalogRepository::class, \App\Infrastructure\Persistence\EloquentFiscalCatalogRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IFiscalDocumentRepository::class, \App\Infrastructure\Persistence\EloquentFiscalDocumentRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IWarehouseRepository::class, \App\Infrastructure\Persistence\EloquentWarehouseRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IItemDocumentRepository::class, \App\Infrastructure\Persistence\EloquentItemDocumentRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IItemStockRepository::class, \App\Infrastructure\Persistence\EloquentItemStockRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IStockIncidentRepository::class, \App\Infrastructure\Persistence\EloquentStockIncidentRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IItemUsageReader::class, \App\Infrastructure\Persistence\EloquentItemUsageReader::class);
+        $this->app->bind(\App\Core\Interfaces\IConsumableBatchReader::class, \App\Infrastructure\Persistence\EloquentConsumableBatchReader::class);
     }
 
     /**

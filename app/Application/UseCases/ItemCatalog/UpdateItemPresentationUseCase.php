@@ -8,15 +8,17 @@ use App\Application\DTOs\ItemCatalog\ItemPresentationDTO;
 use App\Core\Entities\ItemPresentationEntity;
 use App\Core\Exceptions\ItemCatalogException;
 use App\Core\Interfaces\IItemRepository;
+use App\Core\Interfaces\IItemUsageReader;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /**
- * Editable while no document line uses it; B2 freezes name and factor from the first line (P4).
+ * Editable while no document line uses it; name and factor freeze from the first line (P4).
  */
 final class UpdateItemPresentationUseCase
 {
     public function __construct(
-        private readonly IItemRepository $repository
+        private readonly IItemRepository $repository,
+        private readonly IItemUsageReader $usage,
     ) {
     }
 
@@ -32,7 +34,11 @@ final class UpdateItemPresentationUseCase
             throw ItemCatalogException::duplicatePresentation($item->getName(), $name);
         }
 
-        $presentation->update($name, $dto->factorToItemUnit ?? $presentation->getFactorToItemUnit());
+        $presentation->update(
+            $name,
+            $dto->factorToItemUnit ?? $presentation->getFactorToItemUnit(),
+            $this->usage->presentationHasLines($presentationId),
+        );
 
         return $this->repository->savePresentation($presentation);
     }

@@ -12,10 +12,16 @@ use App\Http\Controllers\Api\RegisterNewCaravansController;
 use App\Http\Controllers\Api\ImportOCRGestationController;
 use App\Http\Controllers\Api\ProviderController;
 use App\Http\Controllers\Api\FarmController;
+use App\Http\Controllers\Api\FiscalCatalogController;
+use App\Http\Controllers\Api\FiscalDocumentController;
 use App\Http\Controllers\Api\ItemCategoryController;
 use App\Http\Controllers\Api\ItemController;
+use App\Http\Controllers\Api\ItemDocumentController;
+use App\Http\Controllers\Api\ItemStockController;
 use App\Http\Controllers\Api\ItemPresentationController;
+use App\Http\Controllers\Api\StockIncidentController;
 use App\Http\Controllers\Api\UnitOfMeasureController;
+use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\BatchController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ActivityController;
@@ -201,6 +207,37 @@ Route::middleware([
 
         // A provider's roles decide what it may be linked to (D1, DB5).
         Route::patch('/providers/{id}/roles', [ProviderController::class, 'updateRoles'])->whereNumber('id');
+    });
+
+    // Registro de comprobantes de proveedores y stock (Entrega B2). Sin PUT/PATCH/DELETE sobre
+    // comprobantes ni operaciones: un error se corrige anulando.
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/fiscal-document-types', [FiscalCatalogController::class, 'documentTypes']);
+        Route::get('/taxes', [FiscalCatalogController::class, 'taxes']);
+
+        Route::get('/fiscal-documents', [FiscalDocumentController::class, 'index']);
+        Route::post('/fiscal-documents', [FiscalDocumentController::class, 'store']);
+        Route::get('/fiscal-documents/{id}', [FiscalDocumentController::class, 'show'])->whereNumber('id');
+        Route::post('/fiscal-documents/{id}/void', [FiscalDocumentController::class, 'void'])->whereNumber('id');
+
+        Route::get('/warehouses', [WarehouseController::class, 'index']);
+
+        Route::get('/item-documents', [ItemDocumentController::class, 'index']);
+        Route::get('/item-documents/{id}', [ItemDocumentController::class, 'show'])->whereNumber('id');
+        Route::post('/item-documents/initial-stock', [ItemDocumentController::class, 'storeInitialStock']);
+        Route::post('/item-documents/consumptions', [ItemDocumentController::class, 'storeConsumption']);
+        Route::post('/item-documents/counts', [ItemDocumentController::class, 'storeCount']);
+        Route::post('/item-documents/{id}/reversal', [ItemDocumentController::class, 'reverse'])->whereNumber('id');
+
+        Route::get('/items/{id}/stock', [ItemStockController::class, 'show'])->whereNumber('id');
+        Route::get('/items/{id}/kardex', [ItemStockController::class, 'kardex'])->whereNumber('id');
+        Route::patch('/items/{id}/stock/{warehouseId}/critical', [ItemStockController::class, 'setCritical'])
+            ->whereNumber('id')->whereNumber('warehouseId');
+
+        Route::get('/stock-incidents', [StockIncidentController::class, 'index']);
+        Route::patch('/stock-incidents/{id}/resolve', [StockIncidentController::class, 'resolve'])->whereNumber('id');
+
+        Route::get('/batches/{id}/consumption-history', [BatchController::class, 'consumptionHistory'])->whereNumber('id');
     });
 
     // Órdenes de Ingreso de hacienda externa (ING-02): la compra espera su DTE

@@ -109,6 +109,26 @@ final class ItemCatalogException extends DomainException
         return new self("Está vinculado a {$items} ítem(s): desvinculalo primero para quitarle \"vende artículos o servicios\".");
     }
 
+    public static function itemInUse(string $item): self
+    {
+        return new self("{$item} ya tiene movimientos: su unidad y su comportamiento no se pueden cambiar.");
+    }
+
+    public static function itemWithBalance(string $item, string $balance): self
+    {
+        return new self("{$item} tiene {$balance} en stock. Consumilo o ajustalo por conteo antes de desactivarlo.");
+    }
+
+    public static function presentationInUse(string $presentation): self
+    {
+        return new self("{$presentation} ya se usó en comprobantes: su nombre y su contenido no se pueden cambiar. Creá otra presentación.");
+    }
+
+    public static function unitInDocuments(string $unit, int $lines): self
+    {
+        return new self("{$unit} ya se usó en {$lines} renglón(es) de comprobantes: su dimensión y su factor no se pueden cambiar. Desactivala y creá otra.");
+    }
+
     public static function providerHasFarms(int $farms): self
     {
         return new self("Tiene {$farms} campo(s) de origen: no se le puede quitar \"vende hacienda\".");

@@ -9,12 +9,27 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * List shape of an item. ItemDetailResource adds presentations and providers.
+ * List shape of an item. ItemDetailResource adds presentations and providers. B2 adds the balance and
+ * the VAT rate of its last invoice, when the controller passes them.
  *
  * @property-read ItemEntity $resource
  */
 class ItemResource extends JsonResource
 {
+    /** @var array{quantity: string, value: string, has_negative: bool, has_critical: bool}|null */
+    private ?array $stock = null;
+
+    private ?int $lastVatRateId = null;
+
+    /** @param array{quantity: string, value: string, has_negative: bool, has_critical: bool}|null $stock */
+    public function withStock(?array $stock, ?int $lastVatRateId): static
+    {
+        $this->stock = $stock;
+        $this->lastVatRateId = $lastVatRateId;
+
+        return $this;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -45,6 +60,10 @@ class ItemResource extends JsonResource
             ],
             'presentations_count' => $this->resource->getPresentationsCount(),
             'providers_count' => $this->resource->getProvidersCount(),
+            // Only stock-tracked articles have a balance; one never moved shows zero.
+            'stock' => !$this->resource->tracksStock() ? null
+                : ($this->stock ?? ['quantity' => '0.0000', 'value' => '0.0000', 'has_negative' => false, 'has_critical' => false]),
+            'last_vat_rate_id' => $this->lastVatRateId,
         ];
     }
 }

@@ -36,9 +36,20 @@ return Application::configure(basePath: dirname(__DIR__))
         // AGENT.md 3.5: a broken business invariant is a 422, never a 500.
         $exceptions->render(function (\App\Core\Exceptions\DomainException $exception, $request) {
             if ($request->expectsJson() || $request->is('api/*')) {
+                // A count confirmed against a balance that changed meanwhile (stock DS6).
+                if ($exception instanceof \App\Core\Exceptions\StaleCountException) {
+                    return response()->json([
+                        'message' => $exception->getMessage(),
+                        'current_quantity' => $exception->getCurrentQuantity(),
+                    ], 409);
+                }
+
                 return response()->json([
                     'message' => $exception->getMessage(),
-                    'errors' => ['domain' => [$exception->getMessage()]],
+                    // Field keys ("lines.3.quantity") let a sheet mark the offending cells.
+                    'errors' => $exception instanceof \App\Core\Exceptions\FieldValidationException
+                        ? $exception->getErrors()
+                        : ['domain' => [$exception->getMessage()]],
                 ], 422);
             }
 

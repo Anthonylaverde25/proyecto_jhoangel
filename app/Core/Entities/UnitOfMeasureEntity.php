@@ -54,7 +54,7 @@ final class UnitOfMeasureEntity
     /**
      * U4: dimension and factor change the meaning of every item counted in this unit.
      */
-    public function changeConversion(UnitDimension $dimension, ?string $factorToBase, int $itemsUsing): void
+    public function changeConversion(UnitDimension $dimension, ?string $factorToBase, int $itemsUsing, int $documentLinesUsing = 0): void
     {
         $changes = $dimension !== $this->dimension || !self::sameFactor($factorToBase, $this->factorToBase);
         if (!$changes) {
@@ -62,6 +62,9 @@ final class UnitOfMeasureEntity
         }
         if ($itemsUsing > 0) {
             throw ItemCatalogException::unitInUse($this->name, $itemsUsing);
+        }
+        if ($documentLinesUsing > 0) {
+            throw ItemCatalogException::unitInDocuments($this->name, $documentLinesUsing);
         }
         self::assertFactor($factorToBase, $this->isBase);
         $this->dimension = $dimension;

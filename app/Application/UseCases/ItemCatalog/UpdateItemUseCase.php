@@ -8,17 +8,19 @@ use App\Application\DTOs\ItemCatalog\ItemDTO;
 use App\Core\Entities\ItemEntity;
 use App\Core\Exceptions\ItemCatalogException;
 use App\Core\Interfaces\IItemRepository;
+use App\Core\Interfaces\IItemUsageReader;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /**
- * Edits the item's general data. B2 adds the guard that freezes unit, type and track_stock once the
- * item has document lines.
+ * Edits the item's general data. Unit, type and track_stock freeze once the item has lines in
+ * provider documents or stock operations (plan 4.10).
  */
 final class UpdateItemUseCase
 {
     public function __construct(
         private readonly IItemRepository $repository,
         private readonly ItemReferenceGuard $references,
+        private readonly IItemUsageReader $usage,
     ) {
     }
 
@@ -41,12 +43,16 @@ final class UpdateItemUseCase
             $code,
         );
 
-        if ($dto->behavior !== null) {
-            $item->changeBehavior($dto->behavior);
+        $behaviorChanges = $dto->behavior !== null && $dto->behavior !== $item->getBehavior();
+        $unitChanges = $dto->unitOfMeasureId !== null && $dto->unitOfMeasureId !== $item->getUnitOfMeasureId();
+        $hasLines = ($behaviorChanges || $unitChanges) && $this->usage->itemHasLines($id, $companyId);
+
+        if ($behaviorChanges) {
+            $item->changeBehavior($dto->behavior, $hasLines);
         }
-        if ($dto->unitOfMeasureId !== null && $dto->unitOfMeasureId !== $item->getUnitOfMeasureId()) {
+        if ($unitChanges) {
             $this->references->assertUnit($dto->unitOfMeasureId, $companyId);
-            $item->changeUnit($dto->unitOfMeasureId);
+            $item->changeUnit($dto->unitOfMeasureId, $hasLines);
         }
         if ($dto->categorySent && $dto->itemCategoryId !== $item->getItemCategoryId()) {
             $this->references->assertCategory($dto->itemCategoryId, $companyId);

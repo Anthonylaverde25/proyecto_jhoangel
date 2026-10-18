@@ -12,8 +12,8 @@ use App\Core\Exceptions\ItemCatalogException;
  * An article or a service the company buys or uses (D9, D11). The unit is the stock unit of an
  * article or the billing unit of a service, chosen by the operator (D17).
  *
- * Unit, type and track_stock become immutable once the item has document lines; that guard
- * arrives with the lines in B2.
+ * Unit, type and track_stock become immutable once the item has lines in provider documents or
+ * stock operations (B2, plan 4.10).
  */
 final class ItemEntity
 {
@@ -92,14 +92,20 @@ final class ItemEntity
         $this->description = $description;
     }
 
-    public function changeBehavior(ItemBehavior $behavior): void
+    public function changeBehavior(ItemBehavior $behavior, bool $hasLines = false): void
     {
+        if ($hasLines && $behavior !== $this->getBehavior()) {
+            throw ItemCatalogException::itemInUse($this->name);
+        }
         $this->type = $behavior->type();
         $this->trackStock = $behavior->tracksStock();
     }
 
-    public function changeUnit(int $unitOfMeasureId): void
+    public function changeUnit(int $unitOfMeasureId, bool $hasLines = false): void
     {
+        if ($hasLines && $unitOfMeasureId !== $this->unitOfMeasureId) {
+            throw ItemCatalogException::itemInUse($this->name);
+        }
         $this->unitOfMeasureId = $unitOfMeasureId;
     }
 

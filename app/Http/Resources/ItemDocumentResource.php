@@ -1,0 +1,81 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Resources;
+
+use App\Application\Services\Stock\LedgerResult;
+use App\Core\Entities\ItemDocumentEntity;
+use App\Core\Entities\ItemDocumentLineEntity;
+use App\Core\Entities\StockIncidentEntity;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+/**
+ * A stock operation with its lines and, in the detail, each line's movement.
+ *
+ * @property-read ItemDocumentEntity $resource
+ */
+class ItemDocumentResource extends JsonResource
+{
+    /** @var list<StockIncidentEntity> */
+    private array $incidents = [];
+
+    public static function fromLedger(LedgerResult $result): self
+    {
+        $resource = new self($result->document);
+        $resource->incidents = $result->incidents;
+
+        return $resource;
+    }
+
+    /** @return array<string, mixed> */
+    public function toArray(Request $request): array
+    {
+        $document = $this->resource;
+
+        return [
+            'id' => $document->getId(),
+            'number' => $document->getNumber(),
+            'type' => $document->getType()->value,
+            'type_label' => $document->getType()->label(),
+            'occurred_at' => $document->getOccurredAt(),
+            'warehouse' => ['id' => $document->getWarehouseId(), 'name' => $document->getWarehouseName()],
+            'fiscal_document' => $document->getFiscalDocumentId() === null ? null
+                : ['id' => $document->getFiscalDocumentId(), 'label' => $document->getFiscalDocumentLabel()],
+            'batch' => $document->getBatchId() === null ? null : ['id' => $document->getBatchId(), 'name' => $document->getBatchName()],
+            'heads_treated' => $document->getHeadsTreated(),
+            'reverses' => $document->getReversesDocumentId() === null ? null
+                : ['id' => $document->getReversesDocumentId(), 'number' => $document->getReversesNumber()],
+            'reversed_by' => $document->getReversedById() === null ? null
+                : ['id' => $document->getReversedById(), 'number' => $document->getReversedByNumber()],
+            'can_reverse' => $document->reversalRefusal() === null,
+            'reversal_refusal' => $document->reversalRefusal(),
+            'reason' => $document->getReason(),
+            'notes' => $document->getNotes(),
+            'total_cost' => $document->totalCost(),
+            'created_by' => $document->getCreatedByName(),
+            'created_at' => $document->getCreatedAt(),
+            'lines' => array_map(fn (ItemDocumentLineEntity $line) => [
+                'id' => $line->getId(),
+                'position' => $line->getPosition(),
+                'item' => ['id' => $line->getItemId(), 'name' => $line->getItemName(), 'unit_symbol' => $line->getItemUnitSymbol()],
+                'input_quantity' => $line->getInputQuantity(),
+                'input_label' => $line->getInputLabel(),
+                'quantity' => $line->getQuantity(),
+                'input_unit_price' => $line->getInputUnitPrice(),
+                'unit_cost' => $line->getUnitCost(),
+                'total_cost' => $line->getTotalCost(),
+                'counted_quantity' => $line->getCountedQuantity(),
+                'movement' => $line->getMovement() === null ? null : [
+                    'id' => $line->getMovement()->id,
+                    'direction' => $line->getMovement()->direction,
+                    'quantity' => $line->getMovement()->quantity,
+                    'balance_after' => $line->getMovement()->balanceAfter,
+                    'average_cost_after' => $line->getMovement()->averageCostAfter,
+                ],
+            ], $document->getLines()),
+            'incidents_raised' => array_map(fn (StockIncidentEntity $i) => StockIncidentResource::shape($i), $this->incidents),
+        ];
+    }
+}

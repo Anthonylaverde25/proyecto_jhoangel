@@ -8,6 +8,8 @@ use App\Application\DTOs\CreateBatchDTO;
 use App\Application\DTOs\ServiceOrders\StartBatchServiceOrderDTO;
 use App\Application\DTOs\Batches\AssignExternalCaravansToOwnBatchDTO;
 use App\Application\UseCases\Batches\BatchUseCases;
+use App\Application\UseCases\Stock\StockUseCases;
+use App\Http\Controllers\Api\Concerns\ResolvesActiveCompany;
 use App\Core\Interfaces\ICompanyContext;
 use App\Core\Interfaces\IEntryOrderRepository;
 use App\Http\Controllers\Controller;
@@ -25,6 +27,8 @@ use App\Http\Requests\AssignExternalCaravansToOwnBatchRequest;
 
 class BatchController extends Controller
 {
+    use ResolvesActiveCompany;
+
     public function __construct(
         private readonly BatchUseCases $batch
     ) {
@@ -127,6 +131,14 @@ class BatchController extends Controller
         return response()->json((new BatchResource($entity))
             ->withEntryOrder($summary[$entity->getId()] ?? null)
             ->withIncomingEntryOrders($incoming[$entity->getId()] ?? []));
+    }
+
+    /**
+     * What the batch received and what it cost, per operation and per head (stock B2, plan 5.7).
+     */
+    public function consumptionHistory(int $id, StockUseCases $stock): JsonResponse
+    {
+        return response()->json(($stock->batchHistory)($id, $this->activeCompanyId()));
     }
 
     /**

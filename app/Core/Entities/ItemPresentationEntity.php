@@ -31,9 +31,13 @@ final class ItemPresentationEntity
         }
     }
 
-    public function update(string $name, string $factorToItemUnit): void
+    /** P4: once used in a line, name and content are what those papers said. */
+    public function update(string $name, string $factorToItemUnit, bool $usedInLines = false): void
     {
         self::assert($name, $factorToItemUnit);
+        if ($usedInLines && ($name !== $this->name || bccomp($factorToItemUnit, $this->factorToItemUnit, 4) !== 0)) {
+            throw ItemCatalogException::presentationInUse($this->name);
+        }
         $this->name = $name;
         $this->factorToItemUnit = $factorToItemUnit;
     }
