@@ -10,7 +10,6 @@ final class StockUseCases
         public readonly GetItemStockUseCase $itemStock,
         public readonly GetItemKardexUseCase $kardex,
         public readonly SetCriticalStockUseCase $setCritical,
-        public readonly ListWarehousesUseCase $warehouses,
         public readonly GetBatchConsumptionHistoryUseCase $batchHistory,
         public readonly SummarizeItemsStockUseCase $summarizeItems,
         public readonly DescribeItemUsageUseCase $describeItem,

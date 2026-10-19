@@ -40,7 +40,18 @@ class ItemDocumentResource extends JsonResource
             'type' => $document->getType()->value,
             'type_label' => $document->getType()->label(),
             'occurred_at' => $document->getOccurredAt(),
-            'warehouse' => ['id' => $document->getWarehouseId(), 'name' => $document->getWarehouseName()],
+            'warehouse' => ['id' => $document->getWarehouseId(), 'code' => $document->getWarehouseCode(), 'name' => $document->getWarehouseName()],
+            // Delivery D: the other half of a transfer.
+            'paired' => $document->getCounterpart() === null ? null : [
+                'id' => $document->getCounterpart()->id,
+                'number' => $document->getCounterpart()->number,
+                'type' => $document->getCounterpart()->type->value,
+                'warehouse' => [
+                    'id' => $document->getCounterpart()->warehouseId,
+                    'code' => $document->getCounterpart()->warehouseCode,
+                    'name' => $document->getCounterpart()->warehouseName,
+                ],
+            ],
             'fiscal_document' => $document->getFiscalDocumentId() === null ? null
                 : ['id' => $document->getFiscalDocumentId(), 'label' => $document->getFiscalDocumentLabel()],
             'batch' => $document->getBatchId() === null ? null : ['id' => $document->getBatchId(), 'name' => $document->getBatchName()],

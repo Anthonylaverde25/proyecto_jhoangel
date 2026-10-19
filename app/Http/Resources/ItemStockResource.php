@@ -25,7 +25,12 @@ class ItemStockResource extends JsonResource
         return [
             'item' => ['id' => $item->getId(), 'name' => $item->getName(), 'unit_symbol' => $item->getUnit()?->getSymbol(), 'track_stock' => $item->tracksStock()],
             'warehouses' => array_map(fn (ItemStockEntity $stock) => [
-                'warehouse' => ['id' => $stock->getWarehouseId(), 'name' => $stock->getWarehouseName()],
+                'warehouse' => [
+                    'id' => $stock->getWarehouseId(),
+                    'code' => $stock->getWarehouseCode(),
+                    'name' => $stock->getWarehouseName(),
+                    'is_active' => $stock->isWarehouseActive(),
+                ],
                 'quantity' => $stock->getQuantity(),
                 // Delivery C: units without cost yet; the value is of the valued ones only.
                 'unvalued_quantity' => $stock->getUnvaluedQuantity(),

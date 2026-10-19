@@ -110,12 +110,23 @@ class EloquentItemStockRepository implements IItemStockRepository
 
         $summaries = [];
         $rows = ItemStock::withoutGlobalScopes()
+            ->with('warehouse')
             ->where('company_id', $companyId)
             ->whereIn('item_id', $itemIds)
+            ->orderBy('warehouse_id')
             ->get();
         foreach ($rows as $row) {
             $stock = StockMapper::stockToEntity($row);
-            $current = $summaries[$stock->getItemId()] ?? ['quantity' => '0.0000', 'unvalued_quantity' => '0.0000', 'value' => '0.0000', 'has_negative' => false, 'has_critical' => false];
+            $current = $summaries[$stock->getItemId()] ?? ['quantity' => '0.0000', 'unvalued_quantity' => '0.0000', 'value' => '0.0000', 'has_negative' => false, 'has_critical' => false, 'by_warehouse' => []];
+            // Delivery D: what each active warehouse holds, for the available amount of a consumption or a transfer (H5).
+            if ($stock->isWarehouseActive()) {
+                $current['by_warehouse'][] = [
+                    'warehouse_id' => $stock->getWarehouseId(),
+                    'quantity' => $stock->getQuantity(),
+                    'unvalued_quantity' => $stock->getUnvaluedQuantity(),
+                    'value' => $stock->value(),
+                ];
+            }
             $summaries[$stock->getItemId()] = [
                 'quantity' => bcadd($current['quantity'], $stock->getQuantity(), 4),
                 // Delivery C: units waiting for their invoice are in the balance, not in the value.
@@ -123,6 +134,7 @@ class EloquentItemStockRepository implements IItemStockRepository
                 'value' => bcadd($current['value'], $stock->value(), 4),
                 'has_negative' => $current['has_negative'],
                 'has_critical' => $current['has_critical'],
+                'by_warehouse' => $current['by_warehouse'],
             ];
         }
 
@@ -142,6 +154,20 @@ class EloquentItemStockRepository implements IItemStockRepository
         return $summaries;
     }
 
+    /** "ALM-01 → ALM-02" for either half of a transfer and for the reversal of either half (E12). */
+    private function transferRoute(object $row): ?string
+    {
+        $own = $row->warehouse_code;
+        $type = $row->document_type === ItemDocumentType::REVERSAL->value ? $row->reversed_type : $row->document_type;
+        $reversal = $row->document_type === ItemDocumentType::REVERSAL->value;
+
+        return match ($type) {
+            ItemDocumentType::TRANSFER_OUT->value => $own . ' → ' . ($reversal ? $row->reversed_in_code : $row->paired_in_code),
+            ItemDocumentType::TRANSFER_IN->value => ($reversal ? $row->reversed_out_code : $row->paired_out_code) . ' → ' . $own,
+            default => null,
+        };
+    }
+
     public function kardex(int $itemId, KardexFilters $filters, int $companyId): array
     {
         $query = DB::table('stock_movements as m')
@@ -149,6 +175,17 @@ class EloquentItemStockRepository implements IItemStockRepository
             ->join('item_documents as d', 'd.id', '=', 'l.item_document_id')
             ->join('warehouses as w', 'w.id', '=', 'm.warehouse_id')
             ->leftJoin('batches as b', 'b.id', '=', 'd.batch_id')
+            // Delivery D: the other half of a transfer, for "ALM-01 → ALM-02".
+            ->leftJoin('item_documents as tout', 'tout.id', '=', 'd.paired_document_id')
+            ->leftJoin('warehouses as wout', 'wout.id', '=', 'tout.warehouse_id')
+            ->leftJoin('item_documents as tin', 'tin.paired_document_id', '=', 'd.id')
+            ->leftJoin('warehouses as win', 'win.id', '=', 'tin.warehouse_id')
+            // ...and of the transfer half a reversal undoes, so the reversal shows the same route.
+            ->leftJoin('item_documents as rev', 'rev.id', '=', 'd.reverses_document_id')
+            ->leftJoin('item_documents as rout', 'rout.id', '=', 'rev.paired_document_id')
+            ->leftJoin('warehouses as wrout', 'wrout.id', '=', 'rout.warehouse_id')
+            ->leftJoin('item_documents as rin', 'rin.paired_document_id', '=', 'rev.id')
+            ->leftJoin('warehouses as wrin', 'wrin.id', '=', 'rin.warehouse_id')
             ->leftJoin('fiscal_documents as f', 'f.id', '=', 'd.fiscal_document_id')
             ->leftJoin('fiscal_document_types as ft', 'ft.id', '=', 'f.fiscal_document_type_id')
             ->leftJoin('providers as p', 'p.id', '=', 'f.provider_id')
@@ -165,7 +202,8 @@ class EloquentItemStockRepository implements IItemStockRepository
             ->get([
                 'm.id', 'm.direction', 'm.quantity', 'm.unit_cost', 'm.total_cost', 'm.balance_after', 'm.average_cost_after',
                 'm.unvalued_quantity', 'm.unvalued_balance_after',
-                'w.name as warehouse_name', 'd.id as document_id', 'd.number as document_number', 'd.type as document_type',
+                'w.name as warehouse_name', 'w.code as warehouse_code', 'wout.code as paired_out_code', 'win.code as paired_in_code',
+                'rev.type as reversed_type', 'wrout.code as reversed_out_code', 'wrin.code as reversed_in_code', 'd.id as document_id', 'd.number as document_number', 'd.type as document_type',
                 'd.occurred_at', 'b.name as batch_name', 'f.id as fiscal_document_id', 'f.point_of_sale', 'f.number as fiscal_number',
                 'f.reference', 'ft.name as fiscal_type_name', 'p.name as provider_name',
             ]);
@@ -180,6 +218,7 @@ class EloquentItemStockRepository implements IItemStockRepository
                 'document_type' => $row->document_type,
                 'document_type_label' => ItemDocumentType::from($row->document_type)->label(),
                 'batch' => $row->batch_name,
+                'transfer' => $this->transferRoute($row),
                 'fiscal_document' => $row->fiscal_document_id === null ? null : [
                     'id' => (int) $row->fiscal_document_id,
                     'label' => $row->fiscal_type_name . ' ' . FiscalDocumentEntity::formatNumber(

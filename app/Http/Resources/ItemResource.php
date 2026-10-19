@@ -62,7 +62,7 @@ class ItemResource extends JsonResource
             'providers_count' => $this->resource->getProvidersCount(),
             // Only stock-tracked articles have a balance; one never moved shows zero.
             'stock' => !$this->resource->tracksStock() ? null
-                : ($this->stock ?? ['quantity' => '0.0000', 'unvalued_quantity' => '0.0000', 'value' => '0.0000', 'has_negative' => false, 'has_critical' => false]),
+                : ($this->stock ?? ['quantity' => '0.0000', 'unvalued_quantity' => '0.0000', 'value' => '0.0000', 'has_negative' => false, 'has_critical' => false, 'by_warehouse' => []]),
             'last_vat_rate_id' => $this->lastVatRateId,
         ];
     }

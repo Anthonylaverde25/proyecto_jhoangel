@@ -9,12 +9,12 @@ use App\Application\Services\Stock\FieldErrorBag;
 use App\Application\Services\Stock\ItemLineResolver;
 use App\Application\Services\Stock\LedgerResult;
 use App\Application\Services\Stock\StockLedger;
+use App\Application\Services\Stock\WarehouseGuard;
 use App\Core\Entities\ItemDocumentEntity;
 use App\Core\Entities\ItemDocumentLineEntity;
 use App\Core\Enums\ItemDocumentType;
 use App\Core\Exceptions\ItemDocumentException;
 use App\Core\Interfaces\IItemDocumentRepository;
-use App\Core\Interfaces\IWarehouseRepository;
 use App\Core\Services\FiscalDocumentCalculator;
 use App\Core\ValueObjects\Decimal;
 
@@ -26,7 +26,7 @@ final class RegisterInitialStockUseCase
 {
     public function __construct(
         private readonly IItemDocumentRepository $documents,
-        private readonly IWarehouseRepository $warehouses,
+        private readonly WarehouseGuard $warehouses,
         private readonly ItemLineResolver $resolver,
         private readonly FiscalDocumentCalculator $calculator,
         private readonly StockLedger $ledger,
@@ -44,6 +44,7 @@ final class RegisterInitialStockUseCase
         if (substr($dto->occurredAt, 0, 10) > now()->toDateString()) {
             $errors->add('occurred_at', 'La fecha no puede ser futura.');
         }
+        $warehouse = $this->warehouses->active($companyId, $dto->warehouseId, 'warehouse_id', $errors);
         $lines = [];
         foreach ($dto->lines as $index => $line) {
             $resolved = $this->resolver->resolve("lines.{$index}", $companyId, $line->itemId, $line->inputQuantity, $line->inputUnitId, $line->inputPresentationId, $errors, true);
@@ -73,7 +74,7 @@ final class RegisterInitialStockUseCase
         $errors->throwIfAny(ItemDocumentException::class);
 
         return $this->ledger->receive(new ItemDocumentEntity(
-            null, $companyId, null, ItemDocumentType::INITIAL, $this->warehouses->ensureDefault($companyId)->id, $dto->occurredAt, $lines,
+            null, $companyId, null, ItemDocumentType::INITIAL, $warehouse->id, $dto->occurredAt, $lines,
             notes: $dto->notes, idempotencyKey: $dto->idempotencyKey, createdBy: $dto->createdBy,
         ), $dto->createdBy);
     }

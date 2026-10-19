@@ -25,6 +25,8 @@ final class ItemStockEntity
         private ?int $lastMovementId,
         private readonly ?string $warehouseName = null,
         private string $unvaluedQuantity = '0',
+        private readonly ?string $warehouseCode = null,
+        private readonly bool $warehouseActive = true,
     ) {
     }
 
@@ -77,4 +79,6 @@ final class ItemStockEntity
     public function getUnvaluedQuantity(): string { return $this->unvaluedQuantity; }
     public function getLastMovementId(): ?int { return $this->lastMovementId; }
     public function getWarehouseName(): ?string { return $this->warehouseName; }
+    public function getWarehouseCode(): ?string { return $this->warehouseCode; }
+    public function isWarehouseActive(): bool { return $this->warehouseActive; }
 }

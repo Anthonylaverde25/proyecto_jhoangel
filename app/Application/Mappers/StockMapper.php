@@ -14,6 +14,7 @@ use App\Core\Entities\WarehouseEntity;
 use App\Core\Enums\ItemDocumentType;
 use App\Core\Enums\StockIncidentStatus;
 use App\Core\Enums\StockIncidentType;
+use App\Core\ValueObjects\TransferCounterpart;
 use App\Models\ItemDocument;
 use App\Models\ItemDocumentLine;
 use App\Models\ItemStock;
@@ -65,6 +66,32 @@ final class StockMapper
             $reversedBy?->number,
             $model->relationLoaded('creator') ? $model->creator?->name : null,
             $model->created_at?->toIso8601String(),
+            $model->paired_document_id,
+            $model->relationLoaded('warehouse') ? $model->warehouse?->code : null,
+            self::counterpart($model),
+        );
+    }
+
+    /** The other half of a transfer, when its relation was loaded. */
+    private static function counterpart(ItemDocument $model): ?TransferCounterpart
+    {
+        $other = match (true) {
+            $model->type === ItemDocumentType::TRANSFER_IN->value && $model->relationLoaded('paired') => $model->paired,
+            $model->type === ItemDocumentType::TRANSFER_OUT->value && $model->relationLoaded('pairedBy') => $model->pairedBy,
+            default => null,
+        };
+        if ($other === null) {
+            return null;
+        }
+        $warehouse = $other->relationLoaded('warehouse') ? $other->warehouse : $other->warehouse()->first();
+
+        return new TransferCounterpart(
+            (int) $other->id,
+            (int) $other->number,
+            ItemDocumentType::from($other->type),
+            (int) $other->warehouse_id,
+            (string) $warehouse?->code,
+            (string) $warehouse?->name,
         );
     }
 
@@ -127,6 +154,8 @@ final class StockMapper
             $model->last_movement_id,
             $model->relationLoaded('warehouse') ? $model->warehouse?->name : null,
             DecimalColumn::read($model->unvalued_quantity ?? '0', 4),
+            $model->relationLoaded('warehouse') ? $model->warehouse?->code : null,
+            $model->relationLoaded('warehouse') ? (bool) $model->warehouse?->is_active : true,
         );
     }
 

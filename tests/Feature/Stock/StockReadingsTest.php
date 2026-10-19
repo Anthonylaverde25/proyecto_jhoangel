@@ -36,7 +36,7 @@ class StockReadingsTest extends StockTestCase
         $new = Company::create(['name' => 'Campo nuevo ' . Str::random(4)]);
 
         $this->assertSame(1, Warehouse::withoutGlobalScopes()->where('company_id', $new->id)->where('is_default', true)->count());
-        $this->apiAs('GET', '/warehouses')->assertOk()->assertJsonPath('0.code', 'MAIN');
+        $this->apiAs('GET', '/warehouses')->assertOk()->assertJsonPath('0.code', 'ALM-01');  // DD12 (delivery D)
     }
 
     public function test_the_item_list_carries_the_balance_and_filters_alerts(): void

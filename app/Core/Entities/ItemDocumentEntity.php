@@ -6,11 +6,12 @@ namespace App\Core\Entities;
 
 use App\Core\Enums\ItemDocumentType;
 use App\Core\Exceptions\ItemDocumentException;
+use App\Core\ValueObjects\TransferCounterpart;
 
 /**
  * A stock operation (DS14). Append-only: a mistake is undone with a REVERSAL, never edited. A
  * purchase receipt or a return comes from a provider document and only voiding that document
- * reverses it (DS20).
+ * reverses it (DS20). A transfer is two operations: the TRANSFER_IN points to its TRANSFER_OUT (DD7).
  */
 final class ItemDocumentEntity
 {
@@ -39,6 +40,9 @@ final class ItemDocumentEntity
         private readonly ?int $reversedByNumber = null,
         private readonly ?string $createdByName = null,
         private readonly ?string $createdAt = null,
+        private readonly ?int $pairedDocumentId = null,
+        private readonly ?string $warehouseCode = null,
+        private readonly ?TransferCounterpart $counterpart = null,
     ) {
         if ($lines === []) {
             throw ItemDocumentException::on('lines', 'La operación no tiene renglones.');
@@ -53,6 +57,9 @@ final class ItemDocumentEntity
         }
         if (($batchId === null) !== ($headsTreated === null) || ($headsTreated !== null && $headsTreated <= 0)) {
             throw ItemDocumentException::on('heads_treated', 'Indicá cuántas cabezas recibieron el consumo.');
+        }
+        if (($type === ItemDocumentType::TRANSFER_IN) !== ($pairedDocumentId !== null)) {
+            throw ItemDocumentException::on('domain', 'La entrada de una transferencia apunta a su salida, y sólo ella.');
         }
         // E5 for reversals; the count's reason depends on its difference and is checked by the ledger.
         if ($type === ItemDocumentType::REVERSAL && ($reversesDocumentId === null || trim((string) $reason) === '')) {
@@ -105,6 +112,9 @@ final class ItemDocumentEntity
     public function getReversedByNumber(): ?int { return $this->reversedByNumber; }
     public function getCreatedByName(): ?string { return $this->createdByName; }
     public function getCreatedAt(): ?string { return $this->createdAt; }
+    public function getPairedDocumentId(): ?int { return $this->pairedDocumentId; }
+    public function getWarehouseCode(): ?string { return $this->warehouseCode; }
+    public function getCounterpart(): ?TransferCounterpart { return $this->counterpart; }
 
     public function totalCost(): string
     {

@@ -30,6 +30,7 @@ abstract class StoreStockOperationRequest extends FormRequest
             'occurred_at' => ['required', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'idempotency_key' => ['required', 'string', 'max:64'],
+            'warehouse_id' => ['nullable', 'integer'],  // the default when absent (DD6)
             'batch_id' => $initial ? ['prohibited'] : ['nullable', 'integer'],
             'heads_treated' => $initial ? ['prohibited'] : ['nullable', 'integer', 'min:1'],
             'lines' => ['required', 'array', 'min:1', 'max:200'],

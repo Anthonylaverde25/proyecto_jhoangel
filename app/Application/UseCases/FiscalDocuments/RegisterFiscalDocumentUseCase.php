@@ -15,6 +15,7 @@ use App\Core\Entities\ItemDocumentLineEntity;
 use App\Core\Enums\ItemDocumentType;
 use App\Core\Interfaces\IFiscalDiscrepancyRepository;
 use App\Core\Interfaces\IFiscalDocumentRepository;
+use App\Core\Interfaces\IItemDocumentRepository;
 use App\Core\Interfaces\IUnvaluedLotRepository;
 use App\Core\Interfaces\IWarehouseRepository;
 use App\Core\Services\DeliveryNoteInvoiceComparator;
@@ -25,7 +26,8 @@ use Illuminate\Support\Facades\DB;
  * stock-tracked lines become one purchase receipt (invoice, ticket), one return (credit note) or one
  * delivery receipt (delivery note); services and non-stock articles stay on the document, charged to
  * their batch (DS14). An invoice converted from delivery notes moves no quantities (DC1): it values
- * what arrived unpriced and records every difference with the notes (delivery C, part 5 §5.4).
+ * what arrived unpriced and records every difference with the notes (delivery C, part 5 §5.4). What a
+ * provider document moves always goes to the company's default warehouse: the paper names none (DD5).
  */
 final class RegisterFiscalDocumentUseCase
 {
@@ -37,6 +39,7 @@ final class RegisterFiscalDocumentUseCase
         private readonly IUnvaluedLotRepository $lots,
         private readonly DeliveryNoteInvoiceComparator $comparator,
         private readonly IFiscalDiscrepancyRepository $discrepancies,
+        private readonly IItemDocumentRepository $operations,
     ) {
     }
 
@@ -91,7 +94,10 @@ final class RegisterFiscalDocumentUseCase
         }
         $lots = $this->lots->lockByDeliveryNoteLines(array_keys($origins), $companyId);
 
-        $entries = [];
+        // Each lot is valued where it entered, and each tax where its note entered (delivery D, H1): one
+        // VALUATION per warehouse, in warehouse order.
+        $byWarehouse = [];
+        $receiptWarehouses = [];
         foreach ($invoice->getLines() as $line) {
             $note = $line->deliveryNoteLineId === null ? null : ($origins[$line->deliveryNoteLineId] ?? null);
             if ($note === null) {
@@ -99,24 +105,32 @@ final class RegisterFiscalDocumentUseCase
             }
             $lot = $lots[$line->deliveryNoteLineId] ?? null;
             if ($note->isValued() === false && $lot !== null && $lot->isPending()) {
-                $entries[] = new ValuationEntry($line, $lot);
+                $byWarehouse[$lot->getWarehouseId()][] = new ValuationEntry($line, $lot);
             } elseif ($note->isValued() === true && bccomp($line->nonRecoverableTaxAmount, '0', 4) > 0) {
-                $entries[] = new ValuationEntry($line, taxAmount: $line->nonRecoverableTaxAmount);
+                $noteId = (int) $note->getId();
+                $warehouseId = $receiptWarehouses[$noteId] ??= $this->operations->receiptWarehouseOf($noteId, $companyId)
+                    ?? $this->warehouses->ensureDefault($companyId)->id;
+                $byWarehouse[$warehouseId][] = new ValuationEntry($line, taxAmount: $line->nonRecoverableTaxAmount);
             }
         }
+        ksort($byWarehouse);
 
-        $result = $this->ledger->valuate(
-            $companyId,
-            $this->warehouses->ensureDefault($companyId)->id,
-            (int) $invoice->getId(),
-            $invoice->getIssuedAt() . ' 00:00:00',
-            $entries,
-            $userId,
-        );
+        $incidents = [];
+        foreach ($byWarehouse as $warehouseId => $entries) {
+            $result = $this->ledger->valuate(
+                $companyId,
+                $warehouseId,
+                (int) $invoice->getId(),
+                $invoice->getIssuedAt() . ' 00:00:00',
+                $entries,
+                $userId,
+            );
+            array_push($incidents, ...($result?->incidents ?? []));
+        }
 
         $this->discrepancies->createMany($this->comparator->compare($invoice, $notes, $userId));
 
-        return $result?->incidents ?? [];
+        return $incidents;
     }
 
     /** @param list<FiscalDocumentLineEntity> $stocked */

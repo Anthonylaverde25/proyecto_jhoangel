@@ -17,8 +17,19 @@ interface IItemDocumentRepository
     /** With lines, their movements and the reversal that cancelled it, if any. */
     public function findById(int $id, int $companyId): ?ItemDocumentEntity;
 
-    /** The operation a provider document generated (not its reversal). */
-    public function findByFiscalDocument(int $fiscalDocumentId, int $companyId): ?ItemDocumentEntity;
+    /**
+     * The operations a provider document generated (not their reversals): one per warehouse, since an
+     * invoice converted from delivery notes values each lot where it entered (delivery D, H2).
+     *
+     * @return list<ItemDocumentEntity>
+     */
+    public function findAllByFiscalDocument(int $fiscalDocumentId, int $companyId): array;
+
+    /** The other half of a transfer (DD7), or null when the operation is not one. */
+    public function findPair(ItemDocumentEntity $document): ?ItemDocumentEntity;
+
+    /** The warehouse a delivery note's stock entered (its DELIVERY_RECEIPT), or null without stocked lines. */
+    public function receiptWarehouseOf(int $fiscalDocumentId, int $companyId): ?int;
 
     /** @return array{data: list<ItemDocumentEntity>, total: int} */
     public function search(ItemDocumentFilters $filters, int $companyId): array;

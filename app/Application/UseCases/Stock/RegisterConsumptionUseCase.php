@@ -10,12 +10,12 @@ use App\Application\Services\Stock\FieldErrorBag;
 use App\Application\Services\Stock\ItemLineResolver;
 use App\Application\Services\Stock\LedgerResult;
 use App\Application\Services\Stock\StockLedger;
+use App\Application\Services\Stock\WarehouseGuard;
 use App\Core\Entities\ItemDocumentEntity;
 use App\Core\Entities\ItemDocumentLineEntity;
 use App\Core\Enums\ItemDocumentType;
 use App\Core\Exceptions\ItemDocumentException;
 use App\Core\Interfaces\IItemDocumentRepository;
-use App\Core\Interfaces\IWarehouseRepository;
 
 /**
  * Stock-tracked articles taken out of the warehouse, charged to one batch with the heads that
@@ -26,7 +26,7 @@ final class RegisterConsumptionUseCase
 {
     public function __construct(
         private readonly IItemDocumentRepository $documents,
-        private readonly IWarehouseRepository $warehouses,
+        private readonly WarehouseGuard $warehouses,
         private readonly ItemLineResolver $resolver,
         private readonly BatchConsumptionGuard $batches,
         private readonly StockLedger $ledger,
@@ -44,6 +44,7 @@ final class RegisterConsumptionUseCase
         if (substr($dto->occurredAt, 0, 10) > now()->toDateString()) {
             $errors->add('occurred_at', 'La fecha no puede ser futura.');
         }
+        $warehouse = $this->warehouses->active($companyId, $dto->warehouseId, 'warehouse_id', $errors);
         if ($dto->batchId !== null) {
             $this->batches->check($dto->batchId, $dto->headsTreated, $companyId, '', $errors);
         }
@@ -75,7 +76,7 @@ final class RegisterConsumptionUseCase
         $errors->throwIfAny(ItemDocumentException::class);
 
         return $this->ledger->issue(new ItemDocumentEntity(
-            null, $companyId, null, ItemDocumentType::CONSUMPTION, $this->warehouses->ensureDefault($companyId)->id, $dto->occurredAt, $lines,
+            null, $companyId, null, ItemDocumentType::CONSUMPTION, $warehouse->id, $dto->occurredAt, $lines,
             batchId: $dto->batchId,
             headsTreated: $dto->batchId === null ? null : $dto->headsTreated,
             notes: $dto->notes,

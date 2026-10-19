@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Application\DTOs\Stock\StockCountDTO;
 use App\Application\DTOs\Stock\StockOperationDTO;
+use App\Application\DTOs\Stock\StockTransferDTO;
 use App\Application\Services\Stock\LedgerResult;
 use App\Application\UseCases\Stock\ItemDocumentUseCases;
 use App\Core\Entities\ItemDocumentEntity;
@@ -16,6 +17,7 @@ use App\Http\Requests\Stock\ReasonRequest;
 use App\Http\Requests\Stock\StoreConsumptionRequest;
 use App\Http\Requests\Stock\StoreInitialStockRequest;
 use App\Http\Requests\Stock\StoreStockCountRequest;
+use App\Http\Requests\Stock\StoreStockTransferRequest;
 use App\Http\Resources\ItemDocumentResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -68,6 +70,13 @@ class ItemDocumentController extends Controller
     public function storeCount(StoreStockCountRequest $request): JsonResponse
     {
         $result = ($this->documents->registerCount)(StockCountDTO::fromArray($request->validated(), $request->user()?->id), $this->activeCompanyId());
+
+        return $this->created($request, $result);
+    }
+
+    public function storeTransfer(StoreStockTransferRequest $request): JsonResponse
+    {
+        $result = ($this->documents->registerTransfer)(StockTransferDTO::fromArray($request->validated(), $request->user()?->id), $this->activeCompanyId());
 
         return $this->created($request, $result);
     }

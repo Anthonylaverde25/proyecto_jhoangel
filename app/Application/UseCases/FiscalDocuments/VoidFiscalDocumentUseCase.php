@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Voids a provider document and, in the same transaction, reverses the stock operation it generated
+ * Voids a provider document and, in the same transaction, reverses the stock operations it generated
  * (DS20). If the reversal is refused (plan 4.7) nothing is voided. Once voided, the same number can
  * be loaded again (DS21).
  *
@@ -49,9 +49,11 @@ final class VoidFiscalDocumentUseCase
 
             $document->void($reason, now()->toIso8601String());
 
-            $operation = $this->operations->findByFiscalDocument((int) $document->getId(), $companyId);
-            if ($operation !== null && $operation->getReversedById() === null) {
-                $this->ledger->reverse($operation, $what, $reason, now()->toDateTimeString(), null, $userId);
+            // One operation per warehouse: an invoice converted from notes of two warehouses values both (H3).
+            foreach ($this->operations->findAllByFiscalDocument((int) $document->getId(), $companyId) as $operation) {
+                if ($operation->getReversedById() === null) {
+                    $this->ledger->reverse($operation, $what, $reason, now()->toDateTimeString(), null, $userId);
+                }
             }
 
             $noteIds = $this->documents->deliveryNoteIdsOf((int) $document->getId(), $companyId);

@@ -6,7 +6,7 @@ namespace App\Application\DTOs\Stock;
 
 /**
  * Initial stock or a consumption. A consumption may be charged to a batch, with the heads that
- * received it (D22).
+ * received it (D22). Without a warehouse, the company's default (DD6).
  */
 final readonly class StockOperationDTO
 {
@@ -19,6 +19,7 @@ final readonly class StockOperationDTO
         public ?int $headsTreated = null,
         public ?string $notes = null,
         public ?int $createdBy = null,
+        public ?int $warehouseId = null,
     ) {
     }
 
@@ -35,6 +36,7 @@ final readonly class StockOperationDTO
             isset($data['heads_treated']) ? (int) $data['heads_treated'] : null,
             $notes === '' ? null : $notes,
             $createdBy,
+            isset($data['warehouse_id']) ? (int) $data['warehouse_id'] : null,
         );
     }
 }

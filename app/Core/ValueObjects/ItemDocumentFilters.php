@@ -19,6 +19,7 @@ final readonly class ItemDocumentFilters
         public ?string $to = null,
         public int $page = 1,
         public int $perPage = 25,
+        public bool $transfers = false,  // both halves of every transfer (delivery D)
     ) {
     }
 
@@ -36,6 +37,7 @@ final readonly class ItemDocumentFilters
             $date($query['to'] ?? null),
             max(1, (int) ($query['page'] ?? 1)),
             min(100, max(1, (int) ($query['per_page'] ?? 25))),
+            ($query['type'] ?? null) === 'TRANSFER',
         );
     }
 }

@@ -211,8 +211,8 @@ Route::middleware([
         Route::patch('/providers/{id}/roles', [ProviderController::class, 'updateRoles'])->whereNumber('id');
     });
 
-    // Registro de comprobantes de proveedores y stock (Entrega B2). Sin PUT/PATCH/DELETE sobre
-    // comprobantes ni operaciones: un error se corrige anulando.
+    // Registro de comprobantes de proveedores y stock (Entregas B2 y D). Los almacenes se editan; sobre
+    // comprobantes y operaciones no hay PUT/PATCH/DELETE: un error se corrige anulando.
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/fiscal-document-types', [FiscalCatalogController::class, 'documentTypes']);
         Route::get('/taxes', [FiscalCatalogController::class, 'taxes']);
@@ -228,12 +228,18 @@ Route::middleware([
         Route::patch('/fiscal-discrepancies/{id}/resolve', [FiscalDiscrepancyController::class, 'resolve'])->whereNumber('id');
 
         Route::get('/warehouses', [WarehouseController::class, 'index']);
+        Route::get('/warehouses/next-code', [WarehouseController::class, 'nextCode']);
+        Route::post('/warehouses', [WarehouseController::class, 'store']);
+        Route::patch('/warehouses/{id}', [WarehouseController::class, 'update'])->whereNumber('id');
+        Route::patch('/warehouses/{id}/default', [WarehouseController::class, 'setDefault'])->whereNumber('id');
+        Route::patch('/warehouses/{id}/active', [WarehouseController::class, 'setActive'])->whereNumber('id');
 
         Route::get('/item-documents', [ItemDocumentController::class, 'index']);
         Route::get('/item-documents/{id}', [ItemDocumentController::class, 'show'])->whereNumber('id');
         Route::post('/item-documents/initial-stock', [ItemDocumentController::class, 'storeInitialStock']);
         Route::post('/item-documents/consumptions', [ItemDocumentController::class, 'storeConsumption']);
         Route::post('/item-documents/counts', [ItemDocumentController::class, 'storeCount']);
+        Route::post('/item-documents/transfers', [ItemDocumentController::class, 'storeTransfer']);
         Route::post('/item-documents/{id}/reversal', [ItemDocumentController::class, 'reverse'])->whereNumber('id');
 
         Route::get('/items/{id}/stock', [ItemStockController::class, 'show'])->whereNumber('id');

@@ -283,30 +283,10 @@ final class StockLedger
      */
     public function reverse(ItemDocumentEntity $original, string $what, string $reason, string $occurredAt, ?string $idempotencyKey, ?int $userId): LedgerResult
     {
-        $lines = [];
-        foreach ($original->getLines() as $line) {
-            $lines[$line->getPosition()] = new ItemDocumentLineEntity(
-                $line->getPosition(),
-                $line->getItemId(),
-                $line->getInputQuantity(),
-                $line->getInputUnitId(),
-                $line->getInputPresentationId(),
-                $line->getQuantity(),
-                $line->getInputUnitPrice(),
-                $line->getUnitCostOrNull(),
-                $line->getTotalCost(),
-                $line->getFiscalDocumentLineId(),
-                $line->getCountedQuantity(),
-                $line->getId(),
-                unvaluedQuantity: $line->getUnvaluedQuantity(),
-            );
+        if ($original->getType()->isTransfer()) {
+            throw new \LogicException('A transfer is reversed as a whole, with reverseTransfer().');
         }
-
-        $draft = new ItemDocumentEntity(
-            null, $original->getCompanyId(), null, ItemDocumentType::REVERSAL, $original->getWarehouseId(), $occurredAt, array_values($lines),
-            $original->getFiscalDocumentId(), $original->getBatchId(), $original->getHeadsTreated(), $original->getId(),
-            $reason, null, $idempotencyKey, $userId,
-        );
+        [$draft, $lines] = $this->reversalDraft($original, $reason, $occurredAt, $idempotencyKey, $userId);
 
         $returned = [];
 
@@ -344,6 +324,189 @@ final class StockLedger
                 }
             }
         });
+    }
+
+    /**
+     * TRANSFER_OUT from the origin at its average and TRANSFER_IN into the destination at the same cost,
+     * in one transaction (DD7). Only valued units move and the origin never goes negative (DD8): a line
+     * asking for more is refused with what there is and what is still unvalued.
+     *
+     * @param array<int, array{name: string, symbol: string}> $items labels for the messages, by item id
+     */
+    public function transfer(ItemDocumentEntity $out, int $toWarehouseId, string $fromCode, array $items, ?int $userId): LedgerResult
+    {
+        $companyId = $out->getCompanyId();
+        $fromWarehouseId = $out->getWarehouseId();
+
+        return DB::transaction(function () use ($out, $companyId, $fromWarehouseId, $toWarehouseId, $fromCode, $items, $userId) {
+            $keys = [];
+            foreach ($this->itemIds($out) as $itemId) {
+                $keys[] = [$fromWarehouseId, $itemId];
+                $keys[] = [$toWarehouseId, $itemId];
+            }
+            $locked = $this->lockRows($companyId, $keys);
+            $origin = $this->states($locked[$fromWarehouseId]);
+            $destination = $this->states($locked[$toWarehouseId]);
+
+            $errors = new FieldErrorBag();
+            $outPlans = [];
+            $inPlans = [];
+            $inLines = [];
+            foreach ($out->getLines() as $line) {
+                $itemId = $line->getItemId();
+                $quantity = Decimal::of($line->getQuantity());
+                $from = &$origin[$itemId];
+                $valued = $from['balance']->sub($from['unvalued']);
+                if ($quantity->compare($valued) > 0) {
+                    $errors->add('lines.' . ($line->getPosition() - 1) . '.input_quantity', $this->notTransferable($valued, $from['unvalued'], $fromCode, $items[$itemId] ?? ['name' => '', 'symbol' => '']));
+                    unset($from);
+                    continue;
+                }
+
+                $average = $from['average'];
+                $total = $quantity->mul($average)->round(self::QUANTITY_SCALE);
+                $line->valuate($average->toScale(self::COST_SCALE), $total->toScale(self::QUANTITY_SCALE));
+                $after = ['balance' => $from['balance']->sub($quantity), 'average' => $average, 'unvalued' => $from['unvalued']];
+                $outPlans[$line->getPosition()] = $this->step(-1, $quantity, $average, $total, $after, $from);
+                unset($from);
+
+                $to = &$destination[$itemId];
+                $inPlans[$line->getPosition()] = $this->step(1, $quantity, $average, $total, $this->enterValued($to, $quantity, $average), $to);
+                unset($to);
+                $inLines[] = new ItemDocumentLineEntity(
+                    $line->getPosition(), $itemId, $line->getInputQuantity(), $line->getInputUnitId(), $line->getInputPresentationId(),
+                    $quantity->toScale(self::QUANTITY_SCALE),
+                    unitCost: $average->toScale(self::COST_SCALE),
+                    totalCost: $total->toScale(self::QUANTITY_SCALE),
+                );
+            }
+            $errors->throwIfAny(ItemDocumentException::class);
+
+            $savedOut = $this->persist($out);
+            $savedIn = $this->persist(new ItemDocumentEntity(
+                null, $companyId, null, ItemDocumentType::TRANSFER_IN, $toWarehouseId, $out->getOccurredAt(), $inLines,
+                notes: $out->getNotes(), createdBy: $userId, pairedDocumentId: $savedOut->getId(),
+            ));
+
+            $raised = $this->apply($savedOut, $outPlans, $locked[$fromWarehouseId], $userId)
+                + $this->apply($savedIn, $inPlans, $locked[$toWarehouseId], $userId);
+
+            return new LedgerResult(
+                $this->documents->findById((int) $savedOut->getId(), $companyId) ?? $savedOut,
+                array_values($raised),
+            );
+        });
+    }
+
+    /**
+     * Reverses both halves of a transfer (DD10): the entry first, refused when the destination no
+     * longer holds those valued units, then the exit, back at the cost it left. Returns the exit's
+     * reversal, which carries the idempotency key.
+     */
+    public function reverseTransfer(ItemDocumentEntity $out, ItemDocumentEntity $in, string $reason, string $occurredAt, ?string $idempotencyKey, ?int $userId): LedgerResult
+    {
+        $companyId = $out->getCompanyId();
+        $what = "la transferencia N.º {$out->getNumber()}";
+
+        return DB::transaction(function () use ($out, $in, $companyId, $what, $reason, $occurredAt, $idempotencyKey, $userId) {
+            $keys = [];
+            foreach ($this->itemIds($out) as $itemId) {
+                $keys[] = [$out->getWarehouseId(), $itemId];
+                $keys[] = [$in->getWarehouseId(), $itemId];
+            }
+            $locked = $this->lockRows($companyId, $keys);
+            $origin = $this->states($locked[$out->getWarehouseId()]);
+            $destination = $this->states($locked[$in->getWarehouseId()]);
+
+            [$inDraft] = $this->reversalDraft($in, $reason, $occurredAt, null, $userId);
+            [$outDraft, $outLines] = $this->reversalDraft($out, $reason, $occurredAt, $idempotencyKey, $userId);
+
+            $inPlans = [];
+            foreach ($in->getLines() as $line) {
+                $movement = $line->getMovement();
+                if ($movement === null) {
+                    continue;
+                }
+                $current = &$destination[$line->getItemId()];
+                $quantity = Decimal::of($movement->quantity);
+                $valued = $current['balance']->sub($current['unvalued']);
+                if ($valued->compare($quantity) < 0) {
+                    $gone = $quantity->sub($this->max($valued, Decimal::zero()));
+                    throw ItemDocumentException::on('domain', "No se puede anular {$what}: {$this->format($gone->toScale(4))} de los {$this->format($quantity->toScale(4))} {$line->getItemUnitSymbol()} de {$line->getItemName()} ya salieron de {$in->getWarehouseCode()}. Anulá primero esos movimientos o transferí de vuelta.");
+                }
+                $inPlans[$line->getPosition()] = $this->undoEntry($in, $line, $movement, $what, $current);
+                unset($current);
+            }
+
+            $outPlans = [];
+            $returned = [];
+            foreach ($out->getLines() as $line) {
+                $movement = $line->getMovement();
+                if ($movement === null) {
+                    continue;
+                }
+                $current = &$origin[$line->getItemId()];
+                $outPlans[$line->getPosition()] = $this->undoExit($out, $line, $movement, $outLines[$line->getPosition()], $current, $returned);
+                unset($current);
+            }
+
+            $savedIn = $this->persist($inDraft);
+            $savedOut = $this->persist($outDraft);
+            $raised = $this->apply($savedIn, $inPlans, $locked[$in->getWarehouseId()], $userId)
+                + $this->apply($savedOut, $outPlans, $locked[$out->getWarehouseId()], $userId);
+
+            return new LedgerResult(
+                $this->documents->findById((int) $savedOut->getId(), $companyId) ?? $savedOut,
+                array_values($raised),
+            );
+        });
+    }
+
+    /**
+     * The REVERSAL of an operation: every line replicated; the ledger decides each movement.
+     *
+     * @return array{0: ItemDocumentEntity, 1: array<int, ItemDocumentLineEntity>} the draft and its lines by position
+     */
+    private function reversalDraft(ItemDocumentEntity $original, string $reason, string $occurredAt, ?string $idempotencyKey, ?int $userId): array
+    {
+        $lines = [];
+        foreach ($original->getLines() as $line) {
+            $lines[$line->getPosition()] = new ItemDocumentLineEntity(
+                $line->getPosition(),
+                $line->getItemId(),
+                $line->getInputQuantity(),
+                $line->getInputUnitId(),
+                $line->getInputPresentationId(),
+                $line->getQuantity(),
+                $line->getInputUnitPrice(),
+                $line->getUnitCostOrNull(),
+                $line->getTotalCost(),
+                $line->getFiscalDocumentLineId(),
+                $line->getCountedQuantity(),
+                $line->getId(),
+                unvaluedQuantity: $line->getUnvaluedQuantity(),
+            );
+        }
+
+        $draft = new ItemDocumentEntity(
+            null, $original->getCompanyId(), null, ItemDocumentType::REVERSAL, $original->getWarehouseId(), $occurredAt, array_values($lines),
+            $original->getFiscalDocumentId(), $original->getBatchId(), $original->getHeadsTreated(), $original->getId(),
+            $reason, null, $idempotencyKey, $userId,
+        );
+
+        return [$draft, $lines];
+    }
+
+    /** @param array{name: string, symbol: string} $item */
+    private function notTransferable(Decimal $valued, Decimal $unvalued, string $fromCode, array $item): string
+    {
+        $pending = $unvalued->isPositive()
+            ? " Otros {$this->format($unvalued->toScale(4))} {$item['symbol']} están pendientes de valorizar y no se transfieren."
+            : '';
+
+        return $valued->isPositive()
+            ? "Hay {$this->format($valued->toScale(4))} {$item['symbol']} valorizados en {$fromCode}.{$pending}"
+            : "No hay {$item['name']} valorizado en {$fromCode} para transferir.{$pending}";
     }
 
     /** @param array{balance: Decimal, average: Decimal, unvalued: Decimal} $current */
@@ -551,48 +714,12 @@ final class StockLedger
     private function commit(int $companyId, int $warehouseId, array $itemIds, ?int $userId, callable $prepare, ?callable $afterMovement = null, ?callable $afterPersist = null): LedgerResult
     {
         return DB::transaction(function () use ($companyId, $warehouseId, $itemIds, $userId, $prepare, $afterMovement, $afterPersist) {
-            $itemIds = array_values(array_unique($itemIds));
-            sort($itemIds);
-            $locked = [];
-            foreach ($itemIds as $itemId) {
-                $locked[$itemId] = $this->stocks->lockForMovement($warehouseId, $itemId, $companyId);
-            }
+            $locked = $this->lockRows($companyId, array_map(fn (int $itemId) => [$warehouseId, $itemId], $itemIds))[$warehouseId];
             $this->pendingLots = [];
 
             [$draft, $plans] = $prepare($locked);
             $saved = $this->persist($draft);
-            $reference = mb_strtolower($saved->getType()->label()) . " N.º {$saved->getNumber()}";
-            $now = now()->toIso8601String();
-
-            $raised = [];
-            foreach ($saved->getLines() as $line) {
-                $plan = $plans[$line->getPosition()] ?? null;
-                if ($plan === null) {
-                    continue;
-                }
-                $stock = $locked[$line->getItemId()];
-                $movement = $this->stocks->applyMovement($stock, new StockMovementEntity(
-                    $warehouseId,
-                    $line->getItemId(),
-                    $plan['direction'],
-                    $plan['quantity'],
-                    $plan['unit_cost'],
-                    $plan['total_cost'],
-                    $plan['balance_after'],
-                    $plan['average_after'],
-                    null,
-                    $line->getId(),
-                    $plan['unvalued_quantity'],
-                    $plan['unvalued_after'],
-                ), $companyId);
-
-                foreach ($this->incidents->afterMovement($stock, $movement, $reference, $userId, $now) as $incident) {
-                    $raised[(int) $incident->getId()] = $incident;
-                }
-                foreach ($afterMovement !== null ? $afterMovement($saved, $stock, $movement) : [] as $incident) {
-                    $raised[(int) $incident->getId()] = $incident;
-                }
-            }
+            $raised = $this->apply($saved, $plans, $locked, $userId, $afterMovement);
 
             if ($afterPersist !== null) {
                 $afterPersist($saved);
@@ -603,6 +730,70 @@ final class StockLedger
                 array_values($raised),
             );
         });
+    }
+
+    /**
+     * Locks the balance rows in (warehouse, item) order (DS7, H4): two transfers crossing the same
+     * warehouses wait for each other instead of deadlocking.
+     *
+     * @param list<array{0: int, 1: int}> $keys (warehouse id, item id)
+     * @return array<int, array<int, ItemStockEntity>> by warehouse, then item
+     */
+    private function lockRows(int $companyId, array $keys): array
+    {
+        usort($keys, fn (array $a, array $b) => [$a[0], $a[1]] <=> [$b[0], $b[1]]);
+        $locked = [];
+        foreach ($keys as [$warehouseId, $itemId]) {
+            $locked[$warehouseId][$itemId] ??= $this->stocks->lockForMovement($warehouseId, $itemId, $companyId);
+        }
+
+        return $locked;
+    }
+
+    /**
+     * Appends the planned movements of a persisted operation and raises their notices.
+     *
+     * @param array<int, array<string, mixed>> $plans by line position
+     * @param array<int, ItemStockEntity> $locked the operation's warehouse rows, by item
+     * @param (callable(ItemDocumentEntity, ItemStockEntity, StockMovementEntity): list<StockIncidentEntity>)|null $afterMovement
+     * @return array<int, StockIncidentEntity>
+     */
+    private function apply(ItemDocumentEntity $saved, array $plans, array $locked, ?int $userId, ?callable $afterMovement = null): array
+    {
+        $reference = mb_strtolower($saved->getType()->label()) . " N.º {$saved->getNumber()}";
+        $now = now()->toIso8601String();
+
+        $raised = [];
+        foreach ($saved->getLines() as $line) {
+            $plan = $plans[$line->getPosition()] ?? null;
+            if ($plan === null) {
+                continue;
+            }
+            $stock = $locked[$line->getItemId()];
+            $movement = $this->stocks->applyMovement($stock, new StockMovementEntity(
+                $saved->getWarehouseId(),
+                $line->getItemId(),
+                $plan['direction'],
+                $plan['quantity'],
+                $plan['unit_cost'],
+                $plan['total_cost'],
+                $plan['balance_after'],
+                $plan['average_after'],
+                null,
+                $line->getId(),
+                $plan['unvalued_quantity'],
+                $plan['unvalued_after'],
+            ), $saved->getCompanyId());
+
+            foreach ($this->incidents->afterMovement($stock, $movement, $reference, $userId, $now) as $incident) {
+                $raised[(int) $incident->getId()] = $incident;
+            }
+            foreach ($afterMovement !== null ? $afterMovement($saved, $stock, $movement) : [] as $incident) {
+                $raised[(int) $incident->getId()] = $incident;
+            }
+        }
+
+        return $raised;
     }
 
     /** The company's next number; two operations at once collide on the unique key and retry once. */

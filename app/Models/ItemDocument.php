@@ -27,6 +27,7 @@ class ItemDocument extends Model
         'heads_treated',
         'occurred_at',
         'reverses_document_id',
+        'paired_document_id',
         'reason',
         'notes',
         'idempotency_key',
@@ -41,6 +42,7 @@ class ItemDocument extends Model
         'batch_id' => 'integer',
         'heads_treated' => 'integer',
         'reverses_document_id' => 'integer',
+        'paired_document_id' => 'integer',
         'created_by' => 'integer',
         'occurred_at' => 'datetime',
     ];
@@ -73,6 +75,18 @@ class ItemDocument extends Model
     public function reversedBy(): HasOne
     {
         return $this->hasOne(self::class, 'reverses_document_id')->withoutGlobalScopes();
+    }
+
+    /** The exit a TRANSFER_IN points to (DD7). */
+    public function paired(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'paired_document_id')->withoutGlobalScopes();
+    }
+
+    /** The entry that points to this TRANSFER_OUT. */
+    public function pairedBy(): HasOne
+    {
+        return $this->hasOne(self::class, 'paired_document_id')->withoutGlobalScopes();
     }
 
     public function creator(): BelongsTo

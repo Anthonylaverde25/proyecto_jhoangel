@@ -27,6 +27,7 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
     private const RELATIONS = [
         'lines.item.unit', 'lines.inputUnit', 'lines.inputPresentation', 'lines.movement',
         'warehouse', 'fiscalDocument.type', 'batch', 'reverses', 'reversedBy', 'creator',
+        'paired.warehouse', 'pairedBy.warehouse',
     ];
 
     public function findByIdempotencyKey(string $key, int $companyId): ?ItemDocumentEntity
@@ -43,21 +44,45 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
         return $model ? StockMapper::documentToEntity($model) : null;
     }
 
-    public function findByFiscalDocument(int $fiscalDocumentId, int $companyId): ?ItemDocumentEntity
+    public function findAllByFiscalDocument(int $fiscalDocumentId, int $companyId): array
     {
-        $model = $this->query($companyId)
+        return $this->query($companyId)
             ->with(self::RELATIONS)
             ->where('fiscal_document_id', $fiscalDocumentId)
             ->where('type', '!=', ItemDocumentType::REVERSAL->value)
-            ->first();
+            ->orderBy('id')
+            ->get()
+            ->map(fn (ItemDocument $model) => StockMapper::documentToEntity($model))
+            ->all();
+    }
+
+    public function findPair(ItemDocumentEntity $document): ?ItemDocumentEntity
+    {
+        $query = $this->query($document->getCompanyId())->with(self::RELATIONS);
+        $model = match ($document->getType()) {
+            ItemDocumentType::TRANSFER_IN => $query->find($document->getPairedDocumentId()),
+            ItemDocumentType::TRANSFER_OUT => $query->where('paired_document_id', $document->getId())->first(),
+            default => null,
+        };
 
         return $model ? StockMapper::documentToEntity($model) : null;
+    }
+
+    public function receiptWarehouseOf(int $fiscalDocumentId, int $companyId): ?int
+    {
+        $warehouseId = $this->query($companyId)
+            ->where('fiscal_document_id', $fiscalDocumentId)
+            ->where('type', ItemDocumentType::DELIVERY_RECEIPT->value)
+            ->value('warehouse_id');
+
+        return $warehouseId === null ? null : (int) $warehouseId;
     }
 
     public function search(ItemDocumentFilters $filters, int $companyId): array
     {
         $query = $this->query($companyId)
             ->when($filters->type !== null, fn (Builder $q) => $q->where('type', $filters->type->value))
+            ->when($filters->transfers, fn (Builder $q) => $q->whereIn('type', [ItemDocumentType::TRANSFER_OUT->value, ItemDocumentType::TRANSFER_IN->value]))
             ->when($filters->batchId !== null, fn (Builder $q) => $q->where('batch_id', $filters->batchId))
             ->when($filters->itemId !== null, fn (Builder $q) => $q->whereHas(
                 'lines',
@@ -68,7 +93,7 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
 
         $total = (clone $query)->count();
         $models = $query
-            ->with(['lines.item.unit', 'warehouse', 'fiscalDocument.type', 'batch', 'reverses', 'reversedBy'])
+            ->with(['lines.item.unit', 'warehouse', 'fiscalDocument.type', 'batch', 'reverses', 'reversedBy', 'paired.warehouse', 'pairedBy.warehouse'])
             ->orderByDesc('id')
             ->forPage($filters->page, $filters->perPage)
             ->get();
@@ -93,6 +118,7 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
             'heads_treated' => $document->getHeadsTreated(),
             'occurred_at' => $document->getOccurredAt(),
             'reverses_document_id' => $document->getReversesDocumentId(),
+            'paired_document_id' => $document->getPairedDocumentId(),
             'reason' => $document->getReason(),
             'notes' => $document->getNotes(),
             'idempotency_key' => $document->getIdempotencyKey(),

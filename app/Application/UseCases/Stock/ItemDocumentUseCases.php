@@ -13,6 +13,7 @@ final class ItemDocumentUseCases
         public readonly RegisterConsumptionUseCase $registerConsumption,
         public readonly RegisterStockCountUseCase $registerCount,
         public readonly ReverseItemDocumentUseCase $reverse,
+        public readonly RegisterStockTransferUseCase $registerTransfer,
     ) {
     }
 }
