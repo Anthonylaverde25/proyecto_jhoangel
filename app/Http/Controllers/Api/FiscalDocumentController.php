@@ -38,6 +38,7 @@ class FiscalDocumentController extends Controller
         return response()->json([
             'data' => array_map(fn (FiscalDocumentEntity $d) => (new FiscalDocumentResource($d))->resolve($request), $page['data']),
             'total' => $page['total'],
+            'summary' => $page['summary'],
             'page' => $filters->page,
             'per_page' => $filters->perPage,
         ]);

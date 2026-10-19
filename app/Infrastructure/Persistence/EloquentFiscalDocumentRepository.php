@@ -63,23 +63,7 @@ class EloquentFiscalDocumentRepository implements IFiscalDocumentRepository
 
     public function search(FiscalDocumentFilters $filters, int $companyId): array
     {
-        $query = $this->query($companyId)
-            ->where('status', $filters->status->value)
-            ->when($filters->providerId !== null, fn (Builder $q) => $q->where('provider_id', $filters->providerId))
-            ->when($filters->kind !== null, fn (Builder $q) => $q->whereHas('type', fn (Builder $t) => $t->where('kind', $filters->kind->value)))
-            ->when($filters->from !== null, fn (Builder $q) => $q->where('issued_at', '>=', $filters->from))
-            ->when($filters->to !== null, fn (Builder $q) => $q->where('issued_at', '<=', $filters->to))
-            ->when($filters->search !== null, function (Builder $q) use ($filters) {
-                $term = '%' . $filters->search . '%';
-                $digits = ltrim(preg_replace('/\D/', '', $filters->search) ?? '', '0');
-                $q->where(function (Builder $w) use ($term, $digits) {
-                    $w->whereHas('provider', fn (Builder $p) => $p->withoutGlobalScopes()->where('name', 'like', $term))
-                        ->orWhere('reference', 'like', $term);
-                    if ($digits !== '') {
-                        $w->orWhere('number', (int) $digits);
-                    }
-                });
-            });
+        $query = $this->filtered($filters, $companyId);
 
         $total = (clone $query)->count();
         $models = $query
@@ -90,6 +74,70 @@ class EloquentFiscalDocumentRepository implements IFiscalDocumentRepository
             ->get();
 
         return ['data' => $models->map(fn (FiscalDocument $m) => FiscalDocumentMapper::toEntity($m))->all(), 'total' => $total];
+    }
+
+    public function summarize(FiscalDocumentFilters $filters, int $companyId): array
+    {
+        $byKind = $this->filtered($filters, $companyId, withKind: false)
+            ->join('fiscal_document_types as t', 't.id', '=', 'fiscal_documents.fiscal_document_type_id')
+            ->groupBy('t.kind')
+            ->selectRaw('t.kind, COUNT(*) as n')
+            ->pluck('n', 'kind')
+            ->map(fn ($n) => (int) $n)
+            ->all();
+        $byStatus = $this->filtered($filters, $companyId, withStatus: false)
+            ->groupBy('status')
+            ->selectRaw('status, COUNT(*) as n')
+            ->pluck('n', 'status')
+            ->map(fn ($n) => (int) $n)
+            ->all();
+
+        // A delivery note carries no debt and its invoice repeats it: the period total leaves them out
+        // unless the register is showing delivery notes.
+        $totals = $this->filtered($filters, $companyId)
+            ->join('fiscal_document_types as t', 't.id', '=', 'fiscal_documents.fiscal_document_type_id')
+            ->when($filters->kind === null, fn ($q) => $q->where('t.kind', '!=', FiscalDocumentKind::DELIVERY_NOTE->value))
+            // A delivery note's sign is 0 (no debt); listed alone, its amounts add up as they are.
+            ->selectRaw('COUNT(*) as n,
+                SUM((CASE WHEN t.sign = 0 THEN 1 ELSE t.sign END) * COALESCE(lines_amount, 0)) as net,
+                SUM((CASE WHEN t.sign = 0 THEN 1 ELSE t.sign END) * (COALESCE(line_taxes_amount, 0) + COALESCE(document_taxes_amount, 0))) as taxes,
+                SUM((CASE WHEN t.sign = 0 THEN 1 ELSE t.sign END) * COALESCE(total_amount, 0)) as total')
+            ->first();
+
+        return [
+            'by_kind' => $byKind,
+            'by_status' => $byStatus,
+            'totals' => [
+                'count' => (int) ($totals->n ?? 0),
+                'net' => DecimalColumn::read($totals->net ?? null, 4),
+                'taxes' => DecimalColumn::read($totals->taxes ?? null, 4),
+                'total' => DecimalColumn::read($totals->total ?? null, 4),
+            ],
+        ];
+    }
+
+    /** The register's filters; the counts per kind and per status leave out their own filter. */
+    private function filtered(FiscalDocumentFilters $filters, int $companyId, bool $withKind = true, bool $withStatus = true): Builder
+    {
+        return $this->query($companyId)
+            ->when($withStatus, fn (Builder $q) => $q->where('status', $filters->status->value))
+            ->when($filters->providerId !== null, fn (Builder $q) => $q->where('provider_id', $filters->providerId))
+            ->when($withKind && $filters->kind !== null, fn (Builder $q) => $q->whereHas('type', fn (Builder $t) => $t->where('kind', $filters->kind->value)))
+            ->when($filters->from !== null, fn (Builder $q) => $q->where('issued_at', '>=', $filters->from))
+            ->when($filters->to !== null, fn (Builder $q) => $q->where('issued_at', '<=', $filters->to))
+            ->when($filters->search !== null, function (Builder $q) use ($filters) {
+                $term = '%' . $filters->search . '%';
+                $digits = ltrim(preg_replace('/\D/', '', $filters->search) ?? '', '0');
+                $q->where(function (Builder $w) use ($term, $digits) {
+                    $w->whereHas('provider', fn (Builder $p) => $p->withoutGlobalScopes()->where(
+                        fn (Builder $n) => $n->where('name', 'like', $term)->orWhere('cuit', 'like', $term)
+                    ))
+                        ->orWhere('reference', 'like', $term);
+                    if ($digits !== '') {
+                        $w->orWhere('number', (int) $digits);
+                    }
+                });
+            });
     }
 
     public function create(FiscalDocumentEntity $document): FiscalDocumentEntity

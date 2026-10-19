@@ -18,7 +18,7 @@ final readonly class FiscalDocumentFilters
         public FiscalDocumentStatus $status = FiscalDocumentStatus::REGISTERED,
         public ?string $from = null,
         public ?string $to = null,
-        /** Matches the provider's name or the document number. */
+        /** Matches the provider's name or CUIT, or the document number. */
         public ?string $search = null,
         public int $page = 1,
         public int $perPage = 25,

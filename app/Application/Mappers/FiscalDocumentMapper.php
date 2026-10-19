@@ -67,6 +67,9 @@ final class FiscalDocumentMapper
                     'is_valued' => (bool) $note->is_valued,
                 ])->values()->all()
                 : [],
+            [],
+            $model->relationLoaded('provider') ? $model->provider?->cuit : null,
+            $model->relationLoaded('provider') ? $model->provider?->location : null,
         );
     }
 
@@ -115,6 +118,7 @@ final class FiscalDocumentMapper
                 'remaining_quantity' => DecimalColumn::read($lot->remaining_quantity, 4),
                 'valued_unit_cost' => DecimalColumn::readNullable($lot->valued_unit_cost, 6),
             ],
+            $item?->code,
         );
     }
 

@@ -24,6 +24,14 @@ interface IFiscalDocumentRepository
     /** @return array{data: list<FiscalDocumentEntity>, total: int} headers only */
     public function search(FiscalDocumentFilters $filters, int $companyId): array;
 
+    /**
+     * Counts per kind and per status under the other filters, and the signed totals of the period
+     * (delivery notes left out unless filtered: their invoice repeats them).
+     *
+     * @return array{by_kind: array<string, int>, by_status: array<string, int>, totals: array{count: int, net: string, taxes: string, total: string}}
+     */
+    public function summarize(FiscalDocumentFilters $filters, int $companyId): array;
+
     /** Inserts header, lines and taxes; returns the document with its ids. */
     public function create(FiscalDocumentEntity $document): FiscalDocumentEntity;
 

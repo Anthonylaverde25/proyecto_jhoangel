@@ -49,7 +49,12 @@ class FiscalDocumentResource extends JsonResource
             'id' => $document->getId(),
             'label' => $document->label(),
             'type' => FiscalCatalogResource::type($type),
-            'provider' => ['id' => $document->getProviderId(), 'name' => $document->getProviderName()],
+            'provider' => [
+                'id' => $document->getProviderId(),
+                'name' => $document->getProviderName(),
+                'cuit' => $document->getProviderCuit(),
+                'location' => $document->getProviderLocation(),
+            ],
             'point_of_sale' => $document->getPointOfSale(),
             'number' => $document->getNumber(),
             'formatted_number' => FiscalDocumentEntity::formatNumber($document->getPointOfSale(), $document->getNumber(), $document->getReference()),
@@ -87,7 +92,7 @@ class FiscalDocumentResource extends JsonResource
             'lines' => array_map(fn (FiscalDocumentLineEntity $line) => [
                 'id' => $line->id,
                 'position' => $line->position,
-                'item' => ['id' => $line->itemId, 'name' => $line->itemName, 'unit_symbol' => $line->itemUnitSymbol, 'track_stock' => $line->tracksStock],
+                'item' => ['id' => $line->itemId, 'code' => $line->itemCode, 'name' => $line->itemName, 'unit_symbol' => $line->itemUnitSymbol, 'track_stock' => $line->tracksStock],
                 'input_quantity' => $line->inputQuantity,
                 'input_unit_id' => $line->inputUnitId,
                 'input_presentation_id' => $line->inputPresentationId,

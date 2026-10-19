@@ -41,6 +41,7 @@ final readonly class FiscalDocumentLineEntity
         public ?string $deliveryNoteLabel = null,
         /** Delivery-note lines without price: their lot, as array{status, quantity, remaining_quantity}. */
         public ?array $unvaluedLot = null,
+        public ?string $itemCode = null,
     ) {
     }
 

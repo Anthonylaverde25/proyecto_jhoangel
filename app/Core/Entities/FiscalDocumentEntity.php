@@ -56,6 +56,9 @@ final class FiscalDocumentEntity
         private readonly array $deliveryNotes = [],
         /** The delivery notes the invoice is converted from, when it is being registered (DC5). @var list<int> */
         private readonly array $deliveryNoteIds = [],
+        /** Read only, for the digital sheet of the detail. */
+        private readonly ?string $providerCuit = null,
+        private readonly ?string $providerLocation = null,
     ) {
         if ($lines === []) {
             throw FiscalDocumentException::on('lines', 'El comprobante no tiene renglones.');
@@ -135,6 +138,8 @@ final class FiscalDocumentEntity
     public function getIdempotencyKey(): ?string { return $this->idempotencyKey; }
     public function getCreatedBy(): ?int { return $this->createdBy; }
     public function getProviderName(): ?string { return $this->providerName; }
+    public function getProviderCuit(): ?string { return $this->providerCuit; }
+    public function getProviderLocation(): ?string { return $this->providerLocation; }
     public function getCreatedByName(): ?string { return $this->createdByName; }
     public function getCreatedAt(): ?string { return $this->createdAt; }
     public function getRelatedLabel(): ?string { return $this->relatedLabel; }
