@@ -262,7 +262,7 @@ class CaravanGestationStageTest extends TestCase
     {
         // 1. Create a provider, farm and a batch (safely using firstOrCreate)
         $provider = \App\Models\Provider::firstOrCreate(
-            ['cuit' => '30-12345678-9'],
+            ['cuit' => '30123456781'],
             ['name' => 'Test Provider', 'is_active' => true]
         );
 

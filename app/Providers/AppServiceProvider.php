@@ -51,6 +51,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(ICompanyContext::class, \App\Core\Contexts\CompanyContext::class);
         $this->app->bind(\App\Core\Interfaces\IAssistantGateway::class, \App\Infrastructure\Assistant\AiAgentAssistantGateway::class);
+        $this->app->bind(\App\Core\Interfaces\IFiscalDocumentReader::class, \App\Infrastructure\OCR\AiAgentFiscalDocumentReader::class);
         $this->app->bind(ICaravanRepository::class, EloquentCaravanRepository::class);
         $this->app->bind(\App\Core\Interfaces\IBreedingEligibilityRepository::class, \App\Infrastructure\Persistence\EloquentBreedingEligibilityRepository::class);
         $this->app->bind(

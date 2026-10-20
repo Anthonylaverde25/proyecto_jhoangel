@@ -14,4 +14,7 @@ interface ICompanyRepository
     public function getForUser(int $userId): array;
 
     public function findById(int $id): ?CompanyEntity;
+
+    /** Stores the company's CUIT (digits) or clears it with null. */
+    public function updateCuit(int $id, ?string $cuit): void;
 }

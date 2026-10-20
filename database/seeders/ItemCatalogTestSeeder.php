@@ -23,8 +23,8 @@ use Illuminate\Support\Facades\DB;
  */
 class ItemCatalogTestSeeder extends Seeder
 {
-    private const ITEMS_PROVIDER_CUIT = '30-70845123-4';
-    private const MIXED_PROVIDER_CUIT = '30-98765432-1';
+    private const ITEMS_PROVIDER_CUIT = '30708451238';
+    private const MIXED_PROVIDER_CUIT = '30987654321';
 
     private int $companyId;
 

@@ -17,7 +17,8 @@ class CompanyMapper
             renspa: $model->renspa,
             location: $model->location,
             isActive: (bool) $model->is_active,
-            role: $model->pivot?->role ?? 'operator'
+            role: $model->pivot?->role ?? 'operator',
+            cuit: $model->cuit
         );
     }
 }

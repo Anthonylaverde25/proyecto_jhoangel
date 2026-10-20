@@ -128,9 +128,13 @@ class EloquentFiscalDocumentRepository implements IFiscalDocumentRepository
             ->when($filters->search !== null, function (Builder $q) use ($filters) {
                 $term = '%' . $filters->search . '%';
                 $digits = ltrim(preg_replace('/\D/', '', $filters->search) ?? '', '0');
-                $q->where(function (Builder $w) use ($term, $digits) {
+                // CUITs are stored as digits: "30-70845123" has to find "3070845123…".
+                $cuitTerm = preg_match('/^[\d\s-]+$/', $filters->search) === 1
+                    ? '%' . preg_replace('/\D/', '', $filters->search) . '%'
+                    : $term;
+                $q->where(function (Builder $w) use ($term, $cuitTerm, $digits) {
                     $w->whereHas('provider', fn (Builder $p) => $p->withoutGlobalScopes()->where(
-                        fn (Builder $n) => $n->where('name', 'like', $term)->orWhere('cuit', 'like', $term)
+                        fn (Builder $n) => $n->where('name', 'like', $term)->orWhere('cuit', 'like', $cuitTerm)
                     ))
                         ->orWhere('reference', 'like', $term);
                     if ($digits !== '') {

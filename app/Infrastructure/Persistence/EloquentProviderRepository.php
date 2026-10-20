@@ -6,6 +6,7 @@ namespace App\Infrastructure\Persistence;
 
 use App\Core\Entities\ProviderEntity;
 use App\Core\Interfaces\IProviderRepository;
+use App\Core\ValueObjects\Cuit;
 use App\Models\Provider;
 use App\Application\Mappers\ProviderMapper;
 
@@ -17,6 +18,7 @@ class EloquentProviderRepository implements IProviderRepository
     public function findAll(?string $supplies = null): array
     {
         return Provider::with('farms')
+            ->withExists('fiscalDocuments')
             ->when($supplies === 'livestock', fn ($query) => $query->where('supplies_livestock', true))
             ->when($supplies === 'items', fn ($query) => $query->where('supplies_items', true))
             ->get()
@@ -26,14 +28,17 @@ class EloquentProviderRepository implements IProviderRepository
 
     public function findById(int $id): ?ProviderEntity
     {
-        $model = Provider::with('farms')->find($id);
+        $model = Provider::with('farms')->withExists('fiscalDocuments')->find($id);
         return $model ? ProviderMapper::toEntity($model) : null;
     }
 
     public function findByCuit(string $cuit, int $companyId): ?ProviderEntity
     {
         // Explicit company filter: this may run outside a request, without company context.
-        $model = Provider::withoutGlobalScopes()->where('company_id', $companyId)->where('cuit', $cuit)->first();
+        $model = Provider::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->where('cuit', Cuit::fromString($cuit)->value())
+            ->first();
         return $model ? ProviderMapper::toEntity($model) : null;
     }
 
@@ -68,6 +73,23 @@ class EloquentProviderRepository implements IProviderRepository
                 'supplies_livestock' => $provider->suppliesLivestock(),
                 'supplies_items' => $provider->suppliesItems(),
             ]);
+    }
+
+    public function updateDetails(ProviderEntity $provider): void
+    {
+        Provider::withoutGlobalScopes()
+            ->where('company_id', $provider->getCompanyId())
+            ->whereKey($provider->getId())
+            ->first()
+            ?->fill([
+                'name' => $provider->getName(),
+                'commercial_name' => $provider->getCommercialName(),
+                'cuit' => $provider->getCuit(),
+                'location' => $provider->getLocation(),
+                'email' => $provider->getEmail(),
+                'phone' => $provider->getPhone(),
+            ])
+            ->save();
     }
 
     public function delete(int $id): bool

@@ -8,12 +8,15 @@ use App\Application\DTOs\Stock\FiscalDocumentDTO;
 use App\Application\UseCases\DeliveryNotes\DeliveryNoteUseCases;
 use App\Application\UseCases\FiscalDocuments\FiscalDocumentUseCases;
 use App\Core\Entities\FiscalDocumentEntity;
+use App\Core\Exceptions\FiscalReaderUnavailableException;
 use App\Core\ValueObjects\FiscalDocumentFilters;
 use App\Http\Controllers\Api\Concerns\ResolvesActiveCompany;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\FiscalDocuments\ReadFiscalDocumentImageRequest;
 use App\Http\Requests\Stock\ReasonRequest;
 use App\Http\Requests\Stock\StoreFiscalDocumentRequest;
 use App\Http\Resources\FiscalDocumentResource;
+use App\Http\Resources\ProviderRecognitionResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -51,6 +54,28 @@ class FiscalDocumentController extends Controller
         $counts = ($this->deliveryNotes->countDiscrepancies)($id, $this->activeCompanyId());
 
         return response()->json((new FiscalDocumentResource($document))->detailed([], $counts)->resolve($request));
+    }
+
+    /**
+     * Reads who issued the document in the image and finds it in the company's portfolio. Nothing is
+     * created: the sheet shows what was read and the person decides (delivery F).
+     */
+    public function readImage(ReadFiscalDocumentImageRequest $request): JsonResponse
+    {
+        $file = $request->file('document');
+
+        try {
+            $recognition = ($this->documents->readImage)(
+                (string) file_get_contents($file->getRealPath()),
+                $file->getClientOriginalName(),
+                (string) ($file->getMimeType() ?? 'image/png'),
+                $this->activeCompanyId(),
+            );
+        } catch (FiscalReaderUnavailableException $e) {
+            return response()->json(['message' => $e->getMessage()], 502);
+        }
+
+        return response()->json((new ProviderRecognitionResource($recognition))->resolve($request));
     }
 
     public function store(StoreFiscalDocumentRequest $request): JsonResponse

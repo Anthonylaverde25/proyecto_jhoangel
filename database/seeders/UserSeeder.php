@@ -35,6 +35,7 @@ class UserSeeder extends Seeder
         $company1Id = DB::table('companies')->insertGetId([
             'name' => 'Hacienda Principal',
             'renspa' => '01.02.03.0001',
+            'cuit' => '30717000028',
             'location' => 'Ruta Nacional 5',
             'created_at' => now(),
             'updated_at' => now(),
@@ -44,6 +45,7 @@ class UserSeeder extends Seeder
         $company2Id = DB::table('companies')->insertGetId([
             'name' => 'Hacienda Secundaria',
             'renspa' => '09.08.07.0002',
+            'cuit' => '30717000036',
             'location' => 'Ruta Provincial 10',
             'created_at' => now(),
             'updated_at' => now(),

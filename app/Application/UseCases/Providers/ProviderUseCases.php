@@ -11,6 +11,7 @@ final class ProviderUseCases
         public readonly CreateProviderUseCase $create,
         public readonly FindProviderUseCase $find,
         public readonly UpdateProviderRolesUseCase $updateRoles,
+        public readonly UpdateProviderUseCase $update,
     ) {
     }
 }

@@ -43,7 +43,7 @@ class SecondaryCompanyLivestockSeeder extends Seeder
     private const RENSPA = '09.08.07.0002';
 
     private const PROVIDER = [
-        'cuit' => '30-71888222-4',
+        'cuit' => '30718882229',
         'name' => 'Ganadera Los Algarrobos S.A.',
         'commercial_name' => 'Los Algarrobos',
         'location' => 'Ruta Nacional 35, Km 610 (Córdoba)',

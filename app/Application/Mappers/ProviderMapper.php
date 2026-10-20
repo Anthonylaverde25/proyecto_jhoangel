@@ -32,7 +32,8 @@ class ProviderMapper
             $farms,
             $model->company_id !== null ? (int) $model->company_id : null,
             (bool) ($model->supplies_livestock ?? true),
-            (bool) ($model->supplies_items ?? false)
+            (bool) ($model->supplies_items ?? false),
+            (bool) ($model->fiscal_documents_exists ?? false)
         );
     }
 

@@ -8,6 +8,7 @@ use App\Application\DTOs\CreateProviderDTO;
 use App\Core\Entities\FarmEntity;
 use App\Core\Entities\ProviderEntity;
 use App\Core\Interfaces\IProviderRepository;
+use App\Core\ValueObjects\Cuit;
 
 final class CreateProviderUseCase
 {
@@ -35,7 +36,7 @@ final class CreateProviderUseCase
             id: null,
             name: $dto->name,
             commercialName: $dto->commercialName,
-            cuit: $dto->cuit,
+            cuit: Cuit::requireValid($dto->cuit)->value(),
             location: $dto->location,
             email: $dto->email,
             phone: $dto->phone,

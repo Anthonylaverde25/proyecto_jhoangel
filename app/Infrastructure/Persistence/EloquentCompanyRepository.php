@@ -34,4 +34,9 @@ class EloquentCompanyRepository implements ICompanyRepository
 
         return $model ? CompanyMapper::toEntity($model) : null;
     }
+
+    public function updateCuit(int $id, ?string $cuit): void
+    {
+        Company::whereKey($id)->first()?->fill(['cuit' => $cuit])->save();
+    }
 }

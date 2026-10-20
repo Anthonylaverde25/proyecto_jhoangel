@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Core\ValueObjects;
 
+use App\Core\Exceptions\InvalidCuitException;
 use Stringable;
 
 /**
@@ -56,20 +57,42 @@ final class Cuit implements Stringable
         return $cuit->digits === '' ? null : $cuit;
     }
 
+    /**
+     * The strict door for a CUIT that IS a key — a provider's, which identifies the issuer of every
+     * invoice and delivery note. Institutions keep using `fromString` (ADR-43): there it describes.
+     *
+     * @throws InvalidCuitException with the reason worded for the person typing it
+     */
+    public static function requireValid(string $raw): self
+    {
+        $cuit = self::fromString($raw);
+        $reason = $cuit->invalidReason();
+
+        if ($reason !== null) {
+            throw InvalidCuitException::on('cuit', $reason);
+        }
+
+        return $cuit;
+    }
+
     /** Eleven digits whose check digit closes. What the interface warns about when false. */
     public function isWellFormed(): bool
     {
-        return strlen($this->digits) === 11 && self::checkDigitMatches($this->digits);
+        return $this->hasValidCheckDigit();
     }
 
     public function hasValidCheckDigit(): bool
     {
-        return strlen($this->digits) === 11 && self::checkDigitMatches($this->digits);
+        $expected = $this->expectedCheckDigit();
+
+        return $expected !== null && $expected === (int) $this->digits[10];
     }
 
     /**
-     * The digit these first ten would need, so a warning can say what was probably meant instead
-     * of only that something is off. Null when there are not ten digits to work from.
+     * The digit these first ten would need, so a message can say what was probably meant instead
+     * of only that something is off. Null when there are not eleven digits, and also when the
+     * modulo 11 gives 10: no CUIT is issued with those ten digits (AFIP changes the prefix), so
+     * no last digit would fix it.
      */
     public function expectedCheckDigit(): ?int
     {
@@ -83,31 +106,31 @@ final class Cuit implements Stringable
             $sum += ((int) $this->digits[$position]) * $weight;
         }
 
-        $remainder = $sum % 11;
-
-        return match ($remainder) {
-            0 => 0,
-            1 => 9,
-            default => 11 - $remainder,
+        return match (11 - ($sum % 11)) {
+            11 => 0,
+            10 => null,
+            default => 11 - ($sum % 11),
         };
     }
 
-    private static function checkDigitMatches(string $digits): bool
+    /** Why this is not a valid CUIT, in Spanish for the person typing it; null when it is. */
+    public function invalidReason(): ?string
     {
-        $sum = 0;
+        $length = strlen($this->digits);
 
-        foreach (self::WEIGHTS as $position => $weight) {
-            $sum += ((int) $digits[$position]) * $weight;
+        if ($length !== 11) {
+            return "El CUIT tiene 11 dígitos; se cargaron {$length}.";
         }
 
-        $remainder = 11 - ($sum % 11);
-        $expected = match ($remainder) {
-            11 => 0,
-            10 => -1, // Never valid: those numbers are issued under a different type prefix.
-            default => $remainder,
-        };
+        if ($this->hasValidCheckDigit()) {
+            return null;
+        }
 
-        return $expected === (int) $digits[10];
+        $expected = $this->expectedCheckDigit();
+
+        return $expected === null
+            ? 'No existe un CUIT con esos 10 primeros dígitos: revisá el número.'
+            : "El dígito verificador no cierra: con esos 10 primeros dígitos el CUIT termina en {$expected}.";
     }
 
     /** Comparison is always on the digits, never on the formatting. */

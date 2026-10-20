@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Core\Entities;
 
+use App\Core\Exceptions\ProviderException;
+
 final class ProviderEntity
 {
     public function __construct(
@@ -20,7 +22,8 @@ final class ProviderEntity
         private array $farms = [],
         private ?int $companyId = null,
         private bool $suppliesLivestock = true,
-        private bool $suppliesItems = false
+        private bool $suppliesItems = false,
+        private bool $hasFiscalDocuments = false
     ) {
         self::assertHasRole($suppliesLivestock, $suppliesItems);
     }
@@ -68,6 +71,22 @@ final class ProviderEntity
     public function getCuit(): string
     {
         return $this->cuit;
+    }
+
+    /** Once it issued a fiscal document, the CUIT is what that document says: it no longer changes. */
+    public function isCuitLocked(): bool
+    {
+        return $this->hasFiscalDocuments;
+    }
+
+    /** Expects the digits of an already validated CUIT (`Cuit::requireValid`). */
+    public function changeCuit(string $digits): void
+    {
+        if ($this->hasFiscalDocuments) {
+            throw ProviderException::cuitLocked();
+        }
+
+        $this->cuit = $digits;
     }
 
     public function getLocation(): ?string

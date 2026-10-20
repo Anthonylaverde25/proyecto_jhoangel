@@ -12,8 +12,15 @@ final class CompanyEntity
         private ?string $renspa,
         private ?string $location,
         private bool $isActive = true,
-        private ?string $role = null
+        private ?string $role = null,
+        private ?string $cuit = null
     ) {}
+
+    /** Digits only; null while the company has not loaded it. */
+    public function getCuit(): ?string
+    {
+        return $this->cuit;
+    }
 
     public function getId(): ?int
     {

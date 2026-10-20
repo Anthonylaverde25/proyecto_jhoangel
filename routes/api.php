@@ -58,6 +58,7 @@ use App\Http\Controllers\Api\VeterinaryPortalController;
 use App\Http\Controllers\Api\VeterinaryPortalTokenController;
 use App\Http\Controllers\Api\OperationalKpiController;
 use App\Http\Controllers\Api\AssistantController;
+use App\Http\Controllers\Api\CompanyController;
 use Illuminate\Support\Facades\Route;
 
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -101,7 +102,7 @@ Route::middleware([
     Route::post('/field-mappings/learn', [FieldMappingController::class, 'learn']);
 
     // Jerarquía de Lotes
-    Route::apiResource('providers', ProviderController::class)->only(['index', 'store', 'show']);
+    Route::apiResource('providers', ProviderController::class)->only(['index', 'store', 'show', 'update']);
     Route::apiResource('farms', FarmController::class)->only(['index', 'store', 'show']);
     Route::get('/batches/reserve', [BatchController::class, 'reserve']);
     Route::get('/batches/{id}/service-orders', [BatchController::class, 'serviceOrders'])->whereNumber('id');
@@ -214,11 +215,15 @@ Route::middleware([
     // Registro de comprobantes de proveedores y stock (Entregas B2 y D). Los almacenes se editan; sobre
     // comprobantes y operaciones no hay PUT/PATCH/DELETE: un error se corrige anulando.
     Route::middleware('auth:sanctum')->group(function () {
+        // The active company's fiscal data: its CUIT is the receiver of its providers' documents.
+        Route::patch('/company/fiscal-data', [CompanyController::class, 'updateFiscalData']);
+
         Route::get('/fiscal-document-types', [FiscalCatalogController::class, 'documentTypes']);
         Route::get('/taxes', [FiscalCatalogController::class, 'taxes']);
 
         Route::get('/fiscal-documents', [FiscalDocumentController::class, 'index']);
         Route::post('/fiscal-documents', [FiscalDocumentController::class, 'store']);
+        Route::post('/fiscal-documents/read-image', [FiscalDocumentController::class, 'readImage']);
         Route::get('/fiscal-documents/{id}', [FiscalDocumentController::class, 'show'])->whereNumber('id');
         Route::post('/fiscal-documents/{id}/void', [FiscalDocumentController::class, 'void'])->whereNumber('id');
         // Delivery C: delivery notes waiting for their invoice, the invoice they convert into, and their differences.

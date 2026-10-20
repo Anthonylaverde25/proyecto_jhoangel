@@ -27,9 +27,9 @@ use Illuminate\Database\Seeder;
  */
 class DeliveryNoteTestSeeder extends Seeder
 {
-    private const EL_TALA_CUIT = '30-70845123-4';
-    private const SOUTH_CUIT = '30-98765432-1';
-    private const FUEL_CUIT = '30-71555444-2';
+    private const EL_TALA_CUIT = '30708451238';
+    private const SOUTH_CUIT = '30987654321';
+    private const FUEL_CUIT = '30715554441';
 
     private int $companyId;
 

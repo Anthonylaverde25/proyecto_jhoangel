@@ -258,7 +258,7 @@ final class Ing01TemplateProcessor
             if ($cleanCuit !== '' && strlen($cleanCuit) >= 8) {
                 $provider = Provider::withoutGlobalScopes()
                     ->where('company_id', $companyId)
-                    ->whereRaw("REPLACE(cuit, '-', '') = ?", [$cleanCuit])
+                    ->where('cuit', $cleanCuit)
                     ->first();
                 if ($provider) {
                     return $provider;

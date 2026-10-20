@@ -24,6 +24,7 @@ class ProviderResource extends JsonResource
             'name'            => $this->resource->getName(),
             'commercial_name' => $this->resource->getCommercialName(),
             'cuit'            => $this->resource->getCuit(),
+            'cuit_locked'     => $this->resource->isCuitLocked(),
             'location'        => $this->resource->getLocation(),
             'email'           => $this->resource->getEmail(),
             'phone'           => $this->resource->getPhone(),

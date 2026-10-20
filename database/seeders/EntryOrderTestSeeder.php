@@ -98,7 +98,7 @@ use Illuminate\Support\Facades\DB;
  */
 class EntryOrderTestSeeder extends Seeder
 {
-    private const PROVIDER_CUIT = '30-71555000-1';
+    private const PROVIDER_CUIT = '30715550004';
     private const CODES = [
         'EN-20260928-0001', 'EN-20260928-0002', 'EN-20260928-0003', 'EN-20260928-0004', 'EN-20260928-0005', 'EN-20260928-0006',
         'EN-20260928-0007', 'EN-20260928-0008', 'EN-20260928-0009', 'EN-20260928-0010', 'EN-20260928-0011',

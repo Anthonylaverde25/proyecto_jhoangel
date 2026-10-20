@@ -11,6 +11,7 @@ final class FiscalDocumentUseCases
         public readonly FindFiscalDocumentUseCase $find,
         public readonly RegisterFiscalDocumentUseCase $register,
         public readonly VoidFiscalDocumentUseCase $void,
+        public readonly ReadFiscalDocumentImageUseCase $readImage,
     ) {
     }
 }

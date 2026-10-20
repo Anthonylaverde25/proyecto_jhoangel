@@ -24,6 +24,7 @@ class CompanyResource extends JsonResource
             'id' => $this->resource->getId(),
             'name' => $this->resource->getName(),
             'renspa' => $this->resource->getRenspa(),
+            'cuit' => $this->resource->getCuit(),
             'location' => $this->resource->getLocation(),
             'is_active' => $this->resource->isActive(),
             'role' => $this->resource->getRole(),

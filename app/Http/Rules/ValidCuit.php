@@ -4,23 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Rules;
 
-use App\Core\Exceptions\VeterinaryDomainException;
 use App\Core\ValueObjects\Cuit;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 
 /**
- * The CUIT's check digit as a request rule — DELIBERATELY NOT WIRED ANYWHERE.
+ * The CUIT's length and check digit as a request rule. Wired only where the CUIT is a key — the
+ * provider requests, because it identifies the issuer of every fiscal document.
  *
- * ADR-43 decided the institution's CUIT describes rather than gates: nothing reads it to decide
- * anything, so refusing to store what the professional typed bought nothing and cost the most
- * expensive operation in the app. The warning lives in the interface instead, next to the field.
- *
- * This is kept ready for the day validation is tightened — on request, "primero hagamos funcionar
- * y a futuro validaremos mejor". To turn it on, add `new ValidCuit()` to the `*.cuit` rules of
- * RegisterBullEvaluationSheetRequest, SignExtractionActRequest, RegisterSampleShipmentRequest and
- * both institution blocks of RegisterLabReportRequest — and expect the tests in CuitValidationTest
- * to need flipping back.
+ * Institutions stay out of it on purpose (ADR-43): there the CUIT describes, and a typo is warned
+ * about next to the field, never refused.
  */
 class ValidCuit implements ValidationRule
 {
@@ -37,11 +30,11 @@ class ValidCuit implements ValidationRule
             return;
         }
 
-        try {
-            Cuit::fromString($value);
-        } catch (VeterinaryDomainException $exception) {
-            // The value object already words this well, and one wording beats two that drift.
-            $fail($exception->getMessage());
+        // The value object words the reason, and one wording beats two that drift.
+        $reason = Cuit::fromString($value)->invalidReason();
+
+        if ($reason !== null) {
+            $fail($reason);
         }
     }
 }

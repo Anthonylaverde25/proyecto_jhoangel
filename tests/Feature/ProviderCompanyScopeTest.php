@@ -17,7 +17,7 @@ use Tests\Feature\Veterinary\VeterinaryTestCase;
  */
 class ProviderCompanyScopeTest extends VeterinaryTestCase
 {
-    private const CUIT = '30-55555555-5';
+    private const CUIT = '30555555551';
 
     private Company $other;
 
@@ -51,7 +51,7 @@ class ProviderCompanyScopeTest extends VeterinaryTestCase
     public function test_each_company_lists_only_its_own_providers(): void
     {
         Provider::withoutGlobalScopes()->create([
-            'company_id' => $this->other->id, 'name' => 'Solo del vecino', 'cuit' => '30-66666666-6',
+            'company_id' => $this->other->id, 'name' => 'Solo del vecino', 'cuit' => '30666666662',
         ]);
 
         $names = array_column($this->apiAs('GET', '/providers')->assertOk()->json(), 'name');
@@ -62,7 +62,7 @@ class ProviderCompanyScopeTest extends VeterinaryTestCase
     public function test_the_list_filters_by_role(): void
     {
         $this->apiAs('POST', '/providers', [
-            'name' => 'YPF Agro Test', 'cuit' => '30-77777777-7', 'supplies_livestock' => false, 'supplies_items' => true,
+            'name' => 'YPF Agro Test', 'cuit' => '30777777773', 'supplies_livestock' => false, 'supplies_items' => true,
         ])->assertStatus(201)->assertJsonPath('supplies_items', true);
 
         $livestock = array_column($this->apiAs('GET', '/providers?supplies=livestock')->json(), 'name');
@@ -75,17 +75,17 @@ class ProviderCompanyScopeTest extends VeterinaryTestCase
     public function test_a_provider_needs_at_least_one_role(): void
     {
         $response = $this->apiAs('POST', '/providers', [
-            'name' => 'Sin rol', 'cuit' => '30-88888888-8', 'supplies_livestock' => false, 'supplies_items' => false,
+            'name' => 'Sin rol', 'cuit' => '30888888884', 'supplies_livestock' => false, 'supplies_items' => false,
         ]);
 
         $response->assertStatus(422);
-        $this->assertFalse(Provider::withoutGlobalScopes()->where('cuit', '30-88888888-8')->exists());
+        $this->assertFalse(Provider::withoutGlobalScopes()->where('cuit', '30888888884')->exists());
     }
 
     public function test_a_farm_cannot_hang_from_a_provider_of_another_company(): void
     {
         $foreign = Provider::withoutGlobalScopes()->create([
-            'company_id' => $this->other->id, 'name' => 'Proveedor del vecino', 'cuit' => '30-99999999-9',
+            'company_id' => $this->other->id, 'name' => 'Proveedor del vecino', 'cuit' => '30999999995',
         ]);
 
         $this->apiAs('POST', '/farms', ['name' => 'Campo ajeno', 'provider_id' => $foreign->id])

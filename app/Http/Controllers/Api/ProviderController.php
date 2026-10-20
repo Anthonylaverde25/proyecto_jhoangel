@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Application\DTOs\CreateProviderDTO;
+use App\Application\DTOs\UpdateProviderDTO;
 use App\Application\UseCases\Providers\ProviderUseCases;
 use App\Core\Interfaces\ICompanyContext;
 use App\Http\Controllers\Controller;
@@ -13,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 use App\Http\Requests\Providers\CreateProviderRequest;
+use App\Http\Requests\Providers\UpdateProviderRequest;
 use App\Http\Requests\Providers\UpdateProviderRolesRequest;
 
 class ProviderController extends Controller
@@ -61,6 +63,20 @@ class ProviderController extends Controller
             new ProviderResource($entity),
             201
         );
+    }
+
+    /**
+     * Corrige los datos del proveedor. El CUIT sólo cambia mientras no tenga comprobantes.
+     */
+    public function update(UpdateProviderRequest $request, int $id): JsonResponse
+    {
+        $entity = ($this->provider->update)(
+            $id,
+            UpdateProviderDTO::fromArray($request->validated()),
+            (int) app(ICompanyContext::class)->getCompanyId()
+        );
+
+        return response()->json(new ProviderResource($entity));
     }
 
     /**

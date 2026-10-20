@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -16,6 +17,7 @@ class Company extends Model
     protected $fillable = [
         'name',
         'renspa',
+        'cuit',
         'location',
         'is_active',
     ];
@@ -23,6 +25,14 @@ class Company extends Model
     protected $casts = [
         'is_active' => 'boolean',
     ];
+
+    /** Digits only, whoever writes it: it is compared against the CUITs printed on documents. */
+    protected function cuit(): Attribute
+    {
+        return Attribute::make(
+            set: fn (?string $value) => $value === null || trim($value) === '' ? null : preg_replace('/\D/', '', $value),
+        );
+    }
 
     public function users(): BelongsToMany
     {

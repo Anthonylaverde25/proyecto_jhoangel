@@ -76,7 +76,7 @@ final class ImportOCRGestationTest extends TestCase
 
         // 6. Create Provider, Farm, Batch, Service Order
         $provider = Provider::firstOrCreate(
-            ['cuit' => '30-98765432-1'],
+            ['cuit' => '30987654321'],
             ['name' => 'Gestation Provider', 'is_active' => true]
         );
         // Inside this test's company: a farm of another company cannot hold this company's batch.

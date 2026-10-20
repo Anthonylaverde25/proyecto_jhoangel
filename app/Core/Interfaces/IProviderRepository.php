@@ -25,5 +25,8 @@ interface IProviderRepository
     /** Persists only the two role flags; the provider's farms are left untouched. */
     public function updateRoles(ProviderEntity $provider): void;
 
+    /** Persists only the identity and contact fields; roles and farms are left untouched. */
+    public function updateDetails(ProviderEntity $provider): void;
+
     public function delete(int $id): bool;
 }
