@@ -19,7 +19,7 @@ class CaravanMovementMapper
             (string) $model->type,
             $model->movement_date,
             $model->observations,
-            $model->caravan ? (string) $model->caravan->identification : null,
+            $model->caravan?->identification !== null ? (string) $model->caravan->identification : null,
             $model->from_batch_id !== null ? (int) $model->from_batch_id : null,
             $model->to_batch_id !== null ? (int) $model->to_batch_id : null
         );

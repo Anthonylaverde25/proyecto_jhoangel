@@ -7,6 +7,8 @@ namespace App\Core\Enums;
 enum PhysiologicalState: string
 {
     case IN_SERVICE = 'in_service';
+    /** In a running service with a calf at foot: both facts matter to the herd. */
+    case IN_SERVICE_LACTATING = 'in_service_lactating';
     case PREGNANT_LACTATING = 'pregnant_lactating';
     case PREGNANT_DRY = 'pregnant_dry';
     case EMPTY_LACTATING = 'empty_lactating';
@@ -21,6 +23,7 @@ enum PhysiologicalState: string
     {
         return match ($this) {
             self::IN_SERVICE          => 'En Servicio / Entore',
+            self::IN_SERVICE_LACTATING => 'En servicio · con cría al pie',
             self::PREGNANT_LACTATING  => 'Preñada y Lactando',
             self::PREGNANT_DRY        => 'Preñada y Seca',
             self::EMPTY_LACTATING     => 'Vacía y Lactando',

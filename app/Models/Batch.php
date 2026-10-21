@@ -103,7 +103,7 @@ class Batch extends Model
      * their mother's batch, so its head and its mean weight mix them with the adults. Adds
      * `nursing_count`, `nursing_weighed_count` and `nursing_total_weight`, read with the same
      * definition as the batch aggregates (caravans in possession, their current weight), so the
-     * adults are exactly the rest.
+     * adults are exactly the rest. Also `untagged_calf_count`: the calves still waiting for their tag.
      */
     public function scopeWithNursingCalves(Builder $query): Builder
     {
@@ -123,6 +123,12 @@ class Batch extends Model
             'nursing_count' => $nursing()->selectRaw('COUNT(*)'),
             'nursing_weighed_count' => $weighed()->selectRaw('COUNT(*)'),
             'nursing_total_weight' => $weighed()->selectRaw('COALESCE(SUM(caravan_weights.weight), 0)'),
+            // Calves born here that still wait for their tag: already caravans, already head.
+            'untagged_calf_count' => Caravan::query()
+                ->whereNull('caravans.identification')
+                ->whereDoesntHave('death')
+                ->whereColumn('caravans.batch_id', $this->getTable() . '.id')
+                ->selectRaw('COUNT(*)'),
         ]);
     }
 

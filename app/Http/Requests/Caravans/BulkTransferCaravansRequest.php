@@ -31,6 +31,7 @@ class BulkTransferCaravansRequest extends FormRequest
             'target_batch_id' => 'nullable|integer|exists:batches,id',
             'reason'          => 'nullable|string|max:500',
             'movement_date'   => 'nullable|date',
+            'weaning_type'    => 'nullable|string|in:TRADITIONAL,ANTICIPATED,EARLY',
 
             // Destination batch created in the same transaction as the transfer.
             'new_batch'                 => 'nullable|array',

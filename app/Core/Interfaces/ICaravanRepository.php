@@ -106,6 +106,21 @@ interface ICaravanRepository
     public function countByBatch(int $batchId): int;
 
     /**
+     * The calves of the list that still wait for their tag, named after their mother.
+     *
+     * @param int[] $caravanIds
+     * @return array<int, string> caravan id => label ("Cría de 4521 ♀")
+     */
+    public function untaggedLabels(array $caravanIds): array;
+
+    /**
+     * The calves of a batch that still wait for their tag, oldest first.
+     *
+     * @return list<array{id: int, label: string, sex: string, birth_date: string, birth_weight: ?float, mother_id: int, mother_identification: string}>
+     */
+    public function findUntaggedCalvesByBatch(int $batchId): array;
+
+    /**
      * @param int $batchId
      * @return float|null
      */

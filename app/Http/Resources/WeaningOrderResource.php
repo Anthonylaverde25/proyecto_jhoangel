@@ -95,6 +95,7 @@ class WeaningOrderResource extends JsonResource
                 'target_batch_id' => $d->getTargetBatchId(),
                 'target_batch_name' => $d->getTargetBatchName(),
                 'new_batch_name' => $d->getNewBatchName(),
+                'stays_in_place' => $d->staysInPlace(),
                 'is_confined' => $d->isConfined(),
                 'management_is_confined' => $d->effectiveIsConfined(),
                 'resolved_batch_id' => $d->getResolvedBatchId(),

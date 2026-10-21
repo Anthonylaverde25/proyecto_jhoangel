@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\AnalysisController;
 use App\Http\Controllers\Api\BreedController;
 use App\Http\Controllers\Api\CaravanController;
+use App\Http\Controllers\Api\DeathController;
+use App\Http\Controllers\Api\TagCalvesController;
 use App\Http\Controllers\Api\FieldMappingController;
 use App\Http\Controllers\Api\ImportCaravansController;
 use App\Http\Controllers\Api\LookupCaravansController;
@@ -114,6 +116,11 @@ Route::middleware([
     Route::patch('/batches/{id}/management', [BatchController::class, 'changeManagement']);
     Route::get('/batches/{id}/weights', [BatchController::class, 'getWeightHistory']);
     Route::get('/batches/{id}/gestating-caravans', [CaravanController::class, 'gestatingByBatch']);
+    Route::get('/batches/{batchId}/untagged-calves', [TagCalvesController::class, 'index'])->whereNumber('batchId');
+    Route::post('/caravans/tag', [TagCalvesController::class, 'store']);
+    Route::get('/death-causes', [DeathController::class, 'causes']);
+    Route::get('/death-batches', [DeathController::class, 'deathBatches']);
+    Route::post('/caravans/deaths', [DeathController::class, 'store']);
 
 
     Route::get('/breeds', [BreedController::class, 'index']);

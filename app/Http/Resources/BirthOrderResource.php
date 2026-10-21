@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Core\ValueObjects\AnimalLabel;
+
 use App\Core\Entities\BirthOrderAnimalEntity;
 use App\Core\Entities\BirthOrderEntity;
 use App\Core\Entities\TransferOrderHistoryEntity;
@@ -122,6 +124,9 @@ class BirthOrderResource extends JsonResource
             'overdue_notes' => $a->getOverdueNotes(),
             'calf_caravan_id' => $a->getCalfCaravanId(),
             'calf_identification' => $a->getCalfIdentification(),
+            'calf_label' => $a->getCalfCaravanId() !== null
+                ? AnimalLabel::of($a->getCalfIdentification(), $a->getMotherIdentification(), $a->getCalfSex())
+                : null,
             'calf_sex' => $a->getCalfSex(),
             'calf_batch_id' => $a->getCalfBatchId(),
             'calf_batch_name' => $a->getCalfBatchName(),

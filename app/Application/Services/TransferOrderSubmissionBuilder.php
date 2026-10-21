@@ -32,7 +32,8 @@ final class TransferOrderSubmissionBuilder
         string $movementDate,
         string $origin,
         ?int $userId,
-        array $fieldDataByCaravanId = []
+        array $fieldDataByCaravanId = [],
+        ?\App\Core\Enums\WeaningType $weaningType = null
     ): Cact01SubmissionDTO
     {
         $pending = $order->pendingAnimals();
@@ -106,7 +107,8 @@ final class TransferOrderSubmissionBuilder
             rows: array_values($rows),
             origin: $origin,
             transferOrderId: $order->getId(),
-            actionUserId: $userId
+            actionUserId: $userId,
+            weaningType: $weaningType
         );
     }
 }

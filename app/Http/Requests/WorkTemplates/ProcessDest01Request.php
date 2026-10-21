@@ -35,6 +35,7 @@ class ProcessDest01Request extends FormRequest
             'destinations.*.new_batch'          => 'nullable|array',
             'destinations.*.new_batch.name'     => 'required_with:destinations.*.new_batch|string|max:255',
             'destinations.*.new_batch.is_confined' => 'nullable|boolean',
+            'destinations.*.stays_in_place'     => 'nullable|boolean',
             'sistema_manejo'        => 'nullable|string|max:50',
             // The weaning order the sheet fulfils, as resolved from its code, and the code as read.
             'weaning_order_id'      => 'nullable|integer',

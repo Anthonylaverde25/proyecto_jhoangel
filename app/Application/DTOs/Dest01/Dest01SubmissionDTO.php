@@ -37,7 +37,7 @@ final readonly class Dest01SubmissionDTO
     public const SINGLE_KEY = 'DESTETE';
 
     /**
-     * @param list<array{key: string, target_batch_id: ?int, new_batch: ?array{name: string, is_confined: ?bool}}> $destinations
+     * @param list<array{key: string, target_batch_id: ?int, new_batch: ?array{name: string, is_confined: ?bool}, stays_in_place?: bool}> $destinations
      * @param array<int, array{caravana: string, caravana_madre: ?string, peso: ?float, observations: ?string, destination_key: string, manejo: ?bool, cs_nueva: ?string, category_id?: ?int, subcategory_id?: ?int}> $rows
      *        `cs_nueva` is the C/S cell as read; `category_id` / `subcategory_id` are internal, set only by a screen.
      */
@@ -70,7 +70,7 @@ final readonly class Dest01SubmissionDTO
      * The same submission with its destinations replaced. Used when an order already knows the
      * batch a destination resolved to on an earlier round.
      *
-     * @param list<array{key: string, target_batch_id: ?int, new_batch: ?array{name: string, is_confined: ?bool}}> $destinations
+     * @param list<array{key: string, target_batch_id: ?int, new_batch: ?array{name: string, is_confined: ?bool}, stays_in_place?: bool}> $destinations
      */
     public function withDestinations(array $destinations): self
     {
@@ -112,6 +112,8 @@ final readonly class Dest01SubmissionDTO
                         ? (bool) $newBatch['is_confined']
                         : null,
                 ] : null,
+                // The calves are weaned where they are.
+                'stays_in_place' => filter_var($destination['stays_in_place'] ?? false, FILTER_VALIDATE_BOOLEAN),
             ];
         }
 

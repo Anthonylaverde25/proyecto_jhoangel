@@ -39,6 +39,9 @@ final class ProcessCact01Controller extends Controller
                 'header_errors' => $e->getHeaderErrors(),
                 'row_errors' => $e->getRowErrors(),
             ], 422);
+        } catch (\App\Core\Exceptions\MotherCalfSeparationException $e) {
+            // Rendered with its code and field, so the screen asks for the kind of weaning.
+            throw $e;
         } catch (DomainException $e) {
             return response()->json([
                 'status' => 'invalid',

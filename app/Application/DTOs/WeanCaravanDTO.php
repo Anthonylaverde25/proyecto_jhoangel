@@ -15,7 +15,9 @@ final readonly class WeanCaravanDTO
         public ?string $notes = null,
         public ?int $newCategoryId = null,
         public ?int $newSubcategoryId = null,
-        public ?CreateBatchDTO $newBatch = null
+        public ?CreateBatchDTO $newBatch = null,
+        /** The kind of weaning, chosen by whoever weaned: never inferred. */
+        public ?\App\Core\Enums\WeaningType $weaningType = null
     ) {
     }
 

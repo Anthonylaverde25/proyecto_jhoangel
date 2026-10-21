@@ -66,6 +66,10 @@ class BatchMapper
             );
         }
 
+        if (array_key_exists('untagged_calf_count', $model->getAttributes())) {
+            $entity->setUntaggedCalfCount((int) $model->untagged_calf_count);
+        }
+
         if ($model->relationLoaded('farm') && $model->farm) {
             $entity->setFarmName($model->farm->name);
             

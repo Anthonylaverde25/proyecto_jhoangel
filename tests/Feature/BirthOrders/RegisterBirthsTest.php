@@ -43,12 +43,35 @@ class RegisterBirthsTest extends BirthOrderTestCase
             'animals' => [['caravan_id' => $a->id]],
         ])->assertStatus(422);
 
-        // Missing calf tag: the processing refuses it, and the order is rolled back.
+        // A calf tag already in use: the processing refuses it, and the order is rolled back.
         $this->apiAs('POST', '/birth-orders/register', [
-            'animals' => [['caravan_id' => $a->id, 'outcome' => 'LIVE', 'calf_sex' => 'M', 'birth_date' => now()->toDateString()]],
-        ])->assertStatus(422)->assertJsonPath('row_errors.0.errors.0.code', 'CALF_TAG_MISSING');
+            'animals' => [['caravan_id' => $a->id, 'outcome' => 'LIVE', 'calf_identification' => 'BO-N1', 'calf_sex' => 'M', 'birth_date' => now()->toDateString()]],
+        ])->assertStatus(422)->assertJsonPath('row_errors.0.errors.0.code', 'CALF_TAG_IN_USE');
 
         $this->assertSame($before, BirthOrder::count());
+    }
+
+    public function test_a_calf_may_be_born_without_its_tag(): void
+    {
+        $a = $this->pregnantFemale('BO-U1');
+
+        $response = $this->apiAs('POST', '/birth-orders/register', [
+            'animals' => [['caravan_id' => $a->id, 'outcome' => 'LIVE', 'calf_sex' => 'H', 'calf_weight' => 31, 'birth_date' => now()->toDateString()]],
+        ])->assertStatus(201);
+
+        // The order is done: the tag is a later fact, followed from the batch.
+        $this->assertSame('EXECUTED', $response->json('order.status'));
+        $this->assertSame(1, $response->json('data.untagged_calves_count'));
+        $this->assertSame('CALF_UNTAGGED', collect($response->json('data.warnings'))->pluck('code')->first());
+
+        $line = collect($response->json('order.animals'))->firstWhere('caravan_id', $a->id);
+        $this->assertNull($line['calf_identification']);
+        $this->assertSame('Cría de BO-U1 ♀', $line['calf_label']);
+
+        $calf = Caravan::find($line['calf_caravan_id']);
+        $this->assertNull($calf->identification);
+        $this->assertNull($calf->tagged_at);
+        $this->assertSame($this->breedingA->id, (int) $calf->batch_id);
     }
 
     public function test_a_female_held_by_an_open_order_is_registered_in_that_order(): void
@@ -99,11 +122,11 @@ class RegisterBirthsTest extends BirthOrderTestCase
         $openId = (int) $this->emit([$held])->json('id');
         $before = BirthOrder::count();
 
-        // The free female registers fine; the held one lacks her calf tag.
+        // The free female registers fine; the held one's calf takes a tag already in use.
         $this->apiAs('POST', '/birth-orders/register', [
             'animals' => [
                 ['caravan_id' => $free->id, 'outcome' => 'STILLBORN', 'birth_date' => now()->toDateString()],
-                ['caravan_id' => $held->id, 'outcome' => 'LIVE', 'calf_sex' => 'M', 'birth_date' => now()->toDateString()],
+                ['caravan_id' => $held->id, 'outcome' => 'LIVE', 'calf_identification' => 'BO-K2', 'calf_sex' => 'M', 'birth_date' => now()->toDateString()],
             ],
         ])->assertStatus(422)->assertJsonPath('row_errors.0.caravana_madre', 'BO-K1');
 

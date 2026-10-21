@@ -94,8 +94,8 @@ final class WeanCaravanUseCase
                 $renspa = $this->companyRepository->findById($calf->getCompanyId())?->getRenspa() ?? '';
             }
 
-            // 4. Mark is_nursing = false in caravan_lineage
-            $this->lineageRepository->wean($dto->caravanId);
+            // 4. End the time at foot as a weaning: the fact lives on the calf, with its day and kind.
+            $this->lineageRepository->wean($dto->caravanId, substr($dto->weaningDate, 0, 10), $dto->weaningType);
 
             // 5. Move the calf (origin batch read before it changes) and, when a new category was
             // decided, reclassify it whole: a new category without subcategory clears the old one.
@@ -142,13 +142,16 @@ final class WeanCaravanUseCase
                 renspa: $renspa,
                 type: 'WEANING',
                 movementDate: $weaningDate,
-                observations: $dto->notes ?? 'Weaned and moved to batch: ' . $batch->getName(),
+                observations: $dto->notes ?? ($fromBatchId === $targetBatchId
+                    ? 'Destetado en su lote: ' . $batch->getName()
+                    : 'Destetado y movido al lote: ' . $batch->getName()),
                 fromBatchId: $fromBatchId,
                 toBatchId: $targetBatchId
             ));
 
-            // 8. Recalculate average weight of the target batch
-            if ($recalculateTargetWeight) {
+            // 8. Recalculate average weight of the target batch. A calf weaned where it stands
+            // changes no composition.
+            if ($recalculateTargetWeight && $fromBatchId !== $targetBatchId) {
                 $this->batchWeightService->recalculateBatchWeight($targetBatchId, BatchWeightCause::MOVEMENT_IN);
             }
 

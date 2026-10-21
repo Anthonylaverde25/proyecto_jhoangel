@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Application\DTOs\Cact01;
 
+use App\Core\Enums\WeaningType;
+
 /**
  * CACT-01: change of productive activity, measured at the chute.
  *
@@ -74,7 +76,9 @@ final readonly class Cact01SubmissionDTO
          * sheet was printed blank and its order is created on confirming; a code that did not
          * resolve to `transferOrderId` is rejected instead.
          */
-        public ?string $paperOrderCode = null
+        public ?string $paperOrderCode = null,
+        /** The kind of weaning of the calves the movement parts from their mothers, chosen by the user. */
+        public ?WeaningType $weaningType = null
     ) {
     }
 
@@ -103,7 +107,8 @@ final readonly class Cact01SubmissionDTO
             origin: $this->origin,
             transferOrderId: $this->transferOrderId,
             actionUserId: $this->actionUserId,
-            paperOrderCode: $this->paperOrderCode
+            paperOrderCode: $this->paperOrderCode,
+            weaningType: $this->weaningType
         );
     }
 
@@ -130,7 +135,8 @@ final readonly class Cact01SubmissionDTO
             origin: $this->origin,
             transferOrderId: null,
             actionUserId: $this->actionUserId,
-            paperOrderCode: null
+            paperOrderCode: null,
+            weaningType: $this->weaningType
         );
     }
 
@@ -197,7 +203,8 @@ final readonly class Cact01SubmissionDTO
             origin: ($data['origin'] ?? null) === self::ORIGIN_SCREEN ? self::ORIGIN_SCREEN : self::ORIGIN_SHEET,
             transferOrderId: isset($data['transfer_order_id']) ? (int) $data['transfer_order_id'] : null,
             actionUserId: $actionUserId,
-            paperOrderCode: self::nullableString($data['orden_transferencia'] ?? null)
+            paperOrderCode: self::nullableString($data['orden_transferencia'] ?? null),
+            weaningType: WeaningType::tryFrom((string) ($data['weaning_type'] ?? ''))
         );
     }
 

@@ -27,7 +27,7 @@ class BulkBirthRequest extends FormRequest
     {
         return [
             'births' => 'required|array|min:1',
-            'births.*.calf_identification' => 'required|string',
+            'births.*.calf_identification' => 'nullable|string|max:100',
             'births.*.calf_sex'            => ['required', new Enum(AnimalSex::class)],
             'births.*.calf_category'       => 'nullable|string',
             'births.*.calf_teeth'          => 'nullable|integer|min:0|max:99',

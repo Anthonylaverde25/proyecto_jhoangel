@@ -37,7 +37,8 @@ class WeaningOrderMapper
                     resolvedBatchId: $destination->resolved_batch_id,
                     targetBatchName: $target?->name,
                     resolvedBatchName: $destination->relationLoaded('resolvedBatch') ? $destination->resolvedBatch?->name : null,
-                    targetBatchIsConfined: $target?->is_confined !== null ? (bool) $target->is_confined : null
+                    targetBatchIsConfined: $target?->is_confined !== null ? (bool) $target->is_confined : null,
+                    staysInPlace: (bool) ($destination->stays_in_place ?? false)
                 );
             }
         }

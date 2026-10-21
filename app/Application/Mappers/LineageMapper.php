@@ -6,6 +6,7 @@ namespace App\Application\Mappers;
 
 use App\Models\CaravanLineage;
 use App\Core\Entities\LineageEntity;
+use App\Core\Enums\WeaningType;
 
 class LineageMapper
 {
@@ -28,7 +29,10 @@ class LineageMapper
             (bool) $model->is_nursing,
             $model->sire_assigned_at instanceof \DateTimeInterface ? $model->sire_assigned_at : null,
             $model->sire_identification_method ? (string) $model->sire_identification_method : null,
-            $model->sire_notes ? (string) $model->sire_notes : null
+            $model->sire_notes ? (string) $model->sire_notes : null,
+            $model->nursing_ended_at !== null ? substr((string) ($model->nursing_ended_at instanceof \DateTimeInterface ? $model->nursing_ended_at->format('Y-m-d') : $model->nursing_ended_at), 0, 10) : null,
+            $model->nursing_end_reason !== null ? (string) $model->nursing_end_reason : null,
+            WeaningType::tryFrom((string) $model->weaning_type)
         );
     }
 
@@ -50,6 +54,9 @@ class LineageMapper
         $model->sire_assigned_at           = $entity->getSireAssignedAt();
         $model->sire_identification_method = $entity->getSireIdentificationMethod();
         $model->sire_notes                 = $entity->getSireNotes();
+        $model->nursing_ended_at           = $entity->getNursingEndedAt();
+        $model->nursing_end_reason         = $entity->getNursingEndReason();
+        $model->weaning_type               = $entity->getWeaningType()?->value;
 
         return $model;
     }

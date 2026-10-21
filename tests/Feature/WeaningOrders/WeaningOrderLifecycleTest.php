@@ -150,13 +150,28 @@ class WeaningOrderLifecycleTest extends WeaningOrderTestCase
         $this->emitSingle([$weaned])->assertStatus(422)->assertJsonPath('code', 'ALREADY_WEANED');
     }
 
-    public function test_a_destination_has_to_be_a_weaning_batch(): void
+    public function test_a_destination_is_an_own_working_batch_never_a_death_batch(): void
     {
         $calf = $this->nursingCalf('WO-B1', 'M');
+        $deathBatch = \App\Models\Batch::create([
+            'company_id' => $this->company->id,
+            'name' => 'Muertes WO',
+            'activity_id' => $this->activityId('CRIA'),
+            'batch_type_id' => (int) \App\Models\BatchType::withoutGlobalScopes()->where('code', 'INTERNAL_DEATH')->value('id'),
+            'is_active' => true,
+        ]);
 
+        // The weaning batch is recommended, not required: any own working batch receives them…
         $this->emitSingle([$calf], [
-            'destinations' => [['key' => 'd1', 'label' => '', 'target_batch_id' => $this->breedingA->id]],
-        ])->assertStatus(422)->assertJsonPath('code', 'NOT_A_WEANING_BATCH');
+            'destinations' => [['key' => 'd1', 'label' => '', 'target_batch_id' => $this->breedingB->id]],
+        ])->assertStatus(201);
+
+        // …never a death batch.
+        $other = $this->nursingCalf('WO-B2', 'M');
+        $this->emitSingle([$other], [
+            'destinations' => [['key' => 'd1', 'label' => '', 'target_batch_id' => $deathBatch->id]],
+        ])->assertStatus(422)->assertJsonPath('code', 'NOT_A_WEANING_DESTINATION');
+        $calf = $other;
 
         // A new batch named like another weaning batch is the same batch written twice.
         $this->emitSingle([$calf], [

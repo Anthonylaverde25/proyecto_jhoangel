@@ -29,6 +29,10 @@ class CaravanSummaryResource extends JsonResource
         return [
             'id'                => $row->id,
             'identification'    => $row->identification,
+            'label'             => $row->label,
+            'is_tagged'         => $row->identification !== null,
+            'is_dead'           => $row->deathDate !== null,
+            'death'             => $row->deathDate !== null ? ['date' => $row->deathDate, 'cause' => $row->deathCause] : null,
             'category'          => $categoryName,
             'category_id'       => $row->categoryId,
             'category_name'     => $categoryName,

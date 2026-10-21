@@ -47,6 +47,20 @@ class RegisterWeaningTest extends WeaningOrderTestCase
         $this->assertFalse($this->isNursing($notWeighed));
     }
 
+    public function test_a_calf_without_its_tag_cannot_be_weaned(): void
+    {
+        $calf = $this->nursingCalf('WO-U1', 'H');
+        $calf->update(['identification' => null]);
+        $before = WeaningOrder::count();
+
+        $this->register([$calf])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'UNTAGGED_ANIMAL')
+            ->assertJsonPath('message', 'Sin caravana: Cría de WO-U1-M ♀. Caravanealas antes de destetarlas.');
+
+        $this->assertSame($before, WeaningOrder::count());
+    }
+
     public function test_one_calf_can_be_registered_with_a_declared_category(): void
     {
         $female = $this->nursingCalf('WO-R3', 'H');

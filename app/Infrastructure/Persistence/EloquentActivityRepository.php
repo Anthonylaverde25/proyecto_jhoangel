@@ -63,7 +63,7 @@ class EloquentActivityRepository implements IActivityRepository
                 $sortOrder
             );
 
-            $entity->setBatches($model->batches->map(fn($b) => new BatchEntity(
+            $entity->setBatches($model->batches->map(fn($b) => tap(new BatchEntity(
                 $b->id,
                 $b->name,
                 $b->farm_id ? (int) $b->farm_id : null,
@@ -86,7 +86,7 @@ class EloquentActivityRepository implements IActivityRepository
                 isConfined: $b->is_confined !== null ? (bool) $b->is_confined : null,
                 wasEmptied: (bool) ($b->outgoing_movements_exists ?? false),
                 pendingIdentificationCount: (int) ($b->pending_identification_count ?? 0)
-            ))->toArray());
+            ), fn (BatchEntity $batch) => $batch->setUntaggedCalfCount((int) ($b->untagged_calf_count ?? 0))))->toArray());
 
             return $entity;
         })->toArray();
@@ -121,7 +121,7 @@ class EloquentActivityRepository implements IActivityRepository
                 $sortOrder
             );
 
-            $entity->setBatches($model->batches->map(fn($b) => new BatchEntity(
+            $entity->setBatches($model->batches->map(fn($b) => tap(new BatchEntity(
                 $b->id,
                 $b->name,
                 $b->farm_id ? (int) $b->farm_id : null,
@@ -144,7 +144,7 @@ class EloquentActivityRepository implements IActivityRepository
                 isConfined: $b->is_confined !== null ? (bool) $b->is_confined : null,
                 wasEmptied: (bool) ($b->outgoing_movements_exists ?? false),
                 pendingIdentificationCount: (int) ($b->pending_identification_count ?? 0)
-            ))->toArray());
+            ), fn (BatchEntity $batch) => $batch->setUntaggedCalfCount((int) ($b->untagged_calf_count ?? 0))))->toArray());
 
             return $entity;
         })->toArray();

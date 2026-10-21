@@ -49,7 +49,8 @@ final class ExecuteTransferOrderUseCase
         int $companyId,
         ?int $userId,
         ?string $movementDate = null,
-        array $fieldDataByCaravanId = []
+        array $fieldDataByCaravanId = [],
+        ?\App\Core\Enums\WeaningType $weaningType = null
     ): array {
         $order = $this->repository->findById($id, $companyId) ?? throw TransferOrderDomainException::notFound();
 
@@ -69,7 +70,7 @@ final class ExecuteTransferOrderUseCase
             : (new \DateTimeImmutable('today'))->format('Y-m-d');
 
         return ($this->processCact01)(
-            $this->submissions->fromOrder($order, $date, Cact01SubmissionDTO::ORIGIN_SCREEN, $userId, $fieldDataByCaravanId)
+            $this->submissions->fromOrder($order, $date, Cact01SubmissionDTO::ORIGIN_SCREEN, $userId, $fieldDataByCaravanId, $weaningType)
         );
     }
 }

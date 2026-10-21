@@ -17,7 +17,9 @@ final class BulkTransferCaravansDTO
         public readonly ?int $targetBatchId = null,
         public readonly ?string $reason = null,
         public readonly ?string $movementDate = null,
-        public readonly ?array $newBatch = null
+        public readonly ?array $newBatch = null,
+        /** The kind of weaning of the calves the move parts from their mothers, chosen by the user. */
+        public readonly ?\App\Core\Enums\WeaningType $weaningType = null
     ) {
     }
 
@@ -35,7 +37,8 @@ final class BulkTransferCaravansDTO
             targetBatchId: isset($data['target_batch_id']) ? (int) $data['target_batch_id'] : null,
             reason: isset($data['reason']) ? (string) $data['reason'] : null,
             movementDate: isset($data['movement_date']) ? (string) $data['movement_date'] : null,
-            newBatch: $newBatch
+            newBatch: $newBatch,
+            weaningType: \App\Core\Enums\WeaningType::tryFrom((string) ($data['weaning_type'] ?? ''))
         );
     }
 }

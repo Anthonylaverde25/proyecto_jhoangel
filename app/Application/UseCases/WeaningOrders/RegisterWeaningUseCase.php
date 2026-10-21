@@ -94,7 +94,7 @@ final class RegisterWeaningUseCase
         }
 
         foreach ($dto->destinations as $destination) {
-            if ($destination['target_batch_id'] === null && $destination['is_confined'] === null) {
+            if (!($destination['stays_in_place'] ?? false) && $destination['target_batch_id'] === null && $destination['is_confined'] === null) {
                 $name = $destination['new_batch_name'] ?? $destination['label'];
 
                 throw WeaningOrderDomainException::domainError(

@@ -303,9 +303,12 @@ final class BirthOrderAnimalEntity
             return true;
         }
 
-        return $calfTag !== null
-            && $this->calfIdentification !== null
-            && mb_strtoupper(trim($calfTag)) === mb_strtoupper(trim($this->calfIdentification));
+        // A calf registered without a tag matches a row that still has none.
+        if ($calfTag === null || $this->calfIdentification === null) {
+            return $calfTag === null && $this->calfIdentification === null && $this->calfCaravanId !== null;
+        }
+
+        return mb_strtoupper(trim($calfTag)) === mb_strtoupper(trim($this->calfIdentification));
     }
 
     /**

@@ -257,7 +257,14 @@ class Dest01TemplateProcessingTest extends VeterinaryTestCase
         $this->assertSame(['BATCH_NAME_IN_USE'], array_column($inUse->json('header_errors'), 'code'));
         $this->assertStringContainsString('Elíjalo como lote existente', $inUse->json('header_errors.0.message'));
 
-        $notWeaning = $this->submit(['target_batch_id' => $this->breedingBatch->id], $rows);
+        // A weaning batch is recommended, not required; a death batch never receives weaned calves.
+        $deathBatch = Batch::create([
+            'company_id' => $this->company->id,
+            'name' => 'Muertes DEST',
+            'batch_type_id' => (int) \App\Models\BatchType::withoutGlobalScopes()->where('code', 'INTERNAL_DEATH')->value('id'),
+            'is_active' => true,
+        ]);
+        $notWeaning = $this->submit(['target_batch_id' => $deathBatch->id], $rows);
         $notWeaning->assertStatus(422);
         $this->assertSame(['BATCH_NOT_FOUND'], array_column($notWeaning->json('header_errors'), 'code'));
 

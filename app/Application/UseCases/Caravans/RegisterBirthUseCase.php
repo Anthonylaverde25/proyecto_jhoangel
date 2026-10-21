@@ -93,10 +93,10 @@ final class RegisterBirthUseCase
                 }
             }
 
-            // 4. Validate and create calf identification
-            $calfNumber = new CaravanNumber($dto->calfIdentification);
-            $existingCalf = $this->caravanRepository->findByIdentification($calfNumber);
-            if ($existingCalf !== null) {
+            // 4. The calf may be tagged days later: the tag is checked only when one was given.
+            // Being born here (it gets a lineage below) is what lets it exist without one.
+            $calfNumber = $dto->calfIdentification !== null ? new CaravanNumber($dto->calfIdentification) : null;
+            if ($calfNumber !== null && $this->caravanRepository->findByIdentification($calfNumber) !== null) {
                 throw new DomainException("Ya existe un animal con la identificación '{$dto->calfIdentification}' en esta compañía.");
             }
 
@@ -137,7 +137,9 @@ final class RegisterBirthUseCase
                 reproductiveDetails: $calfReproductiveDetails,
                 gestations: [],
                 lineage: null,
-                categoryId: $calfCategoryId
+                categoryId: $calfCategoryId,
+                // Tagged at birth when the tag came with the calving.
+                taggedAt: $calfNumber !== null ? $dto->birthDate : null
             );
 
             $savedCalf = $this->caravanRepository->save($calfEntity);

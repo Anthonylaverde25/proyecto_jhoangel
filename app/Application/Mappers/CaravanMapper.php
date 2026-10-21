@@ -7,6 +7,7 @@ namespace App\Application\Mappers;
 use App\Models\Caravan;
 use App\Core\Entities\CaravanEntity;
 use App\Core\ValueObjects\CaravanNumber;
+use App\Core\ValueObjects\DeathRecord;
 use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
 use App\Core\ValueObjects\FemaleReproductiveDetails;
@@ -38,12 +39,21 @@ class CaravanMapper
 
     private static function buildEntity(Caravan $model): CaravanEntity
     {
+        $identification = $model->identification !== null && $model->identification !== ''
+            ? new CaravanNumber((string) $model->identification)
+            : null;
+
+        if ($identification === null && $model->exists) {
+            // An untagged calf is named after its mother: the lineage is needed to show it.
+            $model->loadMissing('lineage.mother');
+        }
+
         $breedName = $model->relationLoaded('breedRelation') && $model->breedRelation ? $model->breedRelation->name : null;
         $colorName = $model->relationLoaded('colorRelation') && $model->colorRelation ? $model->colorRelation->name : null;
 
         return new CaravanEntity(
             $model->id,
-            new CaravanNumber((string) $model->identification),
+            $identification,
             (int) $model->teeth,
             $model->entry_weight ? (float) $model->entry_weight : null,
             $model->exit_weight ? (float) $model->exit_weight : null,
@@ -104,7 +114,52 @@ class CaravanMapper
             $model->relationLoaded('subcategoryRelation') && $model->subcategoryRelation ? $model->subcategoryRelation->name : null,
             // Read with withExists('openServiceExposures as is_in_service') by the repository.
             (bool) ($model->getAttributes()['is_in_service'] ?? false),
-            $model->relationLoaded('batch') && $model->batch && $model->batch->relationLoaded('farm') && $model->batch->farm ? $model->batch->farm->name : null
+            $model->relationLoaded('batch') && $model->batch && $model->batch->relationLoaded('farm') && $model->batch->farm ? $model->batch->farm->name : null,
+            $model->tagged_at instanceof \DateTimeInterface ? $model->tagged_at->format('Y-m-d') : ($model->tagged_at !== null ? substr((string) $model->tagged_at, 0, 10) : null),
+            self::death($model),
+            self::nursingCalvesCount($model)
+        );
+    }
+
+    /**
+     * Her own calves still at foot, for a female: read with withCount when the query brought it.
+     */
+    private static function nursingCalvesCount(Caravan $model): ?int
+    {
+        $attributes = $model->getAttributes();
+
+        if (array_key_exists('nursing_calves_count', $attributes)) {
+            return (int) $attributes['nursing_calves_count'];
+        }
+
+        $sex = $model->sex instanceof \BackedEnum ? $model->sex->value : $model->sex;
+
+        if (!$model->exists || $sex !== \App\Core\Enums\AnimalSex::FEMALE->value) {
+            return null;
+        }
+
+        return $model->offspringAsMother()->where('is_nursing', true)->count();
+    }
+
+    private static function death(Caravan $model): ?DeathRecord
+    {
+        if (!$model->exists) {
+            return null;
+        }
+
+        // Read whenever it was not eager loaded: whether an animal is dead guards every flow.
+        $model->loadMissing('death.cause');
+        $death = $model->death;
+
+        if ($death === null) {
+            return null;
+        }
+
+        return new DeathRecord(
+            $death->death_date instanceof \DateTimeInterface ? $death->death_date->format('Y-m-d') : substr((string) $death->death_date, 0, 10),
+            (int) $death->death_cause_id,
+            $death->cause?->name,
+            $death->observations
         );
     }
 
@@ -117,7 +172,8 @@ class CaravanMapper
             $model = new Caravan();
         }
 
-        $model->identification = $entity->getIdentification()->getValue();
+        $model->identification = $entity->findIdentification()?->getValue();
+        $model->tagged_at = $entity->getTaggedAt();
         $model->category_id = $entity->getCategoryId();
         $model->subcategory_id = $entity->getSubcategoryId();
         $model->teeth = $entity->getTeeth();

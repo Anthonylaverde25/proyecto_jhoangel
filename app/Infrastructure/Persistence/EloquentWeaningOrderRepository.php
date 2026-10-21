@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Persistence;
 
+use App\Core\ValueObjects\AnimalLabel;
 use App\Application\Mappers\WeaningOrderMapper;
 use App\Core\Entities\WeaningOrderEntity;
 use App\Core\Enums\TransferOrderStatus;
@@ -166,11 +167,15 @@ class EloquentWeaningOrderRepository implements IWeaningOrderRepository
 
         DB::table('caravans')
             ->leftJoin('caravan_lineage', 'caravan_lineage.caravan_id', '=', 'caravans.id')
+            ->leftJoin('caravans as mothers', 'mothers.id', '=', 'caravan_lineage.mother_id')
+            ->leftJoin('caravan_deaths', 'caravan_deaths.caravan_id', '=', 'caravans.id')
             ->where('caravans.company_id', $companyId)
             ->whereIn('caravans.id', $caravanIds)
             ->get([
                 'caravans.id',
                 'caravans.identification',
+                'mothers.identification as mother_identification',
+                'caravan_deaths.death_date',
                 'caravans.batch_id',
                 'caravans.sex',
                 'caravan_lineage.is_nursing',
@@ -178,7 +183,9 @@ class EloquentWeaningOrderRepository implements IWeaningOrderRepository
             ])
             ->each(function ($row) use (&$facts): void {
                 $facts[(int) $row->id] = [
-                    'identification' => (string) $row->identification,
+                    'identification' => $row->identification !== null ? (string) $row->identification : null,
+                    'label' => AnimalLabel::of($row->identification, $row->mother_identification, (string) $row->sex),
+                    'death_date' => $row->death_date !== null ? substr((string) $row->death_date, 0, 10) : null,
                     'batch_id' => $row->batch_id !== null ? (int) $row->batch_id : null,
                     'sex' => (string) $row->sex,
                     'is_nursing' => $row->is_nursing !== null ? (bool) $row->is_nursing : null,
@@ -207,6 +214,7 @@ class EloquentWeaningOrderRepository implements IWeaningOrderRepository
                     'target_batch_id' => $destination->getTargetBatchId(),
                     'new_batch_name' => $destination->getNewBatchName(),
                     'is_confined' => $destination->isConfined(),
+                    'stays_in_place' => $destination->staysInPlace(),
                     'resolved_batch_id' => $destination->getResolvedBatchId(),
                 ]);
 

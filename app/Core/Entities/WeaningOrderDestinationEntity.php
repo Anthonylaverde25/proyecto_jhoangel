@@ -23,8 +23,17 @@ final class WeaningOrderDestinationEntity
         private ?int $resolvedBatchId = null,
         private readonly ?string $targetBatchName = null,
         private ?string $resolvedBatchName = null,
-        private readonly ?bool $targetBatchIsConfined = null
+        private readonly ?bool $targetBatchIsConfined = null,
+        /** The calves are weaned where they are: no batch is named or created. */
+        private readonly bool $staysInPlace = false
     ) {
+    }
+
+    public const STAY_LABEL = 'Quedan en su lote';
+
+    public function staysInPlace(): bool
+    {
+        return $this->staysInPlace;
     }
 
     /**
@@ -83,7 +92,7 @@ final class WeaningOrderDestinationEntity
 
     public function isNewBatch(): bool
     {
-        return $this->targetBatchId === null;
+        return $this->targetBatchId === null && !$this->staysInPlace;
     }
 
     /**

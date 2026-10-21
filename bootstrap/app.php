@@ -46,6 +46,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
                 return response()->json([
                     'message' => $exception->getMessage(),
+                    // A stable reason ("UNTAGGED_ANIMAL") for the exceptions that carry one.
+                    ...(method_exists($exception, 'getErrorCode') ? ['code' => $exception->getErrorCode()] : []),
                     // Field keys ("lines.3.quantity") let a sheet mark the offending cells.
                     'errors' => $exception instanceof \App\Core\Exceptions\FieldValidationException
                         ? $exception->getErrors()

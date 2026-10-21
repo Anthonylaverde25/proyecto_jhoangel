@@ -16,7 +16,7 @@ use App\Core\Enums\WeaningType;
 final readonly class EmitWeaningOrderDTO
 {
     /**
-     * @param list<array{key: string, label: string, target_batch_id: ?int, new_batch_name: ?string, is_confined: ?bool}> $destinations
+     * @param list<array{key: string, label: string, target_batch_id: ?int, new_batch_name: ?string, is_confined: ?bool, stays_in_place: bool}> $destinations
      * @param list<array{caravan_id: int, destination_key: ?string, target_category_id: ?int, target_subcategory_id: ?int}> $animals
      */
     public function __construct(
@@ -52,6 +52,7 @@ final readonly class EmitWeaningOrderDTO
                 'is_confined' => array_key_exists('is_confined', $destination) && $destination['is_confined'] !== null
                     ? (bool) $destination['is_confined']
                     : null,
+                'stays_in_place' => filter_var($destination['stays_in_place'] ?? false, FILTER_VALIDATE_BOOLEAN),
             ];
         }
 

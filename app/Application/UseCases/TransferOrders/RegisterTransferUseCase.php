@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Application\UseCases\TransferOrders;
 
+use App\Core\Enums\WeaningType;
+
 use App\Application\DTOs\Cact01\Cact01SubmissionDTO;
 use App\Application\DTOs\TransferOrders\EmitTransferOrderDTO;
 use App\Application\DTOs\TransferOrders\RegisterFieldData;
@@ -46,11 +48,11 @@ final class RegisterTransferUseCase
      * @throws Cact01ValidationException
      * @throws DomainException
      */
-    public function __invoke(EmitTransferOrderDTO $dto, array $fieldDataByCaravanId = []): array
+    public function __invoke(EmitTransferOrderDTO $dto, array $fieldDataByCaravanId = [], ?WeaningType $weaningType = null): array
     {
         $this->assertDestinationsResolved($dto);
 
-        return DB::transaction(function () use ($dto, $fieldDataByCaravanId): array {
+        return DB::transaction(function () use ($dto, $fieldDataByCaravanId, $weaningType): array {
             $order = $this->factory->create(
                 $dto,
                 TransferOrderKind::REGISTERED,
@@ -62,7 +64,8 @@ final class RegisterTransferUseCase
                 $dto->movementDate,
                 Cact01SubmissionDTO::ORIGIN_REGISTRATION,
                 $dto->requestedByUserId,
-                $fieldDataByCaravanId
+                $fieldDataByCaravanId,
+                $weaningType
             ));
 
             return [

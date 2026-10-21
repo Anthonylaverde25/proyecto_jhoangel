@@ -53,6 +53,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(\App\Core\Interfaces\IAssistantGateway::class, \App\Infrastructure\Assistant\AiAgentAssistantGateway::class);
         $this->app->bind(\App\Core\Interfaces\IFiscalDocumentReader::class, \App\Infrastructure\OCR\AiAgentFiscalDocumentReader::class);
         $this->app->bind(ICaravanRepository::class, EloquentCaravanRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IDeathCauseRepository::class, \App\Infrastructure\Persistence\EloquentDeathCauseRepository::class);
+        $this->app->bind(\App\Core\Interfaces\ICaravanDeathRepository::class, \App\Infrastructure\Persistence\EloquentCaravanDeathRepository::class);
         $this->app->bind(\App\Core\Interfaces\IBreedingEligibilityRepository::class, \App\Infrastructure\Persistence\EloquentBreedingEligibilityRepository::class);
         $this->app->bind(
             \App\Core\Interfaces\ICaravanRegistrationSubmissionRepository::class,

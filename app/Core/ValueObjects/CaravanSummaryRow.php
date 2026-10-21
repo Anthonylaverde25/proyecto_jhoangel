@@ -18,7 +18,8 @@ final readonly class CaravanSummaryRow
 {
     public function __construct(
         public int $id,
-        public string $identification,
+        /** Null while a calf born here waits for its tag. */
+        public ?string $identification,
         public ?int $categoryId,
         public ?string $categoryName,
         public ?int $subcategoryId,
@@ -38,6 +39,11 @@ final readonly class CaravanSummaryRow
         public bool $isBreedingEligible = true,
         public ?string $breedingExclusionReason = null,
         public ?bool $isReproductiveCategory = null,
+        /** The tag, or "Cría de 4521 ♀" while it has none. */
+        public string $label = '',
+        /** The day it died and the cause, for an animal registered dead. */
+        public ?string $deathDate = null,
+        public ?string $deathCause = null,
     ) {
     }
 }

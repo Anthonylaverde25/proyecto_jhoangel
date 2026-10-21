@@ -29,6 +29,7 @@ class Caravan extends Model
         'breed_id',
         'color_id',
         'identification',
+        'tagged_at',
         'category_id',
         'subcategory_id',
         'teeth',
@@ -45,6 +46,7 @@ class Caravan extends Model
      */
     protected $casts = [
         'identification' => 'string',
+        'tagged_at' => 'date:Y-m-d',
         'category_id' => 'integer',
         'subcategory_id' => 'integer',
         'teeth' => 'integer',
@@ -159,6 +161,14 @@ class Caravan extends Model
     public function lineage(): HasOne
     {
         return $this->hasOne(CaravanLineage::class, 'caravan_id');
+    }
+
+    /**
+     * The death of this animal, when it was registered.
+     */
+    public function death(): HasOne
+    {
+        return $this->hasOne(CaravanDeath::class, 'caravan_id');
     }
 
     /**

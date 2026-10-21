@@ -76,7 +76,11 @@ final class TransferOrderController extends Controller
                 $this->companyId(),
                 $request->user()?->id
             );
-            $result = ($this->useCases->register)($dto, RegisterFieldData::mapFromAnimals($validated['animals']));
+            $result = ($this->useCases->register)(
+                $dto,
+                RegisterFieldData::mapFromAnimals($validated['animals']),
+                \App\Core\Enums\WeaningType::tryFrom((string) ($validated['weaning_type'] ?? ''))
+            );
         } catch (Cact01ValidationException $e) {
             return response()->json([
                 'status' => 'invalid',
@@ -86,6 +90,9 @@ final class TransferOrderController extends Controller
             ], 422);
         } catch (TransferOrderDomainException $e) {
             return $this->domainError($e);
+        } catch (\App\Core\Exceptions\MotherCalfSeparationException $e) {
+            // Rendered with its code and field, so the screen asks for the kind of weaning.
+            throw $e;
         } catch (DomainException $e) {
             return response()->json(['status' => 'invalid', 'message' => $e->getMessage()], 422);
         }
@@ -190,7 +197,8 @@ final class TransferOrderController extends Controller
                 $this->companyId(),
                 $request->user()?->id,
                 $validated['movement_date'] ?? null,
-                RegisterFieldData::mapFromAnimals($validated['animals'] ?? [])
+                RegisterFieldData::mapFromAnimals($validated['animals'] ?? []),
+                \App\Core\Enums\WeaningType::tryFrom((string) ($validated['weaning_type'] ?? ''))
             );
         } catch (Cact01ValidationException $e) {
             return response()->json([
@@ -201,6 +209,9 @@ final class TransferOrderController extends Controller
             ], 422);
         } catch (TransferOrderDomainException $e) {
             return $this->domainError($e);
+        } catch (\App\Core\Exceptions\MotherCalfSeparationException $e) {
+            // Rendered with its code and field, so the screen asks for the kind of weaning.
+            throw $e;
         } catch (DomainException $e) {
             return response()->json(['status' => 'invalid', 'message' => $e->getMessage()], 422);
         }

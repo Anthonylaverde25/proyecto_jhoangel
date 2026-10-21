@@ -13,6 +13,7 @@ use App\Models\Batch;
 use App\Models\BatchType;
 use App\Models\BatchWeight;
 use App\Models\Caravan;
+use App\Models\CaravanLineage;
 use App\Models\CaravanMovement;
 use App\Models\CaravanWeight;
 use App\Models\TransferOrder;
@@ -58,6 +59,32 @@ class RegisterTransferTest extends VeterinaryTestCase
         foreach ($animals as $animal) {
             $this->assertSame($target->id, (int) $animal->fresh()->batch_id);
         }
+    }
+
+    public function test_a_calf_without_its_tag_cannot_be_moved(): void
+    {
+        [$mother] = $this->animals(['REG-U1']);
+        $calf = Caravan::create([
+            'company_id' => $this->company->id,
+            'batch_id' => $this->source->id,
+            'identification' => null,
+            'sex' => 'M',
+            'teeth' => 0,
+        ]);
+        CaravanLineage::create([
+            'caravan_id' => $calf->id,
+            'mother_id' => $mother->id,
+            'birth_date' => now()->subDays(10)->toDateString(),
+            'is_nursing' => true,
+        ]);
+        $target = $this->existingBatch('Recría Sin Caravana REG');
+
+        $this->register([$calf], ['target_batch_id' => $target->id])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'UNTAGGED_ANIMAL')
+            ->assertJsonPath('message', 'Sin caravana: Cría de REG-U1 ♂. Caravanealas antes de trasladarlas.');
+
+        $this->assertSame($this->source->id, (int) $calf->fresh()->batch_id);
     }
 
     public function test_the_movement_keeps_the_declared_date_and_the_order_its_loading_date(): void

@@ -78,6 +78,8 @@ class BatchResource extends JsonResource
             'nursing_count'         => $this->resource->getNursingCount(),
             'nursing_weighed_count' => $this->resource->getNursingWeighedCount(),
             'nursing_total_weight'  => $this->resource->getNursingTotalWeight(),
+            // Calves born here still waiting for their tag ("Caravanear crías").
+            'untagged_calf_count'   => $this->resource->getUntaggedCalfCount() ?? 0,
             'is_active'     => $this->resource->isActive(),
             'is_system'    => $this->resource->isSystem(),
             'min_weight'     => $this->resource->getMinWeight(),

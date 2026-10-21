@@ -43,7 +43,7 @@ interface IWeaningOrderRepository
      * nursing and when it was born. What an order is checked against before it commits a calf.
      *
      * @param int[] $caravanIds
-     * @return array<int, array{identification: string, batch_id: ?int, sex: string, is_nursing: ?bool, birth_date: ?string}> caravan id => facts
+     * @return array<int, array{identification: ?string, label: string, death_date: ?string, batch_id: ?int, sex: string, is_nursing: ?bool, birth_date: ?string}> caravan id => facts (identification null: the calf waits for its tag)
      */
     public function calfFacts(array $caravanIds, int $companyId): array;
 }

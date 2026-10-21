@@ -20,6 +20,7 @@ class TenantDatabaseSeeder extends Seeder
             UserSeeder::class,
             DocumentStatusSeeder::class,
             GestationLossReasonSeeder::class,
+            DeathCauseSeeder::class,
             CaravanFieldMappingSeeder::class,
             BreedSeeder::class,
             ColorSeeder::class,

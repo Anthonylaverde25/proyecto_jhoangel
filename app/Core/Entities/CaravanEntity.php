@@ -8,8 +8,12 @@ use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
 use App\Core\Enums\GestationStage;
 use App\Core\Enums\PhysiologicalState;
+use App\Core\Exceptions\AnimalDeathException;
 use App\Core\Exceptions\DomainException;
+use App\Core\Exceptions\UntaggedAnimalException;
+use App\Core\ValueObjects\AnimalLabel;
 use App\Core\ValueObjects\CaravanNumber;
+use App\Core\ValueObjects\DeathRecord;
 use App\Core\ValueObjects\CaravanProvenance;
 use App\Core\ValueObjects\FemaleReproductiveDetails;
 
@@ -17,7 +21,8 @@ final class CaravanEntity
 {
     public function __construct(
         private readonly ?int $id,
-        private CaravanNumber $identification,
+        /** Null while a calf born in the system waits for its tag. */
+        private ?CaravanNumber $identification,
         private int $teeth,
         private ?float $entryWeight = null,
         private ?float $exitWeight = null,
@@ -47,7 +52,10 @@ final class CaravanEntity
         private ?string $subcategoryCode = null,
         private ?string $subcategoryName = null,
         private bool $isInService = false,
-        private ?string $farmName = null
+        private ?string $farmName = null,
+        private ?string $taggedAt = null,
+        private ?DeathRecord $death = null,
+        private ?int $nursingCalvesCount = null
     ) {
         $this->validateTeeth($teeth);
     }
@@ -129,9 +137,113 @@ final class CaravanEntity
         return $this->currentWeight;
     }
 
+    /**
+     * The tag, for the flows that work by tag.
+     *
+     * @throws UntaggedAnimalException a calf that has not been tagged yet
+     */
     public function getIdentification(): CaravanNumber
     {
+        return $this->identification ?? throw UntaggedAnimalException::for($this);
+    }
+
+    /**
+     * The tag, or null for a calf still waiting for it: for showing or mapping the animal.
+     */
+    public function findIdentification(): ?CaravanNumber
+    {
         return $this->identification;
+    }
+
+    public function isTagged(): bool
+    {
+        return $this->identification !== null;
+    }
+
+    public function getTaggedAt(): ?string
+    {
+        return $this->taggedAt;
+    }
+
+    /**
+     * How the animal is named on screen: its tag, or its mother's while it has none.
+     */
+    public function label(): string
+    {
+        return AnimalLabel::of($this->identification?->getValue(), $this->lineage?->getMotherIdentification(), $this->sex);
+    }
+
+    public function getDeath(): ?DeathRecord
+    {
+        return $this->death;
+    }
+
+    public function isDead(): bool
+    {
+        return $this->death !== null;
+    }
+
+    /**
+     * Registers the death: a calf at foot stops nursing, a pregnant female loses her gestation
+     * (charged to her death). Moving it to a death batch is the caller's job.
+     *
+     * @param int|null $motherDeathLossReasonId the MOTHER_DEATH loss reason, for a pregnant female
+     *
+     * @throws AnimalDeathException dead already, or a date before its birth or after today
+     */
+    public function registerDeath(string $date, int $causeId, ?string $observations, ?int $motherDeathLossReasonId): void
+    {
+        if ($this->death !== null) {
+            throw AnimalDeathException::alreadyDead($this->label(), $this->death->date);
+        }
+
+        $birthDate = $this->lineage?->getBirthDate();
+        if ($birthDate !== null && $date < $birthDate) {
+            throw AnimalDeathException::beforeBirth($this->label(), $birthDate);
+        }
+
+        if ($date > date('Y-m-d')) {
+            throw AnimalDeathException::future($this->label());
+        }
+
+        if ($this->lineage?->isNursing()) {
+            $this->lineage->endNursingByDeath($date);
+        }
+
+        $this->getActiveGestation()?->closeGestation(
+            success: false,
+            endDate: $date,
+            lossReasonId: $motherDeathLossReasonId,
+            lossNotes: 'La hembra murió preñada.'
+        );
+
+        $this->death = new DeathRecord($date, $causeId, null, $observations);
+    }
+
+    /**
+     * Puts the tag on a calf that was born without one.
+     *
+     * @throws UntaggedAnimalException the animal already has a tag
+     * @throws DomainException the date falls before the birth or after today
+     */
+    public function assignTag(CaravanNumber $tag, string $taggedAt): void
+    {
+        if ($this->identification !== null) {
+            throw UntaggedAnimalException::alreadyTagged($this);
+        }
+
+        $birthDate = $this->lineage?->getBirthDate();
+
+        if ($birthDate !== null && $taggedAt < $birthDate) {
+            throw new DomainException("La fecha de caravaneo de la " . lcfirst($this->label()) . " es anterior a su nacimiento ({$birthDate}).");
+        }
+
+        if ($taggedAt > date('Y-m-d')) {
+            throw new DomainException("La fecha de caravaneo de la " . lcfirst($this->label()) . " no puede ser futura.");
+        }
+
+        $this->identification = $tag;
+        $this->taggedAt = $taggedAt;
     }
 
     public function getTeeth(): int
@@ -275,9 +387,33 @@ final class CaravanEntity
         $this->lineage = $lineage;
     }
 
+    /**
+     * Whether this animal is itself a calf at foot of its mother.
+     */
     public function isNursing(): bool
     {
         return $this->lineage?->isNursing() ?? false;
+    }
+
+    /**
+     * How many of her own calves are still at foot; null when it was not read.
+     */
+    public function getNursingCalvesCount(): ?int
+    {
+        return $this->nursingCalvesCount;
+    }
+
+    public function setNursingCalvesCount(?int $count): void
+    {
+        $this->nursingCalvesCount = $count;
+    }
+
+    /**
+     * Whether she has a calf of her own at foot: what makes a female lactating.
+     */
+    public function hasCalfAtFoot(): bool
+    {
+        return ($this->nursingCalvesCount ?? 0) > 0;
     }
 
     public function startNewGestation(
@@ -519,19 +655,20 @@ final class CaravanEntity
      */
     public function getPhysiologicalState(): PhysiologicalState
     {
-        if ($this->sex !== AnimalSex::FEMALE) {
+        // A calf at foot is not a mother: whether it nurses says nothing of its own state.
+        if ($this->sex !== AnimalSex::FEMALE || $this->isNursing()) {
             return PhysiologicalState::UNKNOWN;
         }
 
         $hasActiveGestation = $this->hasActiveGestation();
+        // Lactating: one of her own calves is still at foot.
+        $isNursing = $this->hasCalfAtFoot();
 
         // Exposed to the bulls of a running service and not yet diagnosed pregnant: a
         // positive tacto is more informative than the exposure, so it takes precedence.
         if ($this->isInService && !$hasActiveGestation) {
-            return PhysiologicalState::IN_SERVICE;
+            return $isNursing ? PhysiologicalState::IN_SERVICE_LACTATING : PhysiologicalState::IN_SERVICE;
         }
-
-        $isNursing = $this->isNursing();
 
         if ($hasActiveGestation && $isNursing) {
             return PhysiologicalState::PREGNANT_LACTATING;

@@ -27,6 +27,8 @@ final class ExecuteTransferOrderRequest extends FormRequest
     {
         return [
             'movement_date' => 'sometimes|date|before_or_equal:today',
+            // Parting mothers from their calves at foot weans them: the kind, chosen by the user.
+            'weaning_type' => 'nullable|string|in:TRADITIONAL,ANTICIPATED,EARLY',
             'animals' => 'sometimes|array',
             'animals.*.caravan_id' => 'required|integer',
             'animals.*.category_id' => 'nullable|integer|exists:animal_categories,id',

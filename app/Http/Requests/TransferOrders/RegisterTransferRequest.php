@@ -28,6 +28,7 @@ final class RegisterTransferRequest extends FormRequest
         return [
             ...$rules,
             'movement_date' => 'required|date|before_or_equal:today',
+            'weaning_type' => 'nullable|string|in:TRADITIONAL,ANTICIPATED,EARLY',
 
             // What was measured at the chute. Empty means "no change".
             'animals.*.current_weight' => 'nullable|numeric|gt:0|max:2000',

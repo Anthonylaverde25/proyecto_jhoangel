@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Core\ValueObjects\AnimalLabel;
+
 use App\Core\Entities\LineageEntity;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -49,6 +51,7 @@ class PendingSireResource extends JsonResource
         return [
             'calf_id'              => $model->caravan_id,
             'calf_identification'  => $model->caravan?->identification ?? '—',
+            'calf_label'           => AnimalLabel::of($model->caravan?->identification, $model->mother?->identification, $model->caravan?->sex),
             'calf_sex'             => $model->caravan?->sex ?? null,
             'birth_date'           => $birthDate,
             'days_without_sire'    => $daysWithoutSire,

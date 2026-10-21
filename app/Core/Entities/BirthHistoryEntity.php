@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Core\Entities;
 
+use App\Core\ValueObjects\AnimalLabel;
+
 final class BirthHistoryEntity
 {
     public function __construct(
@@ -13,7 +15,8 @@ final class BirthHistoryEntity
         private string $birthDate,
         private ?string $notes,
         private int $calfId,
-        private string $calfIdentification,
+        /** Null while the calf waits for its tag. */
+        private ?string $calfIdentification,
         private bool $isNursing,
         private ?string $calfSex,
         private ?string $calfBatchName,
@@ -24,7 +27,9 @@ final class BirthHistoryEntity
         private ?string $openOrderCode = null,
         /** The calf's current C/S: the reference a new one is chosen against. */
         private ?int $calfCategoryId = null,
-        private ?int $calfSubcategoryId = null
+        private ?int $calfSubcategoryId = null,
+        /** The day the calf died after being born, when it did. */
+        private ?string $calfDeathDate = null
     ) {
     }
 
@@ -78,9 +83,19 @@ final class BirthHistoryEntity
         return $this->calfId;
     }
 
-    public function getCalfIdentification(): string
+    public function getCalfIdentification(): ?string
     {
         return $this->calfIdentification;
+    }
+
+    public function getCalfDeathDate(): ?string
+    {
+        return $this->calfDeathDate;
+    }
+
+    public function getCalfLabel(): string
+    {
+        return AnimalLabel::of($this->calfIdentification, $this->motherIdentification, $this->calfSex);
     }
 
     public function isNursing(): bool

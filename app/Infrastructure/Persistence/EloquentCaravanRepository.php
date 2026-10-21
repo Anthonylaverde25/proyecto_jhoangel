@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Persistence;
 
 use App\Core\Entities\CaravanEntity;
+use App\Core\ValueObjects\AnimalLabel;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\ValueObjects\CaravanNumber;
 use App\Core\ValueObjects\CaravanSummaryCriteria;
@@ -66,12 +67,12 @@ class EloquentCaravanRepository implements ICaravanRepository
             $gestationModel->sires()->sync($sireSyncData);
         }
 
-        return CaravanMapper::toEntity($model->load(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father']));
+        return CaravanMapper::toEntity($model->load(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause']));
     }
 
     public function findByIdentification(CaravanNumber $identification): ?CaravanEntity
     {
-        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father'])
+        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause'])
             ->where('identification', $identification->getValue())
             ->first();
         
@@ -89,8 +90,9 @@ class EloquentCaravanRepository implements ICaravanRepository
             return [];
         }
 
-        $models = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father'])
+        $models = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause'])
             ->whereIn('identification', $values)
+            ->withCount(['offspringAsMother as nursing_calves_count' => fn ($q) => $q->where('is_nursing', true)])
             ->get();
 
         $resolved = [];
@@ -143,7 +145,7 @@ class EloquentCaravanRepository implements ICaravanRepository
     public function findByIdentificationGlobal(CaravanNumber $identification): ?CaravanEntity
     {
         $model = Caravan::withoutGlobalScopes()
-            ->with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father'])
+            ->with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause'])
             ->where('identification', $identification->getValue())
             ->first();
         
@@ -165,8 +167,9 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function findById(int $id): ?CaravanEntity
     {
-        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'batch.farm.provider', 'provider', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father'])
+        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'batch.farm.provider', 'provider', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause'])
             ->withExists('openServiceExposures as is_in_service')
+            ->withCount(['offspringAsMother as nursing_calves_count' => fn ($q) => $q->where('is_nursing', true)])
             ->find($id);
         
         return $model ? CaravanMapper::toEntity($model) : null;
@@ -281,6 +284,11 @@ class EloquentCaravanRepository implements ICaravanRepository
                 'batch:id,name,farm_id',
                 'batch.farm:id,name',
                 'currentWeight:id,caravan_id,weight,current',
+                // An untagged calf is shown by its mother's tag.
+                'lineage:id,caravan_id,mother_id',
+                'lineage.mother:id,identification',
+                'death:id,caravan_id,death_date,death_cause_id',
+                'death.cause:id,name',
             ])
             ->withExists(['gestations as has_current_gestation' => fn ($q) => $q->where('is_current', true)]);
 
@@ -307,6 +315,9 @@ class EloquentCaravanRepository implements ICaravanRepository
         if ($term !== '') {
             $query->where(function ($q) use ($term) {
                 $q->where('identification', 'LIKE', "%{$term}%")
+                  // "4521" also finds "Cría de 4521": an untagged calf by its mother's tag.
+                  ->orWhere(fn ($uq) => $uq->whereNull('identification')
+                      ->whereHas('lineage.mother', fn ($mq) => $mq->where('identification', 'LIKE', "%{$term}%")))
                   ->orWhereHas('breedRelation', fn ($bq) => $bq->where('name', 'LIKE', "%{$term}%"))
                   ->orWhereHas('categoryRelation', fn ($cq) => $cq->where('name', 'LIKE', "%{$term}%"));
             });
@@ -315,7 +326,8 @@ class EloquentCaravanRepository implements ICaravanRepository
         if ($criteria->sort === CaravanSummaryCriteria::SORT_RECENT) {
             $query->orderByDesc('batch_assigned_at')->orderByDesc('id');
         } else {
-            $query->orderBy('identification');
+            // Untagged calves go last (portable across MySQL and SQLite).
+            $query->orderByRaw('identification IS NULL')->orderBy('identification');
         }
 
         $paginator = $query->paginate($criteria->perPage, ['*'], 'page', $criteria->page);
@@ -338,7 +350,7 @@ class EloquentCaravanRepository implements ICaravanRepository
 
         return new CaravanSummaryRow(
             id: (int) $model->id,
-            identification: (string) $model->identification,
+            identification: $model->identification !== null ? (string) $model->identification : null,
             categoryId: $model->category_id,
             categoryName: $model->categoryRelation?->name,
             subcategoryId: $model->subcategory_id,
@@ -358,6 +370,9 @@ class EloquentCaravanRepository implements ICaravanRepository
             isBreedingEligible: (bool) ($model->is_breeding_eligible ?? true),
             breedingExclusionReason: $model->breeding_exclusion_reason,
             isReproductiveCategory: $isReproductiveCategory,
+            label: AnimalLabel::of($model->identification, $model->lineage?->mother?->identification, $sex),
+            deathDate: $model->death?->death_date?->format('Y-m-d'),
+            deathCause: $model->death?->cause?->name,
         );
     }
 
@@ -374,8 +389,10 @@ class EloquentCaravanRepository implements ICaravanRepository
             'gestations.sires', 'gestations.lossReason',
             'lineage.mother',
             'lineage.father',
+            'death.cause',
             'provider',
-        ])->withExists('openServiceExposures as is_in_service');
+        ])->withExists('openServiceExposures as is_in_service')
+            ->withCount(['offspringAsMother as nursing_calves_count' => fn ($q) => $q->where('is_nursing', true)]);
 
         if ($scope === 'own') {
             $this->applyOwnScope($query);
@@ -407,6 +424,58 @@ class EloquentCaravanRepository implements ICaravanRepository
     public function countByBatch(int $batchId): int
     {
         return Caravan::inPossession()->where('caravans.batch_id', $batchId)->count();
+    }
+
+    public function untaggedLabels(array $caravanIds): array
+    {
+        if ($caravanIds === []) {
+            return [];
+        }
+
+        $labels = [];
+
+        Caravan::query()
+            ->with('lineage.mother:id,identification')
+            ->whereIn('id', array_values(array_unique($caravanIds)))
+            ->whereNull('identification')
+            ->get(['id', 'sex'])
+            ->each(function (Caravan $calf) use (&$labels): void {
+                $labels[(int) $calf->id] = AnimalLabel::of(null, $calf->lineage?->mother?->identification, $calf->sex);
+            });
+
+        return $labels;
+    }
+
+    public function findUntaggedCalvesByBatch(int $batchId): array
+    {
+        return DB::table('caravans')
+            ->join('caravan_lineage', 'caravan_lineage.caravan_id', '=', 'caravans.id')
+            ->join('caravans as mothers', 'mothers.id', '=', 'caravan_lineage.mother_id')
+            ->where('caravans.batch_id', $batchId)
+            ->whereNull('caravans.identification')
+            // A calf that died before being tagged is never tagged.
+            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('caravan_deaths')->whereColumn('caravan_deaths.caravan_id', 'caravans.id'))
+            ->orderBy('caravan_lineage.birth_date')
+            ->orderBy('mothers.identification')
+            ->get([
+                'caravans.id',
+                'caravans.sex',
+                'caravans.entry_weight',
+                'caravan_lineage.birth_date',
+                'caravan_lineage.mother_id',
+                'mothers.identification as mother_identification',
+            ])
+            ->map(fn ($row) => [
+                'id' => (int) $row->id,
+                'label' => AnimalLabel::of(null, (string) $row->mother_identification, (string) $row->sex),
+                'sex' => (string) $row->sex,
+                'birth_date' => substr((string) $row->birth_date, 0, 10),
+                'birth_weight' => $row->entry_weight !== null ? (float) $row->entry_weight : null,
+                'mother_id' => (int) $row->mother_id,
+                'mother_identification' => (string) $row->mother_identification,
+            ])
+            ->values()
+            ->all();
     }
 
     public function countWeighedByBatch(int $batchId): int
@@ -513,7 +582,7 @@ class EloquentCaravanRepository implements ICaravanRepository
     public function findBirthHistory(): array
     {
         $gestations = \App\Models\CaravanGestation::where('success', true)
-            ->with(['caravan.batch', 'offspring.caravan.batch'])
+            ->with(['caravan.batch', 'offspring.caravan.batch', 'offspring.caravan.death'])
             ->get();
 
         $history = [];
@@ -530,7 +599,7 @@ class EloquentCaravanRepository implements ICaravanRepository
                     birthDate: $g->end_date ? $g->end_date->format('Y-m-d') : '',
                     notes: $g->notes,
                     calfId: (int) $lineage->caravan_id,
-                    calfIdentification: (string) ($lineage->caravan?->identification ?? ''),
+                    calfIdentification: $lineage->caravan?->identification !== null ? (string) $lineage->caravan->identification : null,
                     isNursing: (bool) $lineage->is_nursing,
                     calfSex: $lineage->caravan?->sex?->value,
                     calfBatchName: $lineage->caravan?->batch?->name,
@@ -538,7 +607,8 @@ class EloquentCaravanRepository implements ICaravanRepository
                     motherBatchId: $g->caravan?->batch_id !== null ? (int) $g->caravan->batch_id : null,
                     motherBatchName: $g->caravan?->batch?->name,
                     calfCategoryId: $lineage->caravan?->category_id !== null ? (int) $lineage->caravan->category_id : null,
-                    calfSubcategoryId: $lineage->caravan?->subcategory_id !== null ? (int) $lineage->caravan->subcategory_id : null
+                    calfSubcategoryId: $lineage->caravan?->subcategory_id !== null ? (int) $lineage->caravan->subcategory_id : null,
+                    calfDeathDate: $lineage->caravan?->death?->death_date?->format('Y-m-d')
                 );
             }
         }
@@ -587,7 +657,7 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function findGestatingByBatch(int $batchId): array
     {
-        $models = Caravan::with(['breedRelation', 'batch', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father'])
+        $models = Caravan::with(['breedRelation', 'batch', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause'])
             ->where('batch_id', $batchId)
             ->whereHas('gestations', function ($query) {
                 $query->where('is_current', true);

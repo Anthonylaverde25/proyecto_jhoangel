@@ -6,6 +6,7 @@ namespace App\Application\UseCases\WorkTemplates;
 
 use App\Application\DTOs\Cact01\Cact01SubmissionDTO;
 use App\Application\DTOs\CreateBatchDTO;
+use App\Application\Services\MotherCalfSeparation;
 use App\Application\Services\TransferOrderExecutionService;
 use App\Application\UseCases\Batches\CreateBatchUseCase;
 use App\Core\Entities\BatchEntity;
@@ -73,7 +74,8 @@ final class ProcessCact01SubmissionUseCase
         private readonly BatchWeightService $batchWeightService,
         private readonly CreateBatchUseCase $createBatch,
         private readonly TransferOrderExecutionService $orderExecution,
-        private readonly IAnimalCategoryRepository $categoryRepository
+        private readonly IAnimalCategoryRepository $categoryRepository,
+        private readonly MotherCalfSeparation $separation
     ) {
     }
 
@@ -379,6 +381,17 @@ final class ProcessCact01SubmissionUseCase
             if ($createdFromSheet) {
                 $order = $this->orderExecution->createFromSheet($dto, $destinations, $animalsByRow);
             }
+
+            // A mother and her calf at foot sent to different places are parted: the calf is weaned,
+            // of the kind the user chose, before anything moves. Without a kind, nothing moves.
+            $placeByCaravanId = [];
+            foreach ($animalsByRow as $index => $animal) {
+                $key = $dto->rows[$index]['destination_key'];
+                $placeByCaravanId[(int) $animal->getId()] = $destinations[$key]['target_batch_id'] !== null
+                    ? MotherCalfSeparation::batch((int) $destinations[$key]['target_batch_id'])
+                    : "new:{$key}";
+            }
+            $this->separation->weanSeparated($placeByCaravanId, $date->format('Y-m-d'), $dto->weaningType);
 
             // STEP 1. Close every composition about to change, on both sides. Without
             // this the step would be drawn spread over every day since the last

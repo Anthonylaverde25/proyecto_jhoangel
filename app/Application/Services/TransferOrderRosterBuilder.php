@@ -14,6 +14,8 @@ use App\Core\Exceptions\TransferOrderDomainException;
 use App\Core\Interfaces\IActivityRepository;
 use App\Core\Interfaces\IBatchRepository;
 use App\Core\Interfaces\IBatchTypeRepository;
+use App\Core\Interfaces\ICaravanDeathRepository;
+use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Interfaces\ITransferOrderRepository;
 
 /**
@@ -35,7 +37,9 @@ final class TransferOrderRosterBuilder
         private readonly IActivityRepository $activityRepository,
         private readonly IBatchTypeRepository $batchTypeRepository,
         private readonly CategoryTargetValidator $categoryTargets,
-        private readonly OpenOrderCommitmentChecker $commitments
+        private readonly OpenOrderCommitmentChecker $commitments,
+        private readonly ICaravanRepository $caravans,
+        private readonly ICaravanDeathRepository $deaths
     ) {
     }
 
@@ -82,7 +86,37 @@ final class TransferOrderRosterBuilder
             $sourceBatch->getName()
         );
 
+        $this->assertTagged(array_map(fn (TransferOrderAnimalEntity $a) => $a->getCaravanId(), $animals));
+
         return [$destinations, $animals];
+    }
+
+    /**
+     * A moved calf leaves its mother behind: from then on only its tag tells it apart.
+     *
+     * @param int[] $caravanIds
+     *
+     * @throws TransferOrderDomainException
+     */
+    public function assertTagged(array $caravanIds): void
+    {
+        $dead = $this->deaths->deathDates($caravanIds);
+
+        if ($dead !== []) {
+            throw TransferOrderDomainException::domainError(
+                count($dead) . ' animal(es) de la orden están registrados como muertos: no se trasladan.',
+                'ALREADY_DEAD'
+            );
+        }
+
+        $untagged = $this->caravans->untaggedLabels($caravanIds);
+
+        if ($untagged !== []) {
+            throw TransferOrderDomainException::domainError(
+                'Sin caravana: ' . implode(', ', $untagged) . '. Caravanealas antes de trasladarlas.',
+                'UNTAGGED_ANIMAL'
+            );
+        }
     }
 
     /**

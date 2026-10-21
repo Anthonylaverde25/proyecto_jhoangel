@@ -30,6 +30,9 @@ use App\Core\Interfaces\IWeaningOrderRepository;
 final class WeaningOrderRosterBuilder
 {
     public const WEANING_BATCH_TYPE = 'WEANING';
+
+    /** Batches that never receive weaned calves. */
+    public const NOT_WEANING_DESTINATIONS = ['INTERNAL_DEATH', 'INTERNAL_CONSUMPTION'];
     private const FALLBACK_ACTIVITY = 'CRIA';
 
     public function __construct(
@@ -90,7 +93,7 @@ final class WeaningOrderRosterBuilder
      * order is written and again when a draft is issued: a draft may be days old.
      *
      * @param int[] $caravanIds
-     * @return array<int, array{identification: string, batch_id: ?int, sex: string, is_nursing: ?bool, birth_date: ?string}>
+     * @return array<int, array{identification: ?string, label: string, death_date: ?string, batch_id: ?int, sex: string, is_nursing: ?bool, birth_date: ?string}>
      *
      * @throws WeaningOrderDomainException
      */
@@ -113,8 +116,28 @@ final class WeaningOrderRosterBuilder
 
         if ($withoutBirth !== []) {
             throw WeaningOrderDomainException::domainError(
-                'Sin registro de nacimiento: ' . implode(', ', array_column($withoutBirth, 'identification')) . '. Sólo se desteta una cría con su parto registrado.',
+                'Sin registro de nacimiento: ' . implode(', ', array_column($withoutBirth, 'label')) . '. Sólo se desteta una cría con su parto registrado.',
                 'NO_LINEAGE'
+            );
+        }
+
+        // A calf that died is no longer at foot, but it was not weaned either.
+        $dead = array_filter($facts, fn (array $fact) => $fact['death_date'] !== null);
+
+        if ($dead !== []) {
+            throw WeaningOrderDomainException::domainError(
+                'Registradas como muertas: ' . implode(', ', array_column($dead, 'label')) . '. No se destetan.',
+                'ALREADY_DEAD'
+            );
+        }
+
+        // Weaning separates the calf from its mother: from then on only its tag tells it apart.
+        $untagged = array_filter($facts, fn (array $fact) => $fact['identification'] === null);
+
+        if ($untagged !== []) {
+            throw WeaningOrderDomainException::domainError(
+                'Sin caravana: ' . implode(', ', array_column($untagged, 'label')) . '. Caravanealas antes de destetarlas.',
+                'UNTAGGED_ANIMAL'
             );
         }
 
@@ -122,7 +145,7 @@ final class WeaningOrderRosterBuilder
 
         if ($weaned !== []) {
             throw WeaningOrderDomainException::domainError(
-                'Ya destetadas: ' . implode(', ', array_column($weaned, 'identification')) . '.',
+                'Ya destetadas: ' . implode(', ', array_column($weaned, 'label')) . '.',
                 'ALREADY_WEANED'
             );
         }
@@ -158,29 +181,34 @@ final class WeaningOrderRosterBuilder
         $orderKeyByScreenKey = [];
 
         foreach ($dto->destinations as $destination) {
-            $hasExisting = $destination['target_batch_id'] !== null;
-            $hasNew = $destination['new_batch_name'] !== null;
+            $staysInPlace = (bool) ($destination['stays_in_place'] ?? false);
+            $hasExisting = !$staysInPlace && $destination['target_batch_id'] !== null;
+            $hasNew = !$staysInPlace && $destination['new_batch_name'] !== null;
 
-            if ($hasExisting === $hasNew) {
+            if (!$staysInPlace && $hasExisting === $hasNew) {
                 throw WeaningOrderDomainException::domainError(
-                    'Cada destino es un lote de destete existente o uno nuevo con nombre, nunca los dos ni ninguno.',
+                    'Cada destino es un lote existente, uno de destete nuevo con nombre o «Quedan en su lote».',
                     'INVALID_DESTINATION'
                 );
             }
 
-            if ($hasExisting) {
+            if ($staysInPlace) {
+                $label = WeaningOrderDestinationEntity::STAY_LABEL;
+            } elseif ($hasExisting) {
                 $batch = $this->batchRepository->findById((int) $destination['target_batch_id']);
 
                 if ($batch === null || !$batch->isActive()) {
                     throw WeaningOrderDomainException::domainError('Uno de los lotes de destete no existe o está cerrado.', 'BATCH_NOT_FOUND');
                 }
 
-                if ($batch->getBatchTypeCode() !== self::WEANING_BATCH_TYPE) {
-                    throw WeaningOrderDomainException::domainError("El lote '{$batch->getName()}' no es un lote de destete.", 'NOT_A_WEANING_BATCH');
+                // A weaning batch is the recommended destination, not the only one: an own batch of
+                // any working kind may receive weaned calves. Never a death batch or a third party's.
+                if ($batch->getFarmId() !== null || in_array($batch->getBatchTypeCode(), self::NOT_WEANING_DESTINATIONS, true)) {
+                    throw WeaningOrderDomainException::domainError("El lote '{$batch->getName()}' no puede recibir crías destetadas.", 'NOT_A_WEANING_DESTINATION');
                 }
 
                 // A weaning batch from before batch types had an activity has none: it is still a weaning batch.
-                if ($batch->getActivityId() !== null && (int) $batch->getActivityId() !== $destinationActivityId) {
+                if ($batch->getBatchTypeCode() === self::WEANING_BATCH_TYPE && $batch->getActivityId() !== null && (int) $batch->getActivityId() !== $destinationActivityId) {
                     throw WeaningOrderDomainException::domainError(
                         "El lote '{$batch->getName()}' no es de la actividad de los lotes de destete.",
                         'DESTINATION_ACTIVITY_MISMATCH'
@@ -222,7 +250,8 @@ final class WeaningOrderRosterBuilder
                 label: $label,
                 targetBatchId: $hasExisting ? (int) $destination['target_batch_id'] : null,
                 newBatchName: $hasNew ? $label : null,
-                isConfined: $hasNew ? $destination['is_confined'] : null
+                isConfined: $hasNew ? $destination['is_confined'] : null,
+                staysInPlace: $staysInPlace
             );
         }
 
@@ -233,7 +262,7 @@ final class WeaningOrderRosterBuilder
      * The category each calf is ordered to take. Only a DECLARED order keeps them; in the other
      * modes whatever the screen still holds is dropped, because the mode is the decision.
      *
-     * @param array<int, array{identification: string, batch_id: ?int, sex: string, is_nursing: ?bool, birth_date: ?string}> $facts
+     * @param array<int, array{identification: ?string, label: string, death_date: ?string, batch_id: ?int, sex: string, is_nursing: ?bool, birth_date: ?string}> $facts
      * @return array<int, array{0: int, 1: ?int}>
      *
      * @throws WeaningOrderDomainException
@@ -265,7 +294,7 @@ final class WeaningOrderRosterBuilder
     /**
      * @param array<string, string> $orderKeyByScreenKey
      * @param array<int, array{0: int, 1: ?int}> $targetByCaravanId
-     * @param array<int, array{identification: string, batch_id: ?int, sex: string, is_nursing: ?bool, birth_date: ?string}> $facts
+     * @param array<int, array{identification: ?string, label: string, death_date: ?string, batch_id: ?int, sex: string, is_nursing: ?bool, birth_date: ?string}> $facts
      * @return WeaningOrderAnimalEntity[]
      *
      * @throws WeaningOrderDomainException

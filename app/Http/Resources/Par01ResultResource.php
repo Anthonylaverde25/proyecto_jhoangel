@@ -33,6 +33,8 @@ class Par01ResultResource extends JsonResource
             'males_count' => $this->resource['males_count'],
             'females_count' => $this->resource['females_count'],
             'unplanned_count' => $this->resource['unplanned_count'],
+            // Calves born without a tag: they wait in their batch for "Caravanear crías".
+            'untagged_calves_count' => $this->resource['untagged_calves_count'] ?? 0,
             'calves' => $this->resource['calves'],
             'overdue_new' => $this->resource['overdue_new'],
             'overdue_resolved' => $this->resource['overdue_resolved'],
@@ -65,6 +67,10 @@ class Par01ResultResource extends JsonResource
 
         if ($result['already_registered_count'] > 0) {
             $parts[] = "{$result['already_registered_count']} ya registrada(s)";
+        }
+
+        if (($result['untagged_calves_count'] ?? 0) > 0) {
+            $parts[] = "{$result['untagged_calves_count']} cría(s) sin caravana";
         }
 
         $sentence = 'Parición registrada: ' . implode(', ', $parts) . '.';

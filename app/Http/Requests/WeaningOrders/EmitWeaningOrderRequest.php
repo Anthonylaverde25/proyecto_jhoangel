@@ -39,6 +39,7 @@ final class EmitWeaningOrderRequest extends FormRequest
             'destinations.*.target_batch_id' => 'nullable|integer',
             'destinations.*.new_batch_name' => 'nullable|string|max:255',
             'destinations.*.is_confined' => 'nullable|boolean',
+            'destinations.*.stays_in_place' => 'nullable|boolean',
 
             'animals' => 'required|array|min:1',
             'animals.*.caravan_id' => 'required|integer',

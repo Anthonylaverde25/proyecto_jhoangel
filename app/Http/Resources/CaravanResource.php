@@ -22,7 +22,17 @@ class CaravanResource extends JsonResource
     {
         return [
             'id'             => $this->resource->getId(),
-            'identification' => $this->resource->getIdentification()->getValue(),
+            // Null while a calf born here waits for its tag; `label` is what the screens show.
+            'identification' => $this->resource->findIdentification()?->getValue(),
+            'label'          => $this->resource->label(),
+            'is_tagged'      => $this->resource->isTagged(),
+            'tagged_at'      => $this->resource->getTaggedAt(),
+            'is_dead'        => $this->resource->isDead(),
+            'death'          => $this->resource->getDeath() !== null ? [
+                'date' => $this->resource->getDeath()->date,
+                'cause' => $this->resource->getDeath()->causeName,
+                'observations' => $this->resource->getDeath()->observations,
+            ] : null,
             'category'       => $this->resource->getCategoryName() ?? ($this->resource->getCategoryCode() ? strtolower($this->resource->getCategoryCode()) : null),
             'category_id'    => $this->resource->getCategoryId(),
             'category_code'  => $this->resource->getCategoryCode(),
@@ -100,7 +110,9 @@ class CaravanResource extends JsonResource
                 'code' => $this->resource->getPhysiologicalState()->value,
                 'label' => $this->resource->getPhysiologicalState()->label(),
                 'is_pregnant' => $this->resource->isPregnant(),
-                'is_nursing' => $this->resource->isNursing(),
+                // A calf of her own at foot, not whether she nurses herself.
+                'is_nursing' => $this->resource->hasCalfAtFoot(),
+                'nursing_calves_count' => $this->resource->getNursingCalvesCount() ?? 0,
                 'gestation_stage' => $this->resource->getGestationStage()?->value,
                 'gestation_months' => $this->resource->getGestationMonths(),
             ] : null,

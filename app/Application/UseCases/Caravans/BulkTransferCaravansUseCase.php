@@ -6,17 +6,13 @@ namespace App\Application\UseCases\Caravans;
 
 use App\Application\DTOs\BulkTransferCaravansDTO;
 use App\Application\DTOs\CreateBatchDTO;
+use App\Application\Services\CaravanBatchMover;
+use App\Application\Services\MotherCalfSeparation;
 use App\Application\UseCases\Batches\CreateBatchUseCase;
 use App\Application\UseCases\Batches\GetOrCreateReserveBatchUseCase;
-use App\Core\Entities\CaravanMovementEntity;
-use App\Core\Enums\BatchWeightCause;
 use App\Core\Exceptions\DomainException;
 use App\Core\Interfaces\IBatchRepository;
-use App\Core\Interfaces\ICaravanMovementRepository;
 use App\Core\Interfaces\ICaravanRepository;
-use App\Core\Interfaces\IFarmRepository;
-use App\Core\Interfaces\ICompanyRepository;
-use App\Core\Services\BatchWeightService;
 use Illuminate\Support\Facades\DB;
 
 final class BulkTransferCaravansUseCase
@@ -24,10 +20,8 @@ final class BulkTransferCaravansUseCase
     public function __construct(
         private readonly ICaravanRepository $caravanRepository,
         private readonly IBatchRepository $batchRepository,
-        private readonly ICaravanMovementRepository $movementRepository,
-        private readonly IFarmRepository $farmRepository,
-        private readonly ICompanyRepository $companyRepository,
-        private readonly BatchWeightService $batchWeightService,
+        private readonly CaravanBatchMover $mover,
+        private readonly MotherCalfSeparation $separation,
         private readonly GetOrCreateReserveBatchUseCase $getOrCreateReserveBatch,
         private readonly CreateBatchUseCase $createBatch
     ) {
@@ -56,88 +50,56 @@ final class BulkTransferCaravansUseCase
             $targetBatchId = $targetBatch->getId();
             $targetBatchName = $targetBatch->getName();
 
-            // 2. Resolve RENSPA from target batch farm or company
-            $renspa = '';
-            $farmId = $targetBatch->getFarmId();
-            if ($farmId !== null) {
-                $farm = $this->farmRepository->findById($farmId);
-                if ($farm !== null) {
-                    $renspa = $farm->getRenspa() ?? '';
-                }
+            // A death is a declared fact with its date and cause, not a move: it goes through
+            // "Registrar muerte". A calf without its tag, or a dead animal, does not move from here.
+            if ($targetBatch->getBatchTypeCode() === 'INTERNAL_DEATH') {
+                throw new DomainException('Para dar de baja por muerte usá «Registrar muerte»: guarda la fecha y la causa.');
             }
 
-            $movementDateStr = $dto->movementDate ?? (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-            $movementDate = new \DateTime($movementDateStr);
+            $movementDate = new \DateTime($dto->movementDate ?? (new \DateTimeImmutable())->format('Y-m-d H:i:s'));
 
-            // First pass over the caravans, BEFORE anything moves: the source batches and
-            // the composition they still hold have to be read now, because once the
-            // animals change batch the previous membership is gone.
             $caravans = [];
-            $sourceBatchIds = [];
-
+            $untagged = [];
+            $dead = [];
             foreach ($dto->caravanIds as $caravanId) {
                 $caravan = $this->caravanRepository->findById($caravanId);
                 if ($caravan === null) {
                     continue;
                 }
 
+                if (!$caravan->isTagged()) {
+                    $untagged[] = $caravan->label();
+                }
+                if ($caravan->isDead()) {
+                    $dead[] = $caravan->label();
+                }
+
                 $caravans[$caravanId] = $caravan;
-
-                $previousBatchId = $caravan->getBatchId();
-                if ($previousBatchId !== null && $previousBatchId !== $targetBatchId) {
-                    $sourceBatchIds[$previousBatchId] = true;
-                }
             }
 
-            // Closing point of every composition about to change, on BOTH sides. The
-            // destination needs it just as much as the source: without it, the stretch
-            // from its last weighing to the arrival would blend the growth of the animals
-            // already there with the entry of the new ones.
-            foreach (array_keys($sourceBatchIds) as $srcBatchId) {
-                $this->batchWeightService->snapshotBeforeMovement((int) $srcBatchId, $movementDate);
-            }
-            $this->batchWeightService->snapshotBeforeMovement($targetBatchId, $movementDate);
-
-            $transferredCount = 0;
-
-            foreach ($caravans as $caravanId => $caravan) {
-                $previousBatchId = $caravan->getBatchId();
-
-                // If RENSPA was not found from farm, fallback to company RENSPA
-                $effectiveRenspa = $renspa;
-                if (empty($effectiveRenspa) && $caravan->getCompanyId() !== null) {
-                    $company = $this->companyRepository->findById($caravan->getCompanyId());
-                    $effectiveRenspa = $company?->getRenspa() ?? '';
-                }
-
-                // Update caravan's batch
-                $this->caravanRepository->updateBatchAndCategory($caravanId, $targetBatchId, null);
-
-                // Record CaravanMovement
-                $movementObservation = $dto->reason ?? ("Transferido al lote: " . $targetBatchName);
-                $movement = new CaravanMovementEntity(
-                    id: null,
-                    caravanId: $caravanId,
-                    companyId: $caravan->getCompanyId(),
-                    renspa: $effectiveRenspa,
-                    type: 'TRANSFER',
-                    movementDate: $movementDate,
-                    observations: $movementObservation,
-                    fromBatchId: $previousBatchId,
-                    toBatchId: $targetBatchId
-                );
-                $this->movementRepository->save($movement);
-
-                $transferredCount++;
+            if ($untagged !== []) {
+                throw new DomainException('Sin caravana: ' . implode(', ', $untagged) . '. Caravanealas antes de trasladarlas.');
             }
 
-            // 3. Opening point of the new composition on both sides. The vertical distance
-            // to the closing point written above is, by construction, attributable to the
-            // movement and not to elapsed time.
-            foreach (array_keys($sourceBatchIds) as $srcBatchId) {
-                $this->batchWeightService->recalculateBatchWeight((int) $srcBatchId, BatchWeightCause::MOVEMENT_OUT, $movementDate);
+            if ($dead !== []) {
+                throw new DomainException('Registrados como muertos: ' . implode(', ', $dead) . '. No se trasladan.');
             }
-            $this->batchWeightService->recalculateBatchWeight($targetBatchId, BatchWeightCause::MOVEMENT_IN, $movementDate);
+
+            // Parting a mother from her calf at foot weans the calf, of the kind the user chose.
+            $this->separation->weanSeparated(
+                array_fill_keys(array_keys($caravans), MotherCalfSeparation::batch((int) $targetBatchId)),
+                $movementDate->format('Y-m-d'),
+                $dto->weaningType
+            );
+
+            $this->mover->move(
+                $caravans,
+                $targetBatch,
+                $movementDate,
+                'TRANSFER',
+                $dto->reason ?? ('Transferido al lote: ' . $targetBatchName)
+            );
+            $transferredCount = count($caravans);
 
             return [
                 'transferred_count' => $transferredCount,

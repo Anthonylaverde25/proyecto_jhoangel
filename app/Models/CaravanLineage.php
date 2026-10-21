@@ -29,6 +29,9 @@ class CaravanLineage extends Model
         'sire_assigned_at',
         'sire_identification_method',
         'sire_notes',
+        'nursing_ended_at',
+        'nursing_end_reason',
+        'weaning_type',
     ];
 
     /**
@@ -44,6 +47,7 @@ class CaravanLineage extends Model
         'sire_assigned_at'           => 'datetime',
         'sire_identification_method' => 'string',
         'sire_notes'                 => 'string',
+        'nursing_ended_at'           => 'date:Y-m-d',
     ];
 
     /**

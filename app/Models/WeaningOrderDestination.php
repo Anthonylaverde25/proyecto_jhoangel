@@ -22,6 +22,7 @@ class WeaningOrderDestination extends Model
         'label',
         'target_batch_id',
         'new_batch_name',
+        'stays_in_place',
         'is_confined',
         'resolved_batch_id',
     ];
@@ -30,6 +31,7 @@ class WeaningOrderDestination extends Model
      * @var array<string, string>
      */
     protected $casts = [
+        'stays_in_place' => 'boolean',
         'company_id' => 'integer',
         'weaning_order_id' => 'integer',
         'target_batch_id' => 'integer',

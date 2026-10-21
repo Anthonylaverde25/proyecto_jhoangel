@@ -311,6 +311,9 @@ class CaravanController extends Controller
             $entity = ($this->registerGestationDiagnosis)($dto, $companyId);
 
             return response()->json(new CaravanResource($entity));
+        } catch (\App\Core\Exceptions\MotherCalfSeparationException $e) {
+            // Rendered with its code and field, so the screen asks for the kind of weaning.
+            throw $e;
         } catch (\App\Core\Exceptions\DomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -336,6 +339,9 @@ class CaravanController extends Controller
                 CaravanResource::collection($entities),
                 201
             );
+        } catch (\App\Core\Exceptions\MotherCalfSeparationException $e) {
+            // Rendered with its code and field, so the screen asks for the kind of weaning.
+            throw $e;
         } catch (\App\Core\Exceptions\DomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -364,6 +370,9 @@ class CaravanController extends Controller
         try {
             $result = ($this->bulkTransferCaravans)($dto);
             return response()->json($result, 200);
+        } catch (\App\Core\Exceptions\MotherCalfSeparationException $e) {
+            // Rendered with its code and field, so the screen asks for the kind of weaning.
+            throw $e;
         } catch (\App\Core\Exceptions\DomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -382,6 +391,9 @@ class CaravanController extends Controller
 
         try {
             return response()->json(($this->caravan->updateBreedingEligibility)($dto), 200);
+        } catch (\App\Core\Exceptions\MotherCalfSeparationException $e) {
+            // Rendered with its code and field, so the screen asks for the kind of weaning.
+            throw $e;
         } catch (\App\Core\Exceptions\DomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }

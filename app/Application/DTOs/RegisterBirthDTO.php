@@ -7,7 +7,8 @@ namespace App\Application\DTOs;
 final readonly class RegisterBirthDTO
 {
     public function __construct(
-        public string $calfIdentification,
+        /** Null when the calf is tagged days after the calving. */
+        public ?string $calfIdentification,
         public string $calfSex,
         public ?string $calfCategory,
         public int $calfTeeth = 0,
@@ -30,7 +31,7 @@ final readonly class RegisterBirthDTO
     public static function fromArray(array $data): self
     {
         return new self(
-            (string) ($data['calf_identification'] ?? ''),
+            trim((string) ($data['calf_identification'] ?? '')) !== '' ? trim((string) $data['calf_identification']) : null,
             (string) ($data['calf_sex'] ?? ''),
             isset($data['calf_category']) ? (string) $data['calf_category'] : null,
             (int) ($data['calf_teeth'] ?? 0),

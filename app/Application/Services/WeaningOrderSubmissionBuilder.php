@@ -70,6 +70,11 @@ final class WeaningOrderSubmissionBuilder
                 continue;
             }
 
+            if ($destination->staysInPlace()) {
+                $destinations[] = ['key' => $destination->getKey(), 'target_batch_id' => null, 'new_batch' => null, 'stays_in_place' => true];
+                continue;
+            }
+
             $batchId = $destination->getResolvedBatchId() ?? $destination->getTargetBatchId();
 
             if ($batchId === null && $destination->isConfined() === null) {

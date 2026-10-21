@@ -54,6 +54,19 @@ final class BatchEntity
         $this->nursingTotalWeight = $totalWeight;
     }
 
+    /** Calves born here that still wait for their tag; null when not read. */
+    private ?int $untaggedCalfCount = null;
+
+    public function getUntaggedCalfCount(): ?int
+    {
+        return $this->untaggedCalfCount;
+    }
+
+    public function setUntaggedCalfCount(?int $count): void
+    {
+        $this->untaggedCalfCount = $count;
+    }
+
     public function getNursingCount(): ?int
     {
         return $this->nursingCount;

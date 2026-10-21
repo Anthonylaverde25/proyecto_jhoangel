@@ -37,6 +37,11 @@ class GestationLossReasonSeeder extends Seeder
                 'description' => 'Embrión reabsorbido',
             ],
             [
+                'code' => 'MOTHER_DEATH',
+                'name' => 'Muerte de la madre',
+                'description' => 'La hembra murió preñada',
+            ],
+            [
                 'code' => 'OTHER',
                 'name' => 'Otro',
                 'description' => 'Motivo no especificado',

@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Persistence;
 
+use Illuminate\Support\Facades\DB;
+
+
+use App\Core\Enums\WeaningType;
+
 use App\Core\Entities\LineageEntity;
 use App\Core\Interfaces\ICaravanLineageRepository;
 use App\Core\Exceptions\DomainException;
@@ -64,9 +69,46 @@ class EloquentCaravanLineageRepository implements ICaravanLineageRepository
         return $models->map(fn($model) => LineageMapper::toEntity($model))->toArray();
     }
 
-    public function wean(int $caravanId): void
+    public function nursingPairsOf(array $caravanIds): array
     {
-        CaravanLineage::where('caravan_id', $caravanId)->update(['is_nursing' => false]);
+        if ($caravanIds === []) {
+            return [];
+        }
+
+        return DB::table('caravan_lineage')
+            ->join('caravans as mothers', 'mothers.id', '=', 'caravan_lineage.mother_id')
+            ->join('caravans as calves', 'calves.id', '=', 'caravan_lineage.caravan_id')
+            ->where('caravan_lineage.is_nursing', true)
+            ->where(fn ($q) => $q->whereIn('caravan_lineage.mother_id', $caravanIds)->orWhereIn('caravan_lineage.caravan_id', $caravanIds))
+            ->get([
+                'caravan_lineage.mother_id',
+                'caravan_lineage.caravan_id',
+                'mothers.batch_id as mother_batch_id',
+                'calves.batch_id as calf_batch_id',
+                'mothers.identification as mother_identification',
+                'calves.identification as calf_identification',
+                'calves.sex as calf_sex',
+            ])
+            ->map(fn ($row) => [
+                'mother_id' => (int) $row->mother_id,
+                'calf_id' => (int) $row->caravan_id,
+                'mother_batch_id' => $row->mother_batch_id !== null ? (int) $row->mother_batch_id : null,
+                'calf_batch_id' => $row->calf_batch_id !== null ? (int) $row->calf_batch_id : null,
+                'mother_identification' => (string) $row->mother_identification,
+                'calf_identification' => $row->calf_identification !== null ? (string) $row->calf_identification : null,
+            ])
+            ->values()
+            ->all();
+    }
+
+    public function wean(int $caravanId, string $date, ?WeaningType $type): void
+    {
+        CaravanLineage::where('caravan_id', $caravanId)->update([
+            'is_nursing' => false,
+            'nursing_ended_at' => $date,
+            'nursing_end_reason' => LineageEntity::ENDED_WEANED,
+            'weaning_type' => $type?->value,
+        ]);
     }
 
     /**

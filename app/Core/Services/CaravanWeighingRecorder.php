@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Core\Services;
 
 use App\Core\Entities\CaravanWeightEntity;
+use App\Core\Exceptions\AnimalDeathException;
+use App\Core\Interfaces\ICaravanDeathRepository;
 use App\Core\Interfaces\ICaravanWeightRepository;
 use App\Core\ValueObjects\WeighingReading;
 
@@ -23,11 +25,21 @@ final class CaravanWeighingRecorder
 {
     public function __construct(
         private readonly ICaravanWeightRepository $weights,
+        private readonly ICaravanDeathRepository $deaths,
     ) {
     }
 
+    /**
+     * @throws AnimalDeathException a weighing dated after the animal died
+     */
     public function record(int $caravanId, WeighingReading $reading): CaravanWeightEntity
     {
+        // A weighing loaded late, dated before the death, still belongs to its history.
+        $diedOn = $this->deaths->deathDates([$caravanId])[$caravanId] ?? null;
+        if ($diedOn !== null && $reading->date->format('Y-m-d') > $diedOn) {
+            throw AnimalDeathException::weighedAfterDeath($diedOn);
+        }
+
         $isCurrent = !$this->weights->hasWeighingAfter($caravanId, $reading->date);
 
         if ($isCurrent) {

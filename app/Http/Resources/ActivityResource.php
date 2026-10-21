@@ -35,6 +35,7 @@ class ActivityResource extends JsonResource
                 'weighed_count' => $batch->getWeighedCount(),
                 'count' => $batch->getCaravansCount(),
                 'pending_identification_count' => $batch->getPendingIdentificationCount() ?? 0,
+                'untagged_calf_count' => $batch->getUntaggedCalfCount() ?? 0,
                 'head_count' => $batch->getHeadCount(),
                 'activity_id' => $batch->getActivityId(),
                 'batch_type_id' => $batch->getBatchTypeId(),

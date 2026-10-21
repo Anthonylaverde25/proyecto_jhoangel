@@ -501,6 +501,7 @@ final class ProcessPar01SubmissionUseCase
                     $calves[] = [
                         'mother' => $mother->getIdentification()->getValue(),
                         'calf' => $calfData['identification'],
+                        'calf_label' => $created->label(),
                         'sex' => $calfData['sex'],
                         'batch_id' => $created->getBatchId(),
                         'father_id' => $created->getLineage()?->getFatherId(),
@@ -612,6 +613,7 @@ final class ProcessPar01SubmissionUseCase
                 'differs_count' => $checked['differs'],
                 'males_count' => $counts['males'],
                 'females_count' => $counts['females'],
+                'untagged_calves_count' => count(array_filter($calves, fn (array $c) => $c['calf'] === null)),
                 'unplanned_count' => count($unplanned),
                 'calves' => $calves,
                 'overdue_new' => $overdueNew,
@@ -809,7 +811,8 @@ final class ProcessPar01SubmissionUseCase
         $calfTag = $row['caravana_cria'];
 
         if ($calfTag === null) {
-            $rowErrors[] = $this->error('CALF_TAG_MISSING', "Falta la caravana de la cría de '{$tag}'.", 'caravana_cria');
+            // The tag is often put on days later: the calf is born without one and waits in its batch.
+            $warnings[] = $this->warning($index, 'CALF_UNTAGGED', "La cría de '{$tag}' queda sin caravana: caravaneala desde el lote.", 'caravana_cria');
         } else {
             $upper = mb_strtoupper($calfTag);
 
@@ -893,7 +896,7 @@ final class ProcessPar01SubmissionUseCase
             }
         }
 
-        if ($calfTag === null || $sex === null) {
+        if ($sex === null) {
             return null;
         }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\UseCases\Caravans;
 
+use App\Core\ValueObjects\AnimalLabel;
 use App\Core\Services\WrightInbreedingCalculator;
 use App\Models\Caravan;
 use App\Models\CaravanLineage;
@@ -152,6 +153,8 @@ final class GetCaravanPedigreeUseCase
             $offspring[] = [
                 'id' => (int) $o->id,
                 'identification' => $o->identification,
+                // A calf still waiting for its tag is named after its mother.
+                'label' => AnimalLabel::of($o->identification, $caravansMap[(int) $o->mother_id]['identification'] ?? null, $o->sex),
                 'category' => $o->category_name ?? $o->category_code,
                 'breed' => $o->breed,
                 'sex' => $o->sex,
@@ -169,6 +172,7 @@ final class GetCaravanPedigreeUseCase
             'caravan' => [
                 'id' => $caravan->id,
                 'identification' => $caravan->identification,
+                'label' => AnimalLabel::of($caravan->identification, $motherId !== null ? ($caravansMap[$motherId]['identification'] ?? null) : null, $caravan->sex),
                 'category' => $caravan->categoryRelation?->name ?? $caravan->categoryRelation?->code,
                 'breed' => $caravan->breedRelation?->name,
                 'sex' => $caravan->sex?->value ?? (string) $caravan->sex,

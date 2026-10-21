@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Core\Entities;
 
+use App\Core\Enums\WeaningType;
+
 use InvalidArgumentException;
 
 final class LineageEntity
@@ -20,7 +22,12 @@ final class LineageEntity
         private bool $isNursing = true,
         private readonly ?\DateTimeInterface $sireAssignedAt = null,
         private readonly ?string $sireIdentificationMethod = null,
-        private readonly ?string $sireNotes = null
+        private readonly ?string $sireNotes = null,
+        /** When the time at foot ended, and why: WEANED or DIED. */
+        private ?string $nursingEndedAt = null,
+        private ?string $nursingEndReason = null,
+        /** For a weaning, the kind chosen by whoever weaned. */
+        private ?WeaningType $weaningType = null
     ) {
         if ($this->caravanId === $this->motherId) {
             throw new InvalidArgumentException("An animal cannot be its own mother.");
@@ -99,8 +106,42 @@ final class LineageEntity
         return $this->fatherId === null;
     }
 
-    public function wean(): void
+    public const ENDED_WEANED = 'WEANED';
+    public const ENDED_DIED = 'DIED';
+
+    /**
+     * Weaned on that day, of the kind chosen: wherever the calf goes, or if it stays.
+     */
+    public function wean(string $date, ?WeaningType $type): void
     {
         $this->isNursing = false;
+        $this->nursingEndedAt = $date;
+        $this->nursingEndReason = self::ENDED_WEANED;
+        $this->weaningType = $type;
+    }
+
+    /**
+     * The calf died at foot: it is no longer nursing, without having been weaned.
+     */
+    public function endNursingByDeath(string $date): void
+    {
+        $this->isNursing = false;
+        $this->nursingEndedAt = $date;
+        $this->nursingEndReason = self::ENDED_DIED;
+    }
+
+    public function getNursingEndedAt(): ?string
+    {
+        return $this->nursingEndedAt;
+    }
+
+    public function getNursingEndReason(): ?string
+    {
+        return $this->nursingEndReason;
+    }
+
+    public function getWeaningType(): ?WeaningType
+    {
+        return $this->weaningType;
     }
 }

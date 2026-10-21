@@ -21,6 +21,7 @@ use App\Core\Entities\WeaningOrderEntity;
 use App\Core\Enums\AnimalSex;
 use App\Core\Enums\BatchWeightCause;
 use App\Core\Enums\TransferOrderCategoryMode;
+use App\Core\Entities\WeaningOrderDestinationEntity;
 use App\Core\Enums\WeaningType;
 use App\Core\Exceptions\Dest01ValidationException;
 use App\Core\Exceptions\DomainException;
@@ -297,8 +298,9 @@ final class ProcessDest01SubmissionUseCase
             // STEP 1. Close every composition about to change, on both sides, so the curves read
             // the weaning as an instant change and not as a slow drift since the last weighing.
             $sourceBatchIds = [];
-            foreach ($calvesByRow as $calf) {
-                if ($calf->getBatchId() !== null) {
+            foreach ($calvesByRow as $index => $calf) {
+                // A calf weaned where it stands leaves no batch.
+                if ($calf->getBatchId() !== null && !($destinations[$keyByRow[$index]]['stays_in_place'] ?? false)) {
                     $sourceBatchIds[(int) $calf->getBatchId()] = true;
                 }
             }
@@ -316,6 +318,11 @@ final class ProcessDest01SubmissionUseCase
             $resolved = [];
 
             foreach ($destinations as $key => $destination) {
+                if ($destination['stays_in_place'] ?? false) {
+                    $resolved[$key] = ['batch' => null, 'created' => false, 'count' => 0, 'label' => $destination['label']];
+                    continue;
+                }
+
                 if ($destination['target_batch_id'] !== null) {
                     $batch = $this->batchRepository->findById((int) $destination['target_batch_id']);
                     $created = false;
@@ -355,12 +362,16 @@ final class ProcessDest01SubmissionUseCase
 
                 $movementIdByCaravanId[(int) $calf->getId()] = ($this->weanCaravan)(new WeanCaravanDTO(
                     caravanId: (int) $calf->getId(),
-                    targetBatchId: (int) $resolved[$key]['batch']->getId(),
+                    // Weaned where it stands: its own batch is the target, and no batch changes.
+                    targetBatchId: $resolved[$key]['batch'] !== null
+                        ? (int) $resolved[$key]['batch']->getId()
+                        : ($calf->getBatchId() ?? throw new DomainException("La cría {$calf->label()} no está en ningún lote: elegí a qué lote va.")),
                     weaningDate: $weaningDate,
                     weaningWeight: $row['peso'],
                     notes: $rowNotes,
                     newCategoryId: $change !== null ? (int) $change['category']->getId() : null,
-                    newSubcategoryId: $change !== null ? $change['subcategory']?->getId() : null
+                    newSubcategoryId: $change !== null ? $change['subcategory']?->getId() : null,
+                    weaningType: $checked['weaning_type']
                 ), false);
 
                 if ($change !== null) {
@@ -378,6 +389,10 @@ final class ProcessDest01SubmissionUseCase
 
             $seen = [];
             foreach ($resolved as $entry) {
+                if ($entry['batch'] === null) {
+                    continue;
+                }
+
                 $batchId = (int) $entry['batch']->getId();
 
                 if (!isset($seen[$batchId]) && $entry['count'] > 0) {
@@ -411,6 +426,11 @@ final class ProcessDest01SubmissionUseCase
 
             $destinationSummaries = [];
             foreach ($resolved as $entry) {
+                if ($entry['batch'] === null) {
+                    $destinationSummaries[] = ['batch_id' => null, 'batch_name' => $entry['label'], 'created' => false, 'count' => $entry['count'], 'average_weight' => null];
+                    continue;
+                }
+
                 $refreshed = $this->batchRepository->findById((int) $entry['batch']->getId());
 
                 $destinationSummaries[] = [
@@ -423,9 +443,10 @@ final class ProcessDest01SubmissionUseCase
             }
 
             $first = reset($resolved);
+            $firstBatch = $first['batch'] ?? null;
 
             return [
-                'batch' => $this->batchRepository->findById((int) $first['batch']->getId()) ?? $first['batch'],
+                'batch' => $firstBatch !== null ? ($this->batchRepository->findById((int) $firstBatch->getId()) ?? $firstBatch) : null,
                 'created' => $first['created'],
                 'destinations' => $destinationSummaries,
                 ...$this->summary($dto, $calvesByRow),
@@ -493,15 +514,24 @@ final class ProcessDest01SubmissionUseCase
         foreach ($dto->destinations as $destination) {
             $key = $destination['key'];
 
+            // Weaned where they are: no batch is named or created.
+            if ($destination['stays_in_place'] ?? false) {
+                $destinations[$key] = ['target_batch_id' => null, 'new_batch' => null, 'stays_in_place' => true, 'label' => WeaningOrderDestinationEntity::STAY_LABEL];
+                continue;
+            }
+
             if ($destination['target_batch_id'] !== null) {
                 $batch = $this->batchRepository->findById((int) $destination['target_batch_id']);
 
-                if ($batch === null || !$batch->isActive() || $batch->getBatchTypeCode() !== WeaningOrderRosterBuilder::WEANING_BATCH_TYPE) {
-                    $headerErrors[] = $this->headerError('lote_destete', 'BATCH_NOT_FOUND', 'El lote de destete elegido no existe, está cerrado o no es un lote de destete.');
+                // The weaning batch is recommended, not required: any working own batch may receive them.
+                if ($batch === null || !$batch->isActive() || $batch->getFarmId() !== null
+                    || in_array($batch->getBatchTypeCode(), WeaningOrderRosterBuilder::NOT_WEANING_DESTINATIONS, true)) {
+                    $headerErrors[] = $this->headerError('lote_destete', 'BATCH_NOT_FOUND', 'El lote elegido no existe, está cerrado o no puede recibir crías destetadas.');
                     continue;
                 }
 
-                if ($activityId !== null && $batch->getActivityId() !== null && (int) $batch->getActivityId() !== $activityId) {
+                if ($batch->getBatchTypeCode() === WeaningOrderRosterBuilder::WEANING_BATCH_TYPE
+                    && $activityId !== null && $batch->getActivityId() !== null && (int) $batch->getActivityId() !== $activityId) {
                     $headerErrors[] = $this->headerError('lote_destete', 'DESTINATION_ACTIVITY_MISMATCH', "El lote '{$batch->getName()}' no es de la actividad de los lotes de destete.");
                     continue;
                 }

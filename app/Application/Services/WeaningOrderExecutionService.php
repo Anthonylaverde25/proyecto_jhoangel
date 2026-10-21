@@ -130,6 +130,7 @@ final class WeaningOrderExecutionService
                 'target_batch_id' => $destination['target_batch_id'],
                 'new_batch_name' => $destination['new_batch']['name'] ?? null,
                 'is_confined' => $destination['new_batch']['is_confined'] ?? null,
+                'stays_in_place' => $destination['stays_in_place'] ?? false,
             ];
         }
 
@@ -330,6 +331,11 @@ final class WeaningOrderExecutionService
         foreach ($order->getDestinations() as $destination) {
             foreach ($resolvedByKey as $sheetKey => $entry) {
                 $batch = $entry['batch'];
+
+                // Calves weaned where they are: there is no batch to resolve the destination to.
+                if ($batch === null) {
+                    continue;
+                }
                 $matches = ($destination->getTargetBatchId() !== null && $destination->getTargetBatchId() === (int) $batch->getId())
                     || ($destination->getResolvedBatchId() !== null && $destination->getResolvedBatchId() === (int) $batch->getId())
                     || Cact01SubmissionDTO::normalizeKey($batch->getName()) === $destination->getKey()

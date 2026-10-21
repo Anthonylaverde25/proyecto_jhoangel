@@ -31,6 +31,7 @@ final class ProcessCact01Request extends FormRequest
         return [
             'source_batch_id' => 'required|integer',
             'fecha_movimiento' => 'required|date',
+            'weaning_type' => 'nullable|string|in:TRADITIONAL,ANTICIPATED,EARLY',
             'actividad_origen' => 'nullable|string|max:255',
             // The destination activity is the one header field that RESTRICTS: every
             // destination of the sheet has to live inside it. The text beside it is only what

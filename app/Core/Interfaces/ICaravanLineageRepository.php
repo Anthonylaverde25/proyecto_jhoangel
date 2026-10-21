@@ -26,7 +26,19 @@ interface ICaravanLineageRepository
      */
     public function findOffspringByMotherId(int $motherId): array;
 
-    public function wean(int $caravanId): void;
+    /**
+     * The mother–calf pairs still at foot in which any animal of the list takes part, with the batch
+     * each one is in now.
+     *
+     * @param int[] $caravanIds
+     * @return list<array{mother_id: int, calf_id: int, mother_batch_id: ?int, calf_batch_id: ?int, mother_identification: string, calf_identification: ?string}>
+     */
+    public function nursingPairsOf(array $caravanIds): array;
+
+    /**
+     * Ends the time at foot of a calf as a weaning, on that day and of that kind.
+     */
+    public function wean(int $caravanId, string $date, ?\App\Core\Enums\WeaningType $type): void;
 
     /**
      * Returns all lineage records where father_id is NULL (pending sire assignment).
