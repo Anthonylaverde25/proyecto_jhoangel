@@ -16,8 +16,8 @@ final class ListBirthOrdersUseCase
     /**
      * @return BirthOrderEntity[]
      */
-    public function __invoke(int $companyId, ?string $status = null, ?string $kind = null, bool $overdueOnly = false): array
+    public function __invoke(int $companyId, ?string $status = null, ?string $kind = null, bool $overdueOnly = false, bool $withRoll = false): array
     {
-        return $this->repository->list($companyId, $status, $kind, $overdueOnly);
+        return $this->repository->list($companyId, $status, $kind, $overdueOnly, $withRoll);
     }
 }

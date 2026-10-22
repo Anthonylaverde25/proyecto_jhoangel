@@ -12,6 +12,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Warehouses\SetWarehouseActiveRequest;
 use App\Http\Requests\Warehouses\StoreWarehouseRequest;
 use App\Http\Resources\WarehouseResource;
+use App\Http\Resources\WarehouseStockItemResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -68,6 +69,16 @@ class WarehouseController extends Controller
         );
 
         return $this->listing($request, $listing);
+    }
+
+    public function stock(Request $request, int $id): JsonResponse
+    {
+        $result = ($this->warehouses->stock)($id, $this->activeCompanyId());
+
+        return response()->json([
+            'warehouse' => (new WarehouseResource($result['warehouse']))->resolve($request),
+            'items' => array_map(fn (array $row) => WarehouseStockItemResource::fromRow($row), $result['items']),
+        ]);
     }
 
     private function listing(Request $request, WarehouseListing $listing): JsonResponse

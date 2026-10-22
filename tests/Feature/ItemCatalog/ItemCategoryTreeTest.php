@@ -41,10 +41,32 @@ class ItemCategoryTreeTest extends ItemCatalogTestCase
 
     public function test_an_inactive_parent_is_refused(): void
     {
-        $this->apiAs('PATCH', '/item-categories/' . $this->categoryId('FUEL') . '/active', ['is_active' => false])->assertOk();
+        $parent = $this->create('Lubricantes');
+        $this->apiAs('PATCH', "/item-categories/{$parent}/active", ['is_active' => false])->assertOk();
 
-        $this->apiAs('POST', '/item-categories', ['name' => 'Gasoil', 'parent_id' => $this->categoryId('FUEL')])
+        $this->apiAs('POST', '/item-categories', ['name' => 'Aceite', 'parent_id' => $parent])
             ->assertStatus(422)->assertJsonValidationErrors('domain');
+    }
+
+    public function test_a_system_category_cannot_be_renamed_moved_or_deactivated(): void
+    {
+        $feed = $this->categoryId('FEED');
+        $this->apiAs('GET', '/item-categories')->assertOk()
+            ->assertJsonFragment(['code' => 'FEED', 'name' => 'Alimentos', 'is_system' => true]);
+
+        $this->apiAs('PATCH', "/item-categories/{$feed}", ['name' => 'Comida'])->assertStatus(422)->assertJsonValidationErrors('domain');
+        $this->apiAs('PATCH', "/item-categories/{$feed}", ['parent_id' => $this->categoryId('NUTRITION')])->assertStatus(422);
+        $this->apiAs('PATCH', "/item-categories/{$feed}/active", ['is_active' => false])->assertStatus(422);
+
+        $this->assertDatabaseHas('item_categories', ['id' => $feed, 'name' => 'Alimentos', 'parent_id' => null, 'is_active' => true]);
+    }
+
+    public function test_a_system_category_still_takes_subcategories(): void
+    {
+        $id = $this->create('Balanceados', $this->categoryId('FEED'));
+
+        $this->apiAs('PATCH', "/item-categories/{$id}", ['name' => 'Balanceados comerciales'])
+            ->assertOk()->assertJsonPath('is_system', false);
     }
 
     public function test_a_parent_of_another_company_is_refused_by_validation_and_by_the_database(): void

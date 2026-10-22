@@ -19,6 +19,7 @@ class ItemCategory extends Model
         'name',
         'is_active',
         'display_order',
+        'is_system',
     ];
 
     protected $casts = [
@@ -26,6 +27,7 @@ class ItemCategory extends Model
         'parent_id' => 'integer',
         'is_active' => 'boolean',
         'display_order' => 'integer',
+        'is_system' => 'boolean',
     ];
 
     public function items(): HasMany

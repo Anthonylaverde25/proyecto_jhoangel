@@ -15,7 +15,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * A birth order with the batches its females come from and its progress by outcome, and — unless
- * `withRoll` is off, as in the list — its roll and history.
+ * `withRoll` is off, as in the list — its roll and history. The grouped list asks for the roll
+ * alone.
  *
  * Each line carries what the review and the screen need to suggest a sire without printing one:
  * the candidate sires of the gestation and the one the system would use if left empty.
@@ -26,9 +27,23 @@ class BirthOrderResource extends JsonResource
 {
     private bool $withRoll = true;
 
+    private bool $withHistory = true;
+
     public function summary(): self
     {
         $this->withRoll = false;
+        $this->withHistory = false;
+
+        return $this;
+    }
+
+    /**
+     * The list grouped by order and batch: each order with its roll, still without its history.
+     */
+    public function summaryWithRoll(): self
+    {
+        $this->withRoll = true;
+        $this->withHistory = false;
 
         return $this;
     }
@@ -133,6 +148,10 @@ class BirthOrderResource extends JsonResource
             'executed_at' => $a->getExecutedAt()?->format(DATE_ATOM),
             'observations' => $a->getObservations(),
         ], $order->getAnimals());
+
+        if (!$this->withHistory) {
+            return $data;
+        }
 
         $data['history'] = array_map(fn (TransferOrderHistoryEntity $h) => [
             'id' => $h->getId(),

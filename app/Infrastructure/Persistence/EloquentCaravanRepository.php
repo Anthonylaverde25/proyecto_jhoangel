@@ -311,6 +311,10 @@ class EloquentCaravanRepository implements ICaravanRepository
             $query->where('sex', $criteria->sex);
         }
 
+        if ($criteria->categoryId !== null) {
+            $query->where('category_id', $criteria->categoryId);
+        }
+
         $term = trim((string) $criteria->search);
         if ($term !== '') {
             $query->where(function ($q) use ($term) {
@@ -585,12 +589,23 @@ class EloquentCaravanRepository implements ICaravanRepository
             ->with(['caravan.batch', 'offspring.caravan.batch', 'offspring.caravan.death'])
             ->get();
 
+        $nursingIds = $gestations
+            ->flatMap(fn ($g) => $g->offspring)
+            ->filter(fn ($lineage) => $lineage->caravan !== null && (bool) $lineage->is_nursing)
+            ->map(fn ($lineage) => (int) $lineage->caravan_id)
+            ->unique()
+            ->values()
+            ->all();
+        $weights = $this->lastWeightsAfterBirth($nursingIds);
+
         $history = [];
         foreach ($gestations as $g) {
             foreach ($g->offspring as $lineage) {
                 if ($lineage->caravan === null) {
                     continue;
                 }
+
+                $weight = $weights[(int) $lineage->caravan_id] ?? null;
 
                 $history[] = new \App\Core\Entities\BirthHistoryEntity(
                     gestationId: (int) $g->id,
@@ -608,12 +623,55 @@ class EloquentCaravanRepository implements ICaravanRepository
                     motherBatchName: $g->caravan?->batch?->name,
                     calfCategoryId: $lineage->caravan?->category_id !== null ? (int) $lineage->caravan->category_id : null,
                     calfSubcategoryId: $lineage->caravan?->subcategory_id !== null ? (int) $lineage->caravan->subcategory_id : null,
-                    calfDeathDate: $lineage->caravan?->death?->death_date?->format('Y-m-d')
+                    calfDeathDate: $lineage->caravan?->death?->death_date?->format('Y-m-d'),
+                    calfWeight: $weight['weight'] ?? null,
+                    calfWeighingDate: $weight['date'] ?? null
                 );
             }
         }
 
         return $history;
+    }
+
+    /**
+     * The last weight of each calf taken after it was born. The birth weighing (its type, or its
+     * source on older rows) is left out: averaged with later ones it would only reflect how many
+     * calves were never weighed again.
+     *
+     * @param list<int> $caravanIds
+     * @return array<int, array{weight: float, date: ?string}>
+     */
+    private function lastWeightsAfterBirth(array $caravanIds): array
+    {
+        if ($caravanIds === []) {
+            return [];
+        }
+
+        $birthTypeId = \App\Models\WeighingType::idOf(\App\Core\Enums\WeighingTypeCode::BIRTH);
+
+        $rows = \App\Models\CaravanWeight::whereIn('caravan_id', $caravanIds)
+            ->where(fn ($query) => $query->whereNull('source')->orWhere('source', '!=', \App\Core\Enums\WeighingSource::BIRTH->value))
+            ->when($birthTypeId > 0, fn ($query) => $query->where(
+                fn ($type) => $type->whereNull('weighing_type_id')->orWhere('weighing_type_id', '!=', $birthTypeId)
+            ))
+            ->orderByDesc('weighing_date')
+            ->orderByDesc('id')
+            ->get(['caravan_id', 'weight', 'weighing_date']);
+
+        $last = [];
+        foreach ($rows as $row) {
+            $id = (int) $row->caravan_id;
+
+            if (!isset($last[$id])) {
+                $date = $row->weighing_date;
+                $last[$id] = [
+                    'weight' => (float) $row->weight,
+                    'date' => $date instanceof \DateTimeInterface ? $date->format('Y-m-d') : ($date !== null ? substr((string) $date, 0, 10) : null),
+                ];
+            }
+        }
+
+        return $last;
     }
 
     public function updateBatchAndCategory(int $caravanId, int $batchId, ?int $categoryId = null, ?int $subcategoryId = null): void

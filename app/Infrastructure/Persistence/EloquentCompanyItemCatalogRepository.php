@@ -51,6 +51,7 @@ class EloquentCompanyItemCatalogRepository implements ICompanyItemCatalogReposit
                     'name' => $category['name'],
                     'is_active' => true,
                     'display_order' => $category['order'],
+                    'is_system' => true,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);

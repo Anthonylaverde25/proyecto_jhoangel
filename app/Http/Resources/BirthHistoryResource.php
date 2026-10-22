@@ -41,6 +41,9 @@ class BirthHistoryResource extends JsonResource
             'mother_batch_name'     => $this->resource->getMotherBatchName(),
             // A calf pending in an open order cannot be ordered or weaned by another one.
             'open_order_code'       => $this->resource->getOpenOrderCode(),
+            // The last weight after birth; null when the calf was only weighed at birth.
+            'calf_weight'           => $this->resource->getCalfWeight(),
+            'calf_weighing_date'    => $this->resource->getCalfWeighingDate(),
         ];
     }
 }

@@ -8,7 +8,8 @@ use App\Core\Enums\UnitDimension;
 
 /**
  * Units and categories every company starts with (D14). Pure data; migration M10 keeps its own
- * frozen copy so later edits here never change what it did.
+ * frozen copy so later edits here never change what it did. Every base category is a system
+ * category: the software relies on it, so the company cannot rename, move or deactivate it.
  */
 final class BaseItemCatalog
 {
@@ -41,14 +42,18 @@ final class BaseItemCatalog
     {
         return [
             ['code' => 'HEALTH', 'name' => 'Sanidad', 'order' => 1],
-            ['code' => 'NUTRITION', 'name' => 'Nutrición', 'order' => 2],
-            ['code' => 'REPRODUCTION', 'name' => 'Reproducción', 'order' => 3],
-            ['code' => 'IDENTIFICATION', 'name' => 'Identificación', 'order' => 4],
-            ['code' => 'FUEL', 'name' => 'Combustibles', 'order' => 5],
-            ['code' => 'MAINTENANCE', 'name' => 'Mantenimiento', 'order' => 6],
-            ['code' => 'FREIGHT', 'name' => 'Fletes', 'order' => 7],
-            ['code' => 'VET_SERVICES', 'name' => 'Servicios veterinarios', 'order' => 8],
-            ['code' => 'FIELD_SERVICES', 'name' => 'Servicios de campo', 'order' => 9],
+            ['code' => 'LIVESTOCK_TREATMENT', 'name' => 'Tratamiento de ganado', 'order' => 2],
+            ['code' => 'PADDOCK_TREATMENT', 'name' => 'Tratamiento de potrero', 'order' => 3],
+            ['code' => 'FEED', 'name' => 'Alimentos', 'order' => 4],
+            ['code' => 'NUTRITION', 'name' => 'Nutrición', 'order' => 5],
+            ['code' => 'REPRODUCTION', 'name' => 'Reproducción', 'order' => 6],
+            ['code' => 'SEMEN', 'name' => 'Semen', 'order' => 7],
+            ['code' => 'IDENTIFICATION', 'name' => 'Identificación', 'order' => 8],
+            ['code' => 'FUEL', 'name' => 'Combustibles', 'order' => 9],
+            ['code' => 'MAINTENANCE', 'name' => 'Mantenimiento', 'order' => 10],
+            ['code' => 'FREIGHT', 'name' => 'Fletes', 'order' => 11],
+            ['code' => 'VET_SERVICES', 'name' => 'Servicios veterinarios', 'order' => 12],
+            ['code' => 'FIELD_SERVICES', 'name' => 'Servicios de campo', 'order' => 13],
         ];
     }
 }

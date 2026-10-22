@@ -24,12 +24,13 @@ class Dest01ResultResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        /** @var BatchEntity $batch */
+        // Null when every calf stayed where it was: no batch received them.
+        /** @var ?BatchEntity $batch */
         $batch = $this->resource['batch'];
 
         return [
-            'batch_id' => $batch->getId(),
-            'batch_name' => $batch->getName(),
+            'batch_id' => $batch?->getId(),
+            'batch_name' => $batch?->getName() ?? ($this->resource['destinations'][0]['batch_name'] ?? null),
             'batch_created' => $this->resource['created'],
             'destinations' => $this->resource['destinations'],
             'calves_count' => $this->resource['calves_count'],

@@ -7,7 +7,7 @@ namespace App\Core\ValueObjects;
 /**
  * What the AI agent read of a provider document's issuer (Delivery F, part 03 §2): the CUIT it
  * chose and where it came from (ARCA QR or vision), the issuer's name and address, and the
- * receiver's CUIT when the document carries one. Plain data: the rules that need the company and
+ * receiver's CUIT when the document carries one, and the lines it transcribed (Delivery G). Plain data: the rules that need the company and
  * its providers are applied by ReadFiscalDocumentImageUseCase.
  */
 final class FiscalIssuerRead
@@ -20,6 +20,7 @@ final class FiscalIssuerRead
 
     /**
      * @param array<string, mixed>|null $qr
+     * @param list<FiscalLineRead> $lines
      */
     public function __construct(
         public readonly ?string $issuerCuit,
@@ -36,6 +37,7 @@ final class FiscalIssuerRead
         public readonly ?string $visionError,
         public readonly ?string $model,
         public readonly ?int $latencyMs,
+        public readonly array $lines = [],
     ) {
     }
 
@@ -52,6 +54,13 @@ final class FiscalIssuerRead
         $chosen = (array) ($payload['issuer_cuit'] ?? []);
         $receiver = is_array($payload['receiver_cuit'] ?? null) ? $payload['receiver_cuit'] : [];
         $issuer = is_array($payload['issuer'] ?? null) ? $payload['issuer'] : [];
+        $lines = [];
+        foreach (is_array($payload['lines'] ?? null) ? array_values($payload['lines']) : [] as $index => $line) {
+            $read = is_array($line) ? FiscalLineRead::fromAgentLine($line, $index + 1) : null;
+            if ($read !== null) {
+                $lines[] = $read;
+            }
+        }
 
         return new self(
             issuerCuit: $digits($chosen['value'] ?? null),
@@ -68,6 +77,7 @@ final class FiscalIssuerRead
             visionError: is_string($payload['vision_error'] ?? null) ? $payload['vision_error'] : null,
             model: is_string($payload['model'] ?? null) ? $payload['model'] : null,
             latencyMs: isset($payload['latency_ms']) ? (int) $payload['latency_ms'] : null,
+            lines: $lines,
         );
     }
 }

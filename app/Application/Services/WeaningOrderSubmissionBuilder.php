@@ -8,6 +8,7 @@ use App\Application\DTOs\Dest01\Dest01SubmissionDTO;
 use App\Application\DTOs\WeaningOrders\WeaningFieldData;
 use App\Core\Entities\WeaningOrderEntity;
 use App\Core\Enums\TransferOrderCategoryMode;
+use App\Core\Enums\WeaningType;
 use App\Core\Exceptions\WeaningOrderDomainException;
 
 /**
@@ -24,6 +25,8 @@ final class WeaningOrderSubmissionBuilder
      * @param string $weaningDate when the weaning happened (Y-m-d), which may differ from the date
      *                            the order was planned for
      * @param array<int, WeaningFieldData> $fieldDataByCaravanId what was measured or decided per calf
+     * @param list<int>|null $onlyCaravanIds wean only these pending calves; null = all of them
+     * @param WeaningType|null $weaningType how they were weaned, when it was declared at weaning
      *
      * @throws WeaningOrderDomainException
      */
@@ -32,12 +35,30 @@ final class WeaningOrderSubmissionBuilder
         string $weaningDate,
         string $origin,
         ?int $userId,
-        array $fieldDataByCaravanId = []
+        array $fieldDataByCaravanId = [],
+        ?array $onlyCaravanIds = null,
+        ?WeaningType $weaningType = null
     ): Dest01SubmissionDTO {
         $pending = $order->pendingAnimals();
 
         if ($pending === []) {
             throw WeaningOrderDomainException::domainError("La orden {$order->getCode()} no tiene crías pendientes.", 'NOTHING_PENDING');
+        }
+
+        // Some of the pending calves only: the others stay pending and the order is left PARTIAL.
+        if ($onlyCaravanIds !== null) {
+            $wanted = array_flip($onlyCaravanIds);
+            $pendingIds = array_flip(array_map(fn ($line) => $line->getCaravanId(), $pending));
+            $foreign = array_diff_key($wanted, $pendingIds);
+
+            if ($foreign !== []) {
+                throw WeaningOrderDomainException::domainError(
+                    count($foreign) . " cría(s) elegida(s) no están pendientes en la orden {$order->getCode()}.",
+                    'NOT_PENDING_IN_ORDER'
+                );
+            }
+
+            $pending = array_values(array_filter($pending, fn ($line) => isset($wanted[$line->getCaravanId()])));
         }
 
         $unassigned = array_filter($pending, fn ($line) => $line->getDestinationKey() === null);
@@ -113,7 +134,8 @@ final class WeaningOrderSubmissionBuilder
         return new Dest01SubmissionDTO(
             companyId: $order->getCompanyId(),
             fechaDestete: $weaningDate,
-            tipoDestete: $order->getWeaningType()?->value,
+            // The type declared at weaning, when it was declared; else the one the order planned.
+            tipoDestete: ($weaningType ?? $order->getWeaningType())?->value,
             loteOrigen: null,
             responsable: $order->getResponsable(),
             observaciones: $order->getObservations(),

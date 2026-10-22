@@ -39,6 +39,7 @@ class TenantDatabaseSeeder extends Seeder
             // then the catalog that backs the B1 screens: it needs the providers seeded above.
             CompanyItemCatalogSeeder::class,
             ItemCatalogTestSeeder::class,
+            FiscalLineTestSeeder::class,
             // Provider documents and stock operations of the B2 screens, the delivery notes of
             // delivery C and the warehouses and transfers of delivery D, through the use cases.
             StockLedgerTestSeeder::class,

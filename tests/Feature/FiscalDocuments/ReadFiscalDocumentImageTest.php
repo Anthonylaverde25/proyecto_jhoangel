@@ -6,6 +6,9 @@ namespace Tests\Feature\FiscalDocuments;
 
 use App\Core\Exceptions\FiscalReaderUnavailableException;
 use App\Core\Interfaces\IFiscalDocumentReader;
+use App\Core\Interfaces\IFiscalItemMatcher;
+use App\Core\ValueObjects\FiscalItemMatch;
+use App\Core\ValueObjects\FiscalLineRead;
 use App\Core\ValueObjects\Cuit;
 use App\Core\ValueObjects\FiscalIssuerRead;
 use App\Models\Company;
@@ -180,6 +183,70 @@ class ReadFiscalDocumentImageTest extends VeterinaryTestCase
         return $this->apiAs('POST', '/fiscal-documents/read-image', ['document' => UploadedFile::fake()->image('factura.png')]);
     }
 
+    public function test_the_lines_come_back_resolved_even_for_a_new_provider(): void
+    {
+        $this->matcherAnswers([new FiscalItemMatch(1, null, FiscalItemMatch::NONE, 'No está en el catálogo')]);
+        $this->agentReads($this->read($this->freshCuit(), 'qr', lines: [
+            new FiscalLineRead(1, 'Poste quebracho 2,20 m', null, '40.0000', '7600.000000', 'VAT_21'),
+        ]));
+
+        $this->upload()->assertOk()
+            ->assertJsonPath('status', 'NEW')
+            ->assertJsonPath('lines.0.description', 'Poste quebracho 2,20 m')
+            ->assertJsonPath('lines.0.code', null)
+            ->assertJsonPath('lines.0.quantity', '40.0000')
+            ->assertJsonPath('lines.0.unit_price', '7600.000000')
+            ->assertJsonPath('lines.0.vat_rate_code', 'VAT_21')
+            ->assertJsonPath('lines.0.resolution.source', 'NONE')
+            ->assertJsonPath('lines.0.resolution.level', 'NONE');
+    }
+
+    public function test_a_matcher_failure_does_not_fail_the_reading(): void
+    {
+        $provider = $this->provider(true);
+        $this->app->instance(IFiscalItemMatcher::class, new class implements IFiscalItemMatcher {
+            public function match(array $lines, array $catalog, array $providerItemIds, int $companyId): array
+            {
+                throw FiscalReaderUnavailableException::unreachable();
+            }
+        });
+        $this->agentReads($this->read($provider->cuit, 'qr', lines: [new FiscalLineRead(1, 'Algo ilegible para el catálogo')]));
+
+        $this->upload()->assertOk()
+            ->assertJsonPath('status', 'MATCHED')
+            ->assertJsonPath('lines.0.resolution.note', 'MATCHER_UNAVAILABLE');
+    }
+
+    public function test_without_lines_the_matcher_is_not_called(): void
+    {
+        $provider = $this->provider(true);
+        $this->app->instance(IFiscalItemMatcher::class, new class implements IFiscalItemMatcher {
+            public function match(array $lines, array $catalog, array $providerItemIds, int $companyId): array
+            {
+                throw new \LogicException('The matcher must not be called without lines.');
+            }
+        });
+        $this->agentReads($this->read($provider->cuit, 'qr'));
+
+        $this->upload()->assertOk()->assertJsonPath('lines', []);
+    }
+
+    /** @param list<FiscalItemMatch> $matches */
+    private function matcherAnswers(array $matches): void
+    {
+        $this->app->instance(IFiscalItemMatcher::class, new class($matches) implements IFiscalItemMatcher {
+            /** @param list<FiscalItemMatch> $matches */
+            public function __construct(private readonly array $matches)
+            {
+            }
+
+            public function match(array $lines, array $catalog, array $providerItemIds, int $companyId): array
+            {
+                return $this->matches;
+            }
+        });
+    }
+
     private function agentReads(FiscalIssuerRead $read): void
     {
         $this->app->instance(IFiscalDocumentReader::class, new class($read) implements IFiscalDocumentReader {
@@ -201,10 +268,11 @@ class ReadFiscalDocumentImageTest extends VeterinaryTestCase
         ?string $problem = null,
         ?string $discrepancy = null,
         ?string $name = null,
+        array $lines = [],
     ): FiscalIssuerRead {
         return new FiscalIssuerRead(
             $issuer, $source, $discrepancy, $problem, $receiver, $receiver !== null ? $source : null,
-            $name, null, null, null, null, null, 'fake', 10,
+            $name, null, null, null, null, null, 'fake', 10, $lines,
         );
     }
 

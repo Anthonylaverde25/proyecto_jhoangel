@@ -93,6 +93,7 @@ class CaravanController extends Controller
         $search = $request->query('search');
         $sex = $request->query('sex');
         $sort = $request->query('sort');
+        $categoryId = (int) $request->query('category_id', 0);
 
         $result = ($this->paginateCaravansSummary)(new CaravanSummaryCriteria(
             scope: (string) $request->query('scope', 'own'),
@@ -102,6 +103,7 @@ class CaravanController extends Controller
             sort: $sort ? (string) $sort : null,
             page: (int) $request->query('page', 1),
             perPage: (int) $request->query('per_page', 25),
+            categoryId: $categoryId > 0 ? $categoryId : null,
         ));
 
         $count = count($result->items);

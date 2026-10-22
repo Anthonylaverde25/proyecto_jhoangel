@@ -13,6 +13,20 @@ use Illuminate\Support\Facades\DB;
  */
 class FiscalDocumentRegisterTest extends StockTestCase
 {
+    public function test_the_paper_text_of_a_line_is_kept_and_shown(): void
+    {
+        [$itemId] = $this->stockedItem();
+
+        $id = $this->invoice([
+            $this->line($itemId, '10', '100', extra: ['source_description' => '  Ivermec 1% x 500cc ']),
+            $this->line($itemId, '1', '100'),
+        ])->assertStatus(201)->json('id');
+
+        $this->apiAs('GET', "/fiscal-documents/{$id}")->assertOk()
+            ->assertJsonPath('lines.0.source_description', 'Ivermec 1% x 500cc')
+            ->assertJsonPath('lines.1.source_description', null);
+    }
+
     public function test_the_same_number_of_the_same_provider_is_refused_while_registered(): void
     {
         [$item] = $this->stockedItem();

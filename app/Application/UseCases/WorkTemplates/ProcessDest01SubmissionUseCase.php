@@ -9,6 +9,7 @@ use App\Application\DTOs\CreateBatchDTO;
 use App\Application\DTOs\Dest01\Dest01SubmissionDTO;
 use App\Application\DTOs\WeanCaravanDTO;
 use App\Application\Services\OpenOrderCommitmentChecker;
+use App\Application\Services\WeaningDeviationRecorder;
 use App\Application\Services\WeaningOrderExecutionService;
 use App\Application\Services\WeaningOrderRosterBuilder;
 use App\Application\UseCases\Batches\CreateBatchUseCase;
@@ -61,7 +62,8 @@ final class ProcessDest01SubmissionUseCase
         private readonly TroopWeightOutlierDetector $outlierDetector,
         private readonly WeaningOrderRosterBuilder $roster,
         private readonly WeaningOrderExecutionService $orderExecution,
-        private readonly OpenOrderCommitmentChecker $commitments
+        private readonly OpenOrderCommitmentChecker $commitments,
+        private readonly WeaningDeviationRecorder $deviations
     ) {
     }
 
@@ -191,6 +193,8 @@ final class ProcessDest01SubmissionUseCase
         $categoryResolver = new AnimalCategoryTextResolver($this->categoryRepository->all());
         /** @var array<int, array{category: AnimalCategoryEntity, subcategory: ?AnimalSubcategoryEntity}> $categoryByRow */
         $categoryByRow = [];
+        /** @var array<int, array{planned: string, actual: string, metadata: array<string, mixed>}> $categoryDeviationByCaravanId */
+        $categoryDeviationByCaravanId = [];
 
         foreach ($calvesByRow as $index => $calf) {
             $tag = $calf->getIdentification()->getValue();
@@ -228,6 +232,12 @@ final class ProcessDest01SubmissionUseCase
             if ($change !== null) {
                 $categoryByRow[$index] = $change;
             }
+
+            $categoryDeviation = $this->categoryDeviation($change, $calf, $order);
+
+            if ($categoryDeviation !== null) {
+                $categoryDeviationByCaravanId[(int) $calf->getId()] = $categoryDeviation;
+            }
         }
 
         $rowErrors = [];
@@ -253,6 +263,7 @@ final class ProcessDest01SubmissionUseCase
             'calves_by_row' => $calvesByRow,
             'key_by_row' => $keyByRow,
             'category_by_row' => $categoryByRow,
+            'category_deviations' => $categoryDeviationByCaravanId,
             'weaning_date' => $weaningDate,
             'warnings' => array_merge(
                 $warnings,
@@ -413,6 +424,17 @@ final class ProcessDest01SubmissionUseCase
                 $categoryByCaravanId
             );
 
+            // What the weaning did differently from the plan, for the audit: never blocks.
+            if ($order !== null && !$createdFromSheet) {
+                $this->deviations->atExecution(
+                    $order,
+                    array_keys($movementIdByCaravanId),
+                    $weaningDate,
+                    $checked['category_deviations'],
+                    $dto->actionUserId
+                );
+            }
+
             if ($orderSummary !== null) {
                 $orderSummary['created_from_sheet'] = $createdFromSheet;
 
@@ -475,6 +497,12 @@ final class ProcessDest01SubmissionUseCase
         }
 
         $declared = $order?->getWeaningType();
+
+        // Declared at the desk while weaning an order's calves: the screen started from the plan,
+        // so a different type is what happened, and it is recorded on the order as a deviation.
+        if ($dto->origin === Dest01SubmissionDTO::ORIGIN_SCREEN && $marked !== null) {
+            return $marked;
+        }
 
         if ($declared !== null && $marked !== null && $declared !== $marked) {
             $warnings[] = $this->warning(
@@ -628,6 +656,40 @@ final class ProcessDest01SubmissionUseCase
         }
 
         return array_map(fn (array $letters) => array_values($letters), $byKey);
+    }
+
+    /**
+     * The C/S a calf changed to when it is not the one its order declared — or the order said the
+     * category does not change. An order that left it for the chute planned none to deviate from.
+     *
+     * @param array{category: AnimalCategoryEntity, subcategory: ?AnimalSubcategoryEntity}|null $change
+     * @return array{planned: string, actual: string, metadata: array<string, mixed>}|null
+     */
+    private function categoryDeviation(?array $change, CaravanEntity $calf, ?WeaningOrderEntity $order): ?array
+    {
+        $line = $order?->animalByCaravanId((int) $calf->getId());
+
+        if ($change === null || $line === null || $order->getCategoryMode() === TransferOrderCategoryMode::AT_CHUTE) {
+            return null;
+        }
+
+        $categoryId = (int) $change['category']->getId();
+        $subcategoryId = $change['subcategory']?->getId();
+
+        if ($line->hasTargetCategory() && $line->getTargetCategoryId() === $categoryId && $line->getTargetSubcategoryId() === $subcategoryId) {
+            return null;
+        }
+
+        return [
+            'planned' => $line->hasTargetCategory() ? (string) $line->getTargetCategoryLabel() : 'No cambia',
+            'actual' => AnimalCategoryTextResolver::label($change['category'], $change['subcategory']),
+            'metadata' => [
+                'planned_category_id' => $line->getTargetCategoryId(),
+                'planned_subcategory_id' => $line->getTargetSubcategoryId(),
+                'category_id' => $categoryId,
+                'subcategory_id' => $subcategoryId,
+            ],
+        ];
     }
 
     /**

@@ -19,6 +19,8 @@ final readonly class FiscalLineDTO
         public array $taxes,
         /** The delivery-note line an invoice line was converted from (DC5). */
         public ?int $deliveryNoteLineId = null,
+        /** What the paper said, when the line was read from an image (Delivery G). */
+        public ?string $sourceDescription = null,
     ) {
     }
 
@@ -35,6 +37,9 @@ final readonly class FiscalLineDTO
             isset($data['heads_treated']) ? (int) $data['heads_treated'] : null,
             array_map(fn (array $tax) => TaxInputDTO::fromArray($tax), array_values($data['taxes'] ?? [])),
             isset($data['delivery_note_line_id']) ? (int) $data['delivery_note_line_id'] : null,
+            isset($data['source_description']) && trim((string) $data['source_description']) !== ''
+                ? trim((string) $data['source_description'])
+                : null,
         );
     }
 }

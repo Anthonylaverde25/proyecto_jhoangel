@@ -100,11 +100,15 @@ class EloquentBirthOrderRepository implements IBirthOrderRepository
         return $model !== null ? BirthOrderMapper::toEntity($model) : null;
     }
 
-    public function list(int $companyId, ?string $status = null, ?string $kind = null, bool $overdueOnly = false): array
+    public function list(int $companyId, ?string $status = null, ?string $kind = null, bool $overdueOnly = false, bool $withRoll = false): array
     {
-        // The roll is loaded with its source batch but without the females: the list needs how many
-        // calved and from where, not who.
-        return BirthOrder::with(['requestedByUser', 'animals.sourceBatch'])
+        // Unless the roll is asked for, it is loaded with its source batch but without the females:
+        // the list needs how many calved and from where, not who.
+        $relations = $withRoll
+            ? array_values(array_diff(self::DETAIL_RELATIONS, ['history.actionUser']))
+            : ['requestedByUser', 'animals.sourceBatch'];
+
+        return BirthOrder::with($relations)
             ->where('company_id', $companyId)
             ->when($status !== null, fn (Builder $query) => $query->where('status', $status))
             ->when($kind !== null, fn (Builder $query) => $query->where('kind', $kind))

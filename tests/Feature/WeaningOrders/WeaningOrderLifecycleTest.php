@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Tests\Feature\WeaningOrders;
 
+use App\Core\Enums\WeighingTypeCode;
 use App\Models\Batch;
 use App\Models\BatchType;
 use App\Models\CaravanLineage;
 use App\Models\CaravanMovement;
 use App\Models\CaravanWeight;
 use App\Models\WeaningOrderAnimal;
+use App\Models\WeighingType;
 
 /**
  * A weaning order from draft to its end: issued, executed from the screen, partial, closed
@@ -75,6 +77,142 @@ class WeaningOrderLifecycleTest extends WeaningOrderTestCase
 
         $history = $this->apiAs('GET', "/weaning-orders/{$id}")->json('history');
         $this->assertSame('SCREEN', end($history)['metadata']['origin']);
+    }
+
+    public function test_some_calves_of_an_order_are_registered_as_weaned_and_the_rest_stay_pending(): void
+    {
+        $a = $this->nursingCalf('WO-P1', 'M');
+        $b = $this->nursingCalf('WO-P2', 'H');
+        $c = $this->nursingCalf('WO-P3', 'M');
+        $id = $this->emitSingle([$a, $b, $c])->json('id');
+
+        $response = $this->apiAs('POST', "/weaning-orders/{$id}/execute", [
+            'caravan_ids' => [$a->id, $b->id],
+            'animals' => [['caravan_id' => $a->id, 'weight' => 190]],
+        ])->assertStatus(201);
+
+        $this->assertSame('PARTIAL', $response->json('data.weaning_order.status'));
+        $this->assertSame(2, $response->json('data.weaning_order.weaned_now'));
+        $this->assertSame(1, $response->json('data.weaning_order.pending_head_count'));
+        $this->assertFalse($this->isNursing($a));
+        $this->assertFalse($this->isNursing($b));
+        $this->assertTrue($this->isNursing($c));
+
+        // The rest is weaned later with the same order.
+        $this->apiAs('POST', "/weaning-orders/{$id}/execute", ['caravan_ids' => [$c->id]])
+            ->assertStatus(201)
+            ->assertJsonPath('data.weaning_order.status', 'EXECUTED');
+    }
+
+    public function test_where_the_calves_went_is_declared_at_weaning_when_it_differs_from_the_plan(): void
+    {
+        $moved = $this->nursingCalf('WO-R1', 'M');
+        $stayed = $this->nursingCalf('WO-R2', 'H');
+        $pending = $this->nursingCalf('WO-R3', 'M');
+        $id = $this->emitSingle([$moved, $stayed, $pending])->json('id');
+
+        $this->apiAs('POST', "/weaning-orders/{$id}/execute", [
+            'caravan_ids' => [$moved->id, $stayed->id],
+            'weaning_type' => 'EARLY',
+            'destinations' => [
+                ['key' => 's1', 'label' => '', 'target_batch_id' => $this->weaningBatch->id],
+                ['key' => 's2', 'label' => '', 'stays_in_place' => true],
+            ],
+            'animals' => [
+                ['caravan_id' => $moved->id, 'destination_key' => 's1'],
+                ['caravan_id' => $stayed->id, 'destination_key' => 's2'],
+            ],
+        ])->assertStatus(201)->assertJsonPath('data.weaning_order.status', 'PARTIAL');
+
+        // What happened beats the plan: one went to the weaning batch, the other stayed where it was.
+        $this->assertSame($this->weaningBatch->id, (int) $moved->fresh()->batch_id);
+        $this->assertSame($this->breedingA->id, (int) $stayed->fresh()->batch_id);
+        $this->assertFalse($this->isNursing($stayed));
+        $this->assertTrue($this->isNursing($pending));
+
+        $order = $this->apiAs('GET', "/weaning-orders/{$id}")->json();
+        $this->assertSame('per_animal', $order['destination_mode']);
+        $this->assertCount(2, $order['destinations']);
+        // The header keeps the plan.
+        $this->assertSame('TRADITIONAL', $order['weaning_type']);
+
+        // Each line keeps where it was going and says where it went.
+        $lines = collect($order['animals'])->keyBy('identification');
+        $this->assertFalse($lines['WO-R1']['is_redirected']);
+        $this->assertTrue($lines['WO-R2']['is_redirected']);
+        $this->assertSame($this->weaningBatch->name, $lines['WO-R2']['planned_destination_label']);
+        $this->assertSame('EARLY', $lines['WO-R2']['weaning_type_applied']);
+        $this->assertSame($lines['WO-R3']['destination_key'], $lines['WO-R3']['planned_destination_key']);
+        $this->assertSame(['pending_review_head_count' => 2, 'redirected_head_count' => 1, 'type_deviated_head_count' => 2], $order['deviation_summary']);
+
+        // One history entry details the deviation: which calf, from where to where, and the type.
+        $entry = collect($order['history'])->firstWhere('reason', 'Desvío respecto de lo planificado');
+        $this->assertNotNull($entry);
+        $this->assertSame('WO-R2', $entry['metadata']['destinations'][0]['identification']);
+        $this->assertSame($this->weaningBatch->name, $entry['metadata']['destinations'][0]['planned']);
+        $this->assertSame(['planned' => 'TRADITIONAL', 'declared' => 'EARLY', 'head_count' => 2], $entry['metadata']['weaning_type']);
+    }
+
+    public function test_a_different_weaning_type_alone_is_recorded_as_a_deviation(): void
+    {
+        $calf = $this->nursingCalf('WO-R5', 'M');
+        $id = $this->emitSingle([$calf])->json('id');
+
+        $this->apiAs('POST', "/weaning-orders/{$id}/execute", ['weaning_type' => 'ANTICIPATED'])->assertStatus(201);
+
+        $order = $this->apiAs('GET', "/weaning-orders/{$id}")->json();
+        $this->assertSame('TRADITIONAL', $order['weaning_type']);
+        $this->assertSame('ANTICIPATED', $order['animals'][0]['weaning_type_applied']);
+        $this->assertFalse($order['animals'][0]['is_redirected']);
+        $entry = collect($order['history'])->firstWhere('reason', 'Desvío respecto de lo planificado');
+        $this->assertSame('ANTICIPATED', $entry['metadata']['weaning_type']['declared']);
+        $this->assertArrayNotHasKey('destinations', $entry['metadata']);
+    }
+
+    public function test_following_the_plan_records_no_deviation(): void
+    {
+        $calf = $this->nursingCalf('WO-R6', 'M');
+        $id = $this->emitSingle([$calf])->json('id');
+
+        $this->apiAs('POST', "/weaning-orders/{$id}/execute", [
+            'weaning_type' => 'TRADITIONAL',
+            'destinations' => [['key' => 's1', 'label' => '', 'target_batch_id' => $this->weaningBatch->id]],
+            'animals' => [['caravan_id' => $calf->id, 'destination_key' => 's1']],
+        ])->assertStatus(201);
+
+        $order = $this->apiAs('GET', "/weaning-orders/{$id}")->json();
+        $this->assertNull(collect($order['history'])->firstWhere('reason', 'Desvío respecto de lo planificado'));
+        $this->assertSame(['pending_review_head_count' => 0, 'redirected_head_count' => 0, 'type_deviated_head_count' => 0], $order['deviation_summary']);
+        $this->assertCount(1, $order['destinations']);
+    }
+
+    public function test_a_weaning_that_fails_leaves_the_plan_as_it_was(): void
+    {
+        $calf = $this->nursingCalf('WO-R4', 'M');
+        $id = $this->emitSingle([$calf])->json('id');
+
+        $this->apiAs('POST', "/weaning-orders/{$id}/execute", [
+            'weaning_date' => now()->subDays(3)->toDateString(),
+            'destinations' => [['key' => 's1', 'label' => '', 'stays_in_place' => true]],
+            'animals' => [['caravan_id' => $calf->id, 'destination_key' => 's1']],
+        ])->assertStatus(422);
+
+        $order = $this->apiAs('GET', "/weaning-orders/{$id}")->json();
+        $this->assertSame('single', $order['destination_mode']);
+        $this->assertCount(1, $order['destinations']);
+        $this->assertNull(collect($order['history'])->firstWhere('reason', 'Desvío respecto de lo planificado'));
+    }
+
+    public function test_only_pending_calves_of_the_order_can_be_registered_as_weaned(): void
+    {
+        $inOrder = $this->nursingCalf('WO-P4', 'M');
+        $outside = $this->nursingCalf('WO-P5', 'H');
+        $id = $this->emitSingle([$inOrder])->json('id');
+
+        $this->apiAs('POST', "/weaning-orders/{$id}/execute", ['caravan_ids' => [$outside->id]])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'NOT_PENDING_IN_ORDER');
+        $this->assertTrue($this->isNursing($inOrder));
     }
 
     public function test_the_weaning_date_is_declared_and_never_future_nor_before_the_order(): void
@@ -273,5 +411,28 @@ class WeaningOrderLifecycleTest extends WeaningOrderTestCase
 
         $this->assertSame($code, $byCalf['WO-BH1']['open_order_code']);
         $this->assertNull($byCalf['WO-BH2']['open_order_code']);
+    }
+
+    public function test_the_births_list_carries_the_last_weight_after_birth(): void
+    {
+        $weighed = $this->nursingCalf('WO-BW1', 'M');
+        $onlyAtBirth = $this->nursingCalf('WO-BW2', 'H');
+
+        foreach ([[$weighed, WeighingTypeCode::BIRTH, 32.0, 200], [$weighed, WeighingTypeCode::CONTROL, 150.0, 30], [$weighed, WeighingTypeCode::CONTROL, 180.5, 5], [$onlyAtBirth, WeighingTypeCode::BIRTH, 30.0, 200]] as [$calf, $type, $weight, $daysAgo]) {
+            CaravanWeight::create([
+                'weighing_type_id' => WeighingType::idOf($type),
+                'caravan_id' => $calf->id,
+                'weight' => $weight,
+                'current' => $daysAgo === 5 || $calf->is($onlyAtBirth),
+                'weighing_date' => now()->subDays($daysAgo)->toDateString(),
+            ]);
+        }
+
+        $byCalf = collect($this->apiAs('GET', '/caravans/births-history')->json())->keyBy('calf_identification');
+
+        // The latest weighing after birth counts; a calf weighed only at birth has none.
+        $this->assertEquals(180.5, $byCalf['WO-BW1']['calf_weight']);
+        $this->assertSame(now()->subDays(5)->toDateString(), $byCalf['WO-BW1']['calf_weighing_date']);
+        $this->assertNull($byCalf['WO-BW2']['calf_weight']);
     }
 }

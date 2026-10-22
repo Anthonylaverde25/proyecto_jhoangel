@@ -237,6 +237,7 @@ final class FiscalDocumentBuilder
             $taxes,
             $resolved->item->tracksStock(),
             deliveryNoteLineId: $dto->deliveryNoteLineId,
+            sourceDescription: $dto->sourceDescription,
         );
     }
 
@@ -269,6 +270,7 @@ final class FiscalDocumentBuilder
             null,
             [],
             true,
+            sourceDescription: $dto->sourceDescription,
         );
     }
 

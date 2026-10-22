@@ -10,7 +10,7 @@ use App\Models\ItemCategory;
 use App\Models\UnitOfMeasure;
 
 /**
- * Every company starts with 13 units and 9 root categories of its own (D14, DB6).
+ * Every company starts with 13 units and 13 root system categories of its own (D14, DB6).
  */
 class CompanyItemCatalogBootstrapTest extends ItemCatalogTestCase
 {
@@ -19,7 +19,9 @@ class CompanyItemCatalogBootstrapTest extends ItemCatalogTestCase
         $company = Company::create(['name' => 'Campo Nuevo Test']);
 
         $this->assertSame(13, UnitOfMeasure::withoutGlobalScopes()->where('company_id', $company->id)->count());
-        $this->assertSame(9, ItemCategory::withoutGlobalScopes()->where('company_id', $company->id)->whereNull('parent_id')->count());
+        $this->assertSame(13, ItemCategory::withoutGlobalScopes()->where('company_id', $company->id)->whereNull('parent_id')->where('is_system', true)->count());
+        $this->assertSame('Alimentos', ItemCategory::withoutGlobalScopes()->where('company_id', $company->id)->where('code', 'FEED')->value('name'));
+        $this->assertSame(['LIVESTOCK_TREATMENT', 'PADDOCK_TREATMENT', 'SEMEN'], ItemCategory::withoutGlobalScopes()->where('company_id', $company->id)->whereIn('code', ['LIVESTOCK_TREATMENT', 'PADDOCK_TREATMENT', 'SEMEN'])->where('is_system', true)->orderBy('code')->pluck('code')->all());
         $this->assertSame(6, UnitOfMeasure::withoutGlobalScopes()->where('company_id', $company->id)->where('is_base', true)->count());
     }
 

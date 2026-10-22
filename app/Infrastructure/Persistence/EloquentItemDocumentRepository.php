@@ -183,7 +183,8 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
                 'item_id' => (int) $row->item_id,
                 'item_name' => $row->item_name,
                 'behavior' => $this->behavior($row->item_type, (bool) $row->track_stock),
-                'category' => $roots[(int) $row->item_category_id] ?? null,
+                'category' => $roots[(int) $row->item_category_id]['name'] ?? null,
+                'category_id' => $roots[(int) $row->item_category_id]['id'] ?? null,
                 'quantity' => DecimalColumn::read($row->quantity, 4),
                 'unit_symbol' => $row->symbol,
                 'heads_treated' => (int) $row->heads_treated,
@@ -215,7 +216,8 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
                     'item_id' => (int) $row->item_id,
                     'item_name' => $row->item_name,
                     'behavior' => $this->behavior($row->item_type, (bool) $row->track_stock),
-                    'category' => $roots[(int) $row->item_category_id] ?? null,
+                    'category' => $roots[(int) $row->item_category_id]['name'] ?? null,
+                    'category_id' => $roots[(int) $row->item_category_id]['id'] ?? null,
                     'quantity' => DecimalColumn::read($row->quantity, 4),
                     'unit_symbol' => $row->symbol,
                     'heads_treated' => (int) $row->heads_treated,
@@ -247,9 +249,9 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
     }
 
     /**
-     * Name of the root of each category, for the per-category summary of the batch history.
+     * The root of each category, for the per-category summary of the batch history.
      *
-     * @return array<int, string>
+     * @return array<int, array{id: int, name: string}>
      */
     private function rootCategories(int $companyId): array
     {
@@ -260,7 +262,7 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
             while ($current->parent_id !== null && isset($categories[$current->parent_id])) {
                 $current = $categories[$current->parent_id];
             }
-            $roots[(int) $id] = $current->name;
+            $roots[(int) $id] = ['id' => (int) $current->id, 'name' => $current->name];
         }
 
         return $roots;

@@ -8,7 +8,8 @@ use App\Core\Entities\ProviderEntity;
 use App\Core\ValueObjects\FiscalIssuerRead;
 
 /**
- * Who issued the document, as far as the company's portfolio is concerned (Delivery F, part 01).
+ * Who issued the document, as far as the company's portfolio is concerned (Delivery F, part 01),
+ * and the lines read from it with their items (Delivery G).
  */
 final readonly class ProviderRecognition
 {
@@ -34,7 +35,24 @@ final readonly class ProviderRecognition
         public ?string $suggestedCuit = null,
         /** R4: the document names a receiver that is not the company. */
         public bool $receiverMismatch = false,
+        /** @var list<ResolvedFiscalLine> */
+        public array $lines = [],
     ) {
+    }
+
+    /** @param list<ResolvedFiscalLine> $lines */
+    public function withLines(array $lines): self
+    {
+        return new self(
+            $this->status, $this->reason, $this->provider, $this->read, $this->companyCuit,
+            $this->suggestedCuit, $this->receiverMismatch, $lines,
+        );
+    }
+
+    /** The provider whose items widen the matcher's candidates: one in the portfolio. */
+    public function knownProviderId(): ?int
+    {
+        return in_array($this->status, [self::MATCHED, self::ROLE_MISSING], true) ? $this->provider?->getId() : null;
     }
 
     public function companyCuitMissing(): bool

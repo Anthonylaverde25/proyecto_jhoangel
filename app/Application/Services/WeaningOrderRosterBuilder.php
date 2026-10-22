@@ -81,7 +81,7 @@ final class WeaningOrderRosterBuilder
      */
     public function build(EmitWeaningOrderDTO $dto, int $destinationActivityId): array
     {
-        [$destinations, $orderKeyByScreenKey] = $this->destinations($dto, $destinationActivityId);
+        [$destinations, $orderKeyByScreenKey] = $this->destinations($dto->destinations, $destinationActivityId);
         $facts = $this->assertNursingCalves(array_column($dto->animals, 'caravan_id'), $dto->companyId);
         $animals = $this->animals($dto, $orderKeyByScreenKey, $this->targetCategories($dto, $facts), $facts);
 
@@ -171,16 +171,20 @@ final class WeaningOrderRosterBuilder
     }
 
     /**
+     * The destinations a screen declares, checked as an order's are, keyed by the batch's name; and
+     * the order key each screen key became.
+     *
+     * @param list<array{key: string, label: string, target_batch_id: ?int, new_batch_name: ?string, is_confined: ?bool, stays_in_place: bool}> $raw
      * @return array{0: WeaningOrderDestinationEntity[], 1: array<string, string>}
      *
      * @throws WeaningOrderDomainException
      */
-    private function destinations(EmitWeaningOrderDTO $dto, int $destinationActivityId): array
+    public function destinations(array $raw, int $destinationActivityId): array
     {
         $destinations = [];
         $orderKeyByScreenKey = [];
 
-        foreach ($dto->destinations as $destination) {
+        foreach ($raw as $destination) {
             $staysInPlace = (bool) ($destination['stays_in_place'] ?? false);
             $hasExisting = !$staysInPlace && $destination['target_batch_id'] !== null;
             $hasNew = !$staysInPlace && $destination['new_batch_name'] !== null;

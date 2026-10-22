@@ -174,6 +174,7 @@ class EloquentFiscalDocumentRepository implements IFiscalDocumentRepository
                 'fiscal_document_id' => $model->id,
                 'position' => $line->position,
                 'item_id' => $line->itemId,
+                'source_description' => $line->sourceDescription,
                 'input_quantity' => $line->inputQuantity,
                 'input_unit_id' => $line->inputUnitId,
                 'input_presentation_id' => $line->inputPresentationId,

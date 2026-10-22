@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Resources;
 
 use App\Application\DTOs\ProviderRecognition;
+use App\Application\DTOs\ResolvedFiscalLine;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -41,6 +42,23 @@ class ProviderRecognitionResource extends JsonResource
             'receiver_mismatch' => $recognition->receiverMismatch,
             'company_cuit' => $recognition->companyCuit,
             'company_cuit_missing' => $recognition->companyCuitMissing(),
+            'lines' => array_map(fn (ResolvedFiscalLine $line) => [
+                'position' => $line->read->position,
+                'code' => $line->read->code,
+                'description' => $line->read->description,
+                'quantity' => $line->read->quantity,
+                'unit_price' => $line->read->unitPrice,
+                'vat_rate_code' => $line->read->vatRateCode,
+                'vat_tax_rate_id' => $line->vatTaxRateId,
+                'resolution' => [
+                    'source' => $line->source,
+                    'level' => $line->level,
+                    'item_id' => $line->itemId,
+                    'reason' => $line->reason,
+                    'suggested_item_id' => $line->suggestedItemId,
+                    'note' => $line->note,
+                ],
+            ], $recognition->lines),
             'qr' => $read->qr,
             'vision_error' => $read->visionError,
             'model' => $read->model,

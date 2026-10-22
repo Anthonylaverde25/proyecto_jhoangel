@@ -49,6 +49,7 @@ class StoreFiscalDocumentRequest extends FormRequest
             'lines.*.delivery_note_line_id' => ['nullable', 'integer'],
             'lines.*.batch_id' => ['nullable', 'integer'],
             'lines.*.heads_treated' => ['nullable', 'integer', 'min:1'],
+            'lines.*.source_description' => ['nullable', 'string', 'max:191'],
             'lines.*.taxes' => ['sometimes', 'array', 'max:5'],
             'lines.*.taxes.*.tax_id' => ['required', 'integer'],
             'lines.*.taxes.*.tax_rate_id' => ['nullable', 'integer'],

@@ -20,6 +20,7 @@ class ItemCategoryMapper
             (bool) $model->is_active,
             (int) $model->display_order,
             (int) ($model->items_count ?? 0),
+            (bool) $model->is_system,
         );
     }
 
@@ -33,6 +34,7 @@ class ItemCategoryMapper
         $model->name = $entity->getName();
         $model->is_active = $entity->isActive();
         $model->display_order = $entity->getDisplayOrder();
+        $model->is_system = $entity->isSystem();
 
         return $model;
     }

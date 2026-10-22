@@ -16,7 +16,8 @@ use App\Core\ValueObjects\FiscalIssuerRead;
  * applied R1 (the QR wins) and R2 (the model's CUIT needs evidence); this applies the rules that
  * need the company and its portfolio: R3 (the issuer cannot be the company), R4 (a receiver other
  * than the company is warned about), R5 (a valid CUIT, different from the receiver's) and R6 (the
- * portfolio). The receiver's CUIT is often absent: no rule fails because of that.
+ * portfolio). The receiver's CUIT is often absent: no rule fails because of that. Whatever the
+ * provider's status, the lines read are resolved against the catalog (Delivery G).
  */
 final class ReadFiscalDocumentImageUseCase
 {
@@ -24,12 +25,20 @@ final class ReadFiscalDocumentImageUseCase
         private readonly IFiscalDocumentReader $reader,
         private readonly IProviderRepository $providers,
         private readonly ICompanyRepository $companies,
+        private readonly ResolveFiscalLinesUseCase $resolveLines,
     ) {
     }
 
     public function __invoke(string $contents, string $fileName, string $mimeType, int $companyId): ProviderRecognition
     {
         $read = $this->reader->readIssuer($contents, $fileName, $mimeType, $companyId);
+        $recognition = $this->recognize($read, $companyId);
+
+        return $recognition->withLines(($this->resolveLines)($read->lines, $recognition->knownProviderId(), $companyId));
+    }
+
+    private function recognize(FiscalIssuerRead $read, int $companyId): ProviderRecognition
+    {
         $companyCuit = $this->companies->findById($companyId)?->getCuit();
         $issuer = $read->issuerCuit;
         $receiver = $read->receiverCuit;

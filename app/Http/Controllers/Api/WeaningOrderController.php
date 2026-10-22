@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Application\DTOs\WeaningOrders\EmitWeaningOrderDTO;
+use App\Application\DTOs\WeaningOrders\WeaningExecutionDeclarationDTO;
 use App\Application\DTOs\WeaningOrders\WeaningFieldData;
 use App\Application\UseCases\WeaningOrders\WeaningOrderUseCases;
 use App\Core\Enums\TransferOrderKind;
@@ -177,7 +178,9 @@ final class WeaningOrderController extends Controller
                 $this->companyId(),
                 $request->user()?->id,
                 $validated['weaning_date'] ?? null,
-                WeaningFieldData::mapFromAnimals($validated['animals'] ?? [])
+                WeaningFieldData::mapFromAnimals($validated['animals'] ?? []),
+                isset($validated['caravan_ids']) ? array_map('intval', $validated['caravan_ids']) : null,
+                WeaningExecutionDeclarationDTO::fromArray($validated)
             );
         } catch (Dest01ValidationException $e) {
             return $this->sheetError($e);

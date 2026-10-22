@@ -127,10 +127,30 @@ class WeaningOrderResource extends JsonResource
             'target_subcategory_id' => $a->getTargetSubcategoryId(),
             'target_category_label' => $a->getTargetCategoryLabel(),
             'destination_key' => $a->getDestinationKey(),
+            // What the order planned, kept when the calf went elsewhere.
+            'planned_destination_key' => $a->getPlannedDestinationKey(),
+            'planned_destination_label' => $a->getPlannedDestinationKey() !== null
+                ? $order->destinationByKey($a->getPlannedDestinationKey())?->getLabel()
+                : null,
+            'is_redirected' => $a->isRedirected(),
+            'weaning_type_applied' => $a->getWeaningTypeApplied()?->value,
+            'weaning_type_applied_label' => $a->getWeaningTypeApplied()?->label(),
+            // Its deviations for the audit: null = none, PENDING = some not reviewed yet.
+            'deviation_review' => $a->hasDeviations() ? ($a->areDeviationsReviewed() ? 'REVIEWED' : 'PENDING') : null,
             'status' => $a->getStatus()->value,
             'weaned_at' => $a->getWeanedAt()?->format(DATE_ATOM),
             'caravan_movement_id' => $a->getCaravanMovementId(),
         ], $order->getAnimals());
+
+        // How far the weaning strayed from the plan: calves sent elsewhere, and weaned with another type.
+        $data['deviation_summary'] = [
+            'pending_review_head_count' => count(array_filter($order->getAnimals(), fn (WeaningOrderAnimalEntity $a) => $a->hasDeviations() && !$a->areDeviationsReviewed())),
+            'redirected_head_count' => count(array_filter($order->getAnimals(), fn (WeaningOrderAnimalEntity $a) => $a->isRedirected())),
+            'type_deviated_head_count' => count(array_filter(
+                $order->getAnimals(),
+                fn (WeaningOrderAnimalEntity $a) => $a->getWeaningTypeApplied() !== null && $a->getWeaningTypeApplied() !== $order->getWeaningType()
+            )),
+        ];
 
         $data['history'] = array_map(fn (TransferOrderHistoryEntity $h) => [
             'id' => $h->getId(),

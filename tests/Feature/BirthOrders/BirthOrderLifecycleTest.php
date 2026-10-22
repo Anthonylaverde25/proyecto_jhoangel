@@ -65,6 +65,19 @@ class BirthOrderLifecycleTest extends BirthOrderTestCase
         $this->assertSame($this->categoryId('VACA'), (int) $c->fresh()->category_id);
     }
 
+    public function test_the_list_carries_the_roll_only_when_asked(): void
+    {
+        $a = $this->pregnantFemale('BO-L1');
+        $this->emit([$a])->assertStatus(201);
+
+        $plain = $this->apiAs('GET', '/birth-orders')->assertOk();
+        $this->assertArrayNotHasKey('animals', $plain->json('0'));
+
+        $withRoll = $this->apiAs('GET', '/birth-orders?with_roll=1')->assertOk();
+        $this->assertSame($a->identification, $withRoll->json('0.animals.0.identification'));
+        $this->assertArrayNotHasKey('history', $withRoll->json('0'));
+    }
+
     public function test_a_female_cannot_be_in_two_open_birth_orders(): void
     {
         $a = $this->pregnantFemale('BO-B1');

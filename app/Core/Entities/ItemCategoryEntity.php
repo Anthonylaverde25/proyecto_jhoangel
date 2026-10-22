@@ -8,6 +8,8 @@ use App\Core\Exceptions\ItemCatalogException;
 
 /**
  * A node of the company's category tree (D10). Deactivating it leaves its children and items alone.
+ * A system category belongs to the software: it cannot be renamed, moved or deactivated, but it
+ * still takes subcategories and items.
  */
 final class ItemCategoryEntity
 {
@@ -22,6 +24,7 @@ final class ItemCategoryEntity
         private bool $isActive = true,
         private int $displayOrder = 1,
         private readonly int $itemsCount = 0,
+        private readonly bool $isSystem = false,
     ) {
         if (preg_match(self::CODE_PATTERN, $code) !== 1) {
             throw ItemCatalogException::invalidCode('de la categoría');
@@ -36,6 +39,9 @@ final class ItemCategoryEntity
         if (trim($name) === '') {
             throw ItemCatalogException::emptyName();
         }
+        if ($name !== $this->name || $displayOrder !== $this->displayOrder) {
+            $this->assertNotSystem();
+        }
         $this->name = $name;
         $this->displayOrder = $displayOrder;
     }
@@ -43,12 +49,25 @@ final class ItemCategoryEntity
     /** The cycle check (C3) needs the whole tree, so the use case runs it before calling this. */
     public function moveTo(?int $parentId): void
     {
+        if ($parentId !== $this->parentId) {
+            $this->assertNotSystem();
+        }
         $this->parentId = $parentId;
     }
 
     public function setActive(bool $active): void
     {
+        if ($active !== $this->isActive) {
+            $this->assertNotSystem();
+        }
         $this->isActive = $active;
+    }
+
+    private function assertNotSystem(): void
+    {
+        if ($this->isSystem) {
+            throw ItemCatalogException::systemCategory($this->name);
+        }
     }
 
     public function getId(): ?int { return $this->id; }
@@ -59,4 +78,5 @@ final class ItemCategoryEntity
     public function isActive(): bool { return $this->isActive; }
     public function getDisplayOrder(): int { return $this->displayOrder; }
     public function getItemsCount(): int { return $this->itemsCount; }
+    public function isSystem(): bool { return $this->isSystem; }
 }

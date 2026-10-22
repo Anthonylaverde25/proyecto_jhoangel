@@ -54,6 +54,11 @@ final class ItemCatalogException extends DomainException
         return new self("La categoría {$category} está desactivada.");
     }
 
+    public static function systemCategory(string $category): self
+    {
+        return new self("{$category} es una categoría del sistema: no se puede editar, mover ni desactivar. Sí admite subcategorías.");
+    }
+
     public static function categoryCycle(string $category, string $parent): self
     {
         return new self("{$category} no puede quedar dentro de {$parent}: {$parent} ya está dentro de {$category}.");

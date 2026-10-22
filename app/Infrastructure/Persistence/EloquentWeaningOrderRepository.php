@@ -27,6 +27,7 @@ class EloquentWeaningOrderRepository implements IWeaningOrderRepository
         'animals.caravan.lineage.mother',
         'animals.targetCategory',
         'animals.targetSubcategory',
+        'animals.deviations',
         'history.actionUser',
     ];
 
@@ -225,7 +226,25 @@ class EloquentWeaningOrderRepository implements IWeaningOrderRepository
         }
 
         foreach ($order->getDestinations() as $destination) {
-            if ($destination->getId() !== null && $destination->getResolvedBatchId() !== null) {
+            // A destination declared when the calves were weaned, which the plan did not have.
+            if ($destination->getId() === null) {
+                $row = $model->destinations()->create([
+                    'company_id' => $model->company_id,
+                    'destination_key' => $destination->getKey(),
+                    'label' => $destination->getLabel(),
+                    'target_batch_id' => $destination->getTargetBatchId(),
+                    'new_batch_name' => $destination->getNewBatchName(),
+                    'is_confined' => $destination->isConfined(),
+                    'stays_in_place' => $destination->staysInPlace(),
+                    'resolved_batch_id' => $destination->getResolvedBatchId(),
+                ]);
+                $idByKey[$destination->getKey()] = (int) $row->id;
+                continue;
+            }
+
+            $idByKey[$destination->getKey()] = $destination->getId();
+
+            if ($destination->getResolvedBatchId() !== null) {
                 $model->destinations()
                     ->whereKey($destination->getId())
                     ->whereNull('resolved_batch_id')
@@ -254,6 +273,10 @@ class EloquentWeaningOrderRepository implements IWeaningOrderRepository
                     'weaning_order_destination_id' => $animal->getDestinationKey() !== null
                         ? ($destinationIdByKey[$animal->getDestinationKey()] ?? null)
                         : null,
+                    // The plan, written once with the roll and never again.
+                    'planned_destination_id' => $animal->getPlannedDestinationKey() !== null
+                        ? ($destinationIdByKey[$animal->getPlannedDestinationKey()] ?? null)
+                        : null,
                     'target_category_id' => $animal->getTargetCategoryId(),
                     'target_subcategory_id' => $animal->getTargetSubcategoryId(),
                     'status' => $animal->getStatus()->value,
@@ -274,7 +297,18 @@ class EloquentWeaningOrderRepository implements IWeaningOrderRepository
         foreach ($order->getAnimals() as $animal) {
             $row = $current->get($animal->getCaravanId());
 
-            if ($row === null || $row->status === $animal->getStatus()->value) {
+            if ($row === null) {
+                continue;
+            }
+
+            // A line pointed to another destination when its calf was weaned.
+            $destinationId = $animal->getDestinationKey() !== null ? ($destinationIdByKey[$animal->getDestinationKey()] ?? null) : null;
+
+            if ($order->areDestinationsRedeclared() && $destinationId !== null && (int) $row->weaning_order_destination_id !== $destinationId) {
+                $row->update(['weaning_order_destination_id' => $destinationId]);
+            }
+
+            if ($row->status === $animal->getStatus()->value) {
                 continue;
             }
 

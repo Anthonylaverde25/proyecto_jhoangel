@@ -9,7 +9,10 @@ use Illuminate\Foundation\Http\FormRequest;
 /**
  * "Ejecutar orden": when the weaning happened and, per calf, what the desk declares for it — weight
  * and notes, and the C/S when the order left the category for the chute. Whether a pair fits the
- * calf is checked by the use case, like on a sheet.
+ * calf is checked by the use case, like on a sheet. `caravan_ids` weans only those pending calves
+ * ("Registrar destetadas"): the rest stay pending and the order is left PARTIAL. `destinations`,
+ * each calf's `destination_key` and `weaning_type` declare what happened when it differs from the
+ * plan.
  */
 final class ExecuteWeaningOrderRequest extends FormRequest
 {
@@ -25,6 +28,17 @@ final class ExecuteWeaningOrderRequest extends FormRequest
     {
         return [
             'weaning_date' => 'sometimes|date|before_or_equal:today',
+            'caravan_ids' => 'sometimes|array|min:1',
+            'caravan_ids.*' => 'integer|distinct',
+            'weaning_type' => 'nullable|string|in:TRADITIONAL,ANTICIPATED,EARLY',
+            'destinations' => 'sometimes|array',
+            'destinations.*.key' => 'required|string|max:255',
+            'destinations.*.label' => 'nullable|string|max:255',
+            'destinations.*.target_batch_id' => 'nullable|integer',
+            'destinations.*.new_batch_name' => 'nullable|string|max:255',
+            'destinations.*.is_confined' => 'nullable|boolean',
+            'destinations.*.stays_in_place' => 'nullable|boolean',
+            'animals.*.destination_key' => 'nullable|string|max:255',
             'animals' => 'sometimes|array',
             'animals.*.caravan_id' => 'required|integer',
             'animals.*.weight' => 'nullable|numeric|gt:0|max:2000',

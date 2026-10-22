@@ -22,6 +22,13 @@ interface IItemStockRepository
     /** @return list<ItemStockEntity> one per warehouse that ever held the item */
     public function findByItem(int $itemId, int $companyId): array;
 
+    /**
+     * What one warehouse holds: every item with a balance (or units waiting for their invoice), by name.
+     *
+     * @return list<array{stock: ItemStockEntity, code: string, name: string, unit_symbol: string|null}>
+     */
+    public function byWarehouse(int $warehouseId, int $companyId): array;
+
     public function saveCriticalStock(ItemStockEntity $stock): void;
 
     /**

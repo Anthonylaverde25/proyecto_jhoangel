@@ -29,8 +29,21 @@ final class BirthHistoryEntity
         private ?int $calfCategoryId = null,
         private ?int $calfSubcategoryId = null,
         /** The day the calf died after being born, when it did. */
-        private ?string $calfDeathDate = null
+        private ?string $calfDeathDate = null,
+        /** The last weight taken after birth: the birth weighing does not count. */
+        private ?float $calfWeight = null,
+        private ?string $calfWeighingDate = null
     ) {
+    }
+
+    public function getCalfWeight(): ?float
+    {
+        return $this->calfWeight;
+    }
+
+    public function getCalfWeighingDate(): ?string
+    {
+        return $this->calfWeighingDate;
     }
 
     public function getCalfCategoryId(): ?int

@@ -26,6 +26,7 @@ class ItemCategoryResource extends JsonResource
             'is_active' => $this->resource->isActive(),
             'display_order' => $this->resource->getDisplayOrder(),
             'items_count' => $this->resource->getItemsCount(),
+            'is_system' => $this->resource->isSystem(),
         ];
     }
 }

@@ -94,6 +94,35 @@ class EloquentItemStockRepository implements IItemStockRepository
             ->all();
     }
 
+    public function byWarehouse(int $warehouseId, int $companyId): array
+    {
+        $stocks = ItemStock::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->where('warehouse_id', $warehouseId)
+            ->where(fn ($q) => $q->where('quantity', '!=', 0)->orWhere('unvalued_quantity', '!=', 0))
+            ->get()
+            ->map(fn (ItemStock $model) => StockMapper::stockToEntity($model));
+
+        $items = DB::table('items as i')
+            ->join('units_of_measure as u', 'u.id', '=', 'i.unit_of_measure_id')
+            ->where('i.company_id', $companyId)
+            ->whereIn('i.id', $stocks->map(fn (ItemStockEntity $s) => $s->getItemId())->all())
+            ->get(['i.id', 'i.code', 'i.name', 'u.symbol'])
+            ->keyBy('id');
+
+        return $stocks
+            ->filter(fn (ItemStockEntity $s) => $items->has($s->getItemId()))
+            ->map(fn (ItemStockEntity $s) => [
+                'stock' => $s,
+                'code' => (string) $items[$s->getItemId()]->code,
+                'name' => (string) $items[$s->getItemId()]->name,
+                'unit_symbol' => $items[$s->getItemId()]->symbol,
+            ])
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
+    }
+
     public function saveCriticalStock(ItemStockEntity $stock): void
     {
         ItemStock::withoutGlobalScopes()
@@ -202,9 +231,9 @@ class EloquentItemStockRepository implements IItemStockRepository
             ->get([
                 'm.id', 'm.direction', 'm.quantity', 'm.unit_cost', 'm.total_cost', 'm.balance_after', 'm.average_cost_after',
                 'm.unvalued_quantity', 'm.unvalued_balance_after',
-                'w.name as warehouse_name', 'w.code as warehouse_code', 'wout.code as paired_out_code', 'win.code as paired_in_code',
+                'm.warehouse_id', 'w.name as warehouse_name', 'w.code as warehouse_code', 'wout.code as paired_out_code', 'win.code as paired_in_code',
                 'rev.type as reversed_type', 'wrout.code as reversed_out_code', 'wrin.code as reversed_in_code', 'd.id as document_id', 'd.number as document_number', 'd.type as document_type',
-                'd.occurred_at', 'b.name as batch_name', 'f.id as fiscal_document_id', 'f.point_of_sale', 'f.number as fiscal_number',
+                'd.occurred_at', 'd.batch_id', 'b.name as batch_name', 'f.id as fiscal_document_id', 'f.point_of_sale', 'f.number as fiscal_number',
                 'f.reference', 'ft.name as fiscal_type_name', 'p.name as provider_name',
             ]);
 
@@ -213,11 +242,13 @@ class EloquentItemStockRepository implements IItemStockRepository
                 'id' => (int) $row->id,
                 'occurred_at' => (string) $row->occurred_at,
                 'warehouse' => $row->warehouse_name,
+                'warehouse_id' => (int) $row->warehouse_id,
                 'document_id' => (int) $row->document_id,
                 'document_number' => (int) $row->document_number,
                 'document_type' => $row->document_type,
                 'document_type_label' => ItemDocumentType::from($row->document_type)->label(),
                 'batch' => $row->batch_name,
+                'batch_id' => $row->batch_id === null ? null : (int) $row->batch_id,
                 'transfer' => $this->transferRoute($row),
                 'fiscal_document' => $row->fiscal_document_id === null ? null : [
                     'id' => (int) $row->fiscal_document_id,

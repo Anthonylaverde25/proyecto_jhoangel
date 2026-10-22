@@ -119,6 +119,7 @@ final class FiscalDocumentMapper
                 'valued_unit_cost' => DecimalColumn::readNullable($lot->valued_unit_cost, 6),
             ],
             $item?->code,
+            $model->source_description,
         );
     }
 

@@ -52,6 +52,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(ICompanyContext::class, \App\Core\Contexts\CompanyContext::class);
         $this->app->bind(\App\Core\Interfaces\IAssistantGateway::class, \App\Infrastructure\Assistant\AiAgentAssistantGateway::class);
         $this->app->bind(\App\Core\Interfaces\IFiscalDocumentReader::class, \App\Infrastructure\OCR\AiAgentFiscalDocumentReader::class);
+        $this->app->bind(\App\Core\Interfaces\IFiscalItemMatcher::class, \App\Infrastructure\OCR\AiAgentFiscalItemMatcher::class);
+        $this->app->bind(\App\Core\Interfaces\IFiscalLineCatalogReader::class, \App\Infrastructure\Persistence\EloquentFiscalLineCatalogReader::class);
         $this->app->bind(ICaravanRepository::class, EloquentCaravanRepository::class);
         $this->app->bind(\App\Core\Interfaces\IDeathCauseRepository::class, \App\Infrastructure\Persistence\EloquentDeathCauseRepository::class);
         $this->app->bind(\App\Core\Interfaces\ICaravanDeathRepository::class, \App\Infrastructure\Persistence\EloquentCaravanDeathRepository::class);
@@ -80,6 +82,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(\App\Core\Interfaces\IServiceOrderIncidentRepository::class, \App\Infrastructure\Persistence\EloquentServiceOrderIncidentRepository::class);
         $this->app->bind(\App\Core\Interfaces\ITransferOrderRepository::class, \App\Infrastructure\Persistence\EloquentTransferOrderRepository::class);
         $this->app->bind(\App\Core\Interfaces\IWeaningOrderRepository::class, \App\Infrastructure\Persistence\EloquentWeaningOrderRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IWeaningOrderDeviationRepository::class, \App\Infrastructure\Persistence\EloquentWeaningOrderDeviationRepository::class);
         $this->app->bind(\App\Core\Interfaces\IEntryOrderRepository::class, \App\Infrastructure\Persistence\EloquentEntryOrderRepository::class);
         $this->app->bind(\App\Core\Interfaces\IBirthOrderRepository::class, \App\Infrastructure\Persistence\EloquentBirthOrderRepository::class);
         $this->app->bind(\App\Core\Interfaces\IAnimalCategoryRepository::class, \App\Infrastructure\Persistence\EloquentAnimalCategoryRepository::class);

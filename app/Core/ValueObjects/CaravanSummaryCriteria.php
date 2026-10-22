@@ -9,6 +9,7 @@ namespace App\Core\ValueObjects;
  *
  * `batchId` is a batch id, the literal 'unassigned' (caravans in no batch), or null (any batch).
  * `sort` is 'identification' (default) or 'recent': latest arrivals to their batch first.
+ * `categoryId` keeps only the caravans of one animal category (its subcategories included).
  */
 final readonly class CaravanSummaryCriteria
 {
@@ -30,6 +31,7 @@ final readonly class CaravanSummaryCriteria
         ?string $sort = null,
         int $page = 1,
         int $perPage = 25,
+        public ?int $categoryId = null,
     ) {
         $sex = $sex !== null ? strtoupper($sex) : null;
         $this->sex = in_array($sex, ['M', 'H'], true) ? $sex : null;

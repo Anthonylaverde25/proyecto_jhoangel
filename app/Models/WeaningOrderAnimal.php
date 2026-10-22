@@ -21,6 +21,7 @@ class WeaningOrderAnimal extends Model
         'caravan_id',
         'source_batch_id',
         'weaning_order_destination_id',
+        'planned_destination_id',
         'target_category_id',
         'target_subcategory_id',
         'status',
@@ -37,6 +38,7 @@ class WeaningOrderAnimal extends Model
         'caravan_id' => 'integer',
         'source_batch_id' => 'integer',
         'weaning_order_destination_id' => 'integer',
+        'planned_destination_id' => 'integer',
         'target_category_id' => 'integer',
         'target_subcategory_id' => 'integer',
         'caravan_movement_id' => 'integer',
@@ -66,6 +68,11 @@ class WeaningOrderAnimal extends Model
     public function targetSubcategory(): BelongsTo
     {
         return $this->belongsTo(AnimalSubcategory::class, 'target_subcategory_id');
+    }
+
+    public function deviations(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(WeaningOrderDeviation::class, 'weaning_order_animal_id');
     }
 
     public function destination(): BelongsTo

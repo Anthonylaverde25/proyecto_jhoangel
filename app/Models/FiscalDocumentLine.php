@@ -32,6 +32,7 @@ class FiscalDocumentLine extends Model
         'unit_cost',
         'batch_id',
         'heads_treated',
+        'source_description',
         'delivery_note_line_id',
     ];
 

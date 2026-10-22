@@ -13,6 +13,7 @@ final class WarehouseUseCases
         public readonly UpdateWarehouseUseCase $update,
         public readonly SetDefaultWarehouseUseCase $setDefault,
         public readonly SetWarehouseActiveUseCase $setActive,
+        public readonly GetWarehouseStockUseCase $stock,
     ) {
     }
 }

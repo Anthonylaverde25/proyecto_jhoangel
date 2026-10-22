@@ -22,9 +22,10 @@ interface IBirthOrderRepository
 
     /**
      * @param bool $overdueOnly only the orders with a female past her due date without calving
+     * @param bool $withRoll every line with its female, gestation and calf, as the detail has them
      * @return BirthOrderEntity[] newest first, without history
      */
-    public function list(int $companyId, ?string $status = null, ?string $kind = null, bool $overdueOnly = false): array;
+    public function list(int $companyId, ?string $status = null, ?string $kind = null, bool $overdueOnly = false, bool $withRoll = false): array;
 
     /**
      * The open birth order where this female is still waiting to calve (PENDING or OVERDUE) for

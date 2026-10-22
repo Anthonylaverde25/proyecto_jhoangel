@@ -45,6 +45,7 @@ use App\Http\Controllers\Api\ProcessLabResultsController;
 use App\Http\Controllers\Api\BatchTypeController;
 use App\Http\Controllers\Api\ServiceOrderController;
 use App\Http\Controllers\Api\TransferOrderController;
+use App\Http\Controllers\Api\WeaningDeviationController;
 use App\Http\Controllers\Api\WeaningOrderController;
 use App\Http\Controllers\Api\WeighingTypeController;
 use App\Http\Controllers\Api\WeighingOrderController;
@@ -188,6 +189,10 @@ Route::middleware([
         Route::post('/weaning-orders/{id}/execute', [WeaningOrderController::class, 'execute'])->whereNumber('id');
         Route::post('/weaning-orders/{id}/close-incomplete', [WeaningOrderController::class, 'closeIncomplete'])->whereNumber('id');
         Route::post('/weaning-orders/{id}/cancel', [WeaningOrderController::class, 'cancel'])->whereNumber('id');
+
+        // Desvíos de destete respecto de la orden: registro y revisión, nunca bloquean.
+        Route::get('/weaning-deviations', [WeaningDeviationController::class, 'index']);
+        Route::post('/weaning-deviations/review', [WeaningDeviationController::class, 'review']);
     });
 
     // Catálogo de artículos y servicios (Entrega B1): por empresa, sin stock todavía.
@@ -241,6 +246,7 @@ Route::middleware([
 
         Route::get('/warehouses', [WarehouseController::class, 'index']);
         Route::get('/warehouses/next-code', [WarehouseController::class, 'nextCode']);
+        Route::get('/warehouses/{id}/stock', [WarehouseController::class, 'stock'])->whereNumber('id');
         Route::post('/warehouses', [WarehouseController::class, 'store']);
         Route::patch('/warehouses/{id}', [WarehouseController::class, 'update'])->whereNumber('id');
         Route::patch('/warehouses/{id}/default', [WarehouseController::class, 'setDefault'])->whereNumber('id');

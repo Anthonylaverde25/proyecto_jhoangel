@@ -81,7 +81,17 @@ class WeaningOrderMapper
                         ? $birthDate->format('Y-m-d')
                         : ($birthDate !== null ? substr((string) $birthDate, 0, 10) : null),
                     currentCategoryId: $caravan?->category_id !== null ? (int) $caravan->category_id : null,
-                    currentSubcategoryId: $caravan?->subcategory_id !== null ? (int) $caravan->subcategory_id : null
+                    currentSubcategoryId: $caravan?->subcategory_id !== null ? (int) $caravan->subcategory_id : null,
+                    plannedDestinationKey: $line->planned_destination_id !== null
+                        ? ($keyById[(int) $line->planned_destination_id] ?? null)
+                        : null,
+                    // The lineage says how the calf was weaned; only a weaned line has one to show.
+                    weaningTypeApplied: $line->status === WeaningOrderAnimalStatus::WEANED->value && $lineage?->weaning_type
+                        ? ($lineage->weaning_type instanceof WeaningType ? $lineage->weaning_type : WeaningType::tryFrom((string) $lineage->weaning_type))
+                        : null,
+                    deviationsReviewed: $line->relationLoaded('deviations') && $line->deviations->isNotEmpty()
+                        ? $line->deviations->every(fn ($deviation) => $deviation->reviewed_at !== null)
+                        : null
                 );
             }
         }

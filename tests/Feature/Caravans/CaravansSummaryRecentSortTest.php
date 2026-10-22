@@ -76,6 +76,23 @@ class CaravansSummaryRecentSortTest extends VeterinaryTestCase
         $this->assertNull($rows['SUM-NOCAT']['is_reproductive_category']);
     }
 
+    public function test_category_filter_keeps_one_category_and_combines_with_the_batch(): void
+    {
+        $calf = AnimalCategory::updateOrCreate(['code' => 'TERNERO'], ['name' => 'Ternero', 'sex' => 'BOTH', 'is_reproductive' => false]);
+        $cow = AnimalCategory::updateOrCreate(['code' => 'VACA'], ['name' => 'Vaca', 'sex' => 'H', 'is_reproductive' => true]);
+        $this->caravan('SUM-T1', 'M', '2026-09-01 08:00:00')->update(['category_id' => $calf->id]);
+        $this->caravan('SUM-T2', 'H', '2026-09-01 08:00:00')->update(['category_id' => $calf->id]);
+        $this->caravan('SUM-V1', 'H', '2026-09-01 08:00:00')->update(['category_id' => $cow->id]);
+        $other = Batch::create(['company_id' => $this->company->id, 'name' => 'Otro lote', 'is_active' => true]);
+        Caravan::create(['company_id' => $this->company->id, 'identification' => 'SUM-T3', 'sex' => 'M', 'batch_id' => $other->id, 'category_id' => $calf->id]);
+
+        $inBatch = $this->apiAs('GET', "/caravans/summary?batch_id={$this->batch->id}&category_id={$calf->id}")->assertOk()->json('data');
+        $this->assertSame(['SUM-T1', 'SUM-T2'], array_column($inBatch, 'identification'));
+
+        $anyBatch = $this->apiAs('GET', "/caravans/summary?scope=all&search=SUM&category_id={$calf->id}")->assertOk()->json('data');
+        $this->assertSame(['SUM-T1', 'SUM-T2', 'SUM-T3'], array_column($anyBatch, 'identification'));
+    }
+
     public function test_unassigned_and_the_page_size_cap(): void
     {
         $this->caravan('SUM-X', 'H', '2026-09-01 08:00:00');

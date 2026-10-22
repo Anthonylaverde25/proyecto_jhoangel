@@ -36,6 +36,9 @@ final class WeaningOrderEntity
      */
     private bool $rosterReplaced = false;
 
+    /** Destinations added or lines pointed elsewhere at execution: the repository writes them. */
+    private bool $destinationsRedeclared = false;
+
     /**
      * @param WeaningOrderDestinationEntity[] $destinations
      * @param WeaningOrderAnimalEntity[] $animals
@@ -183,6 +186,101 @@ final class WeaningOrderEntity
         if ($this->weaningType === null && $type !== null) {
             $this->weaningType = $type;
         }
+    }
+
+    /**
+     * Where some pending calves actually go, declared when they are weaned ("Registrar destetadas"):
+     * what happened beats the plan. The destinations the order lacks are added, the lines point to
+     * them, and an order with one destination for all becomes one per calf when they now differ.
+     * The header keeps what was planned; the history records the difference.
+     *
+     * @param WeaningOrderDestinationEntity[] $destinations what the screen declared
+     * @param array<int, string> $destinationKeyByCaravanId the destination key of each calf weaned now
+     *
+     * @throws WeaningOrderDomainException
+     */
+    public function redeclareDestinations(array $destinations, array $destinationKeyByCaravanId): void
+    {
+        if (!$this->status->isOpen()) {
+            throw WeaningOrderDomainException::domainError(
+                "La orden {$this->code} está {$this->status->label()} y no admite más destetes.",
+                'WEANING_ORDER_NOT_EXECUTABLE'
+            );
+        }
+
+        foreach ($destinations as $destination) {
+            if ($this->destinationByKey($destination->getKey()) === null) {
+                $this->destinations[] = $destination;
+            }
+        }
+
+        foreach ($destinationKeyByCaravanId as $caravanId => $key) {
+            $line = $this->animalByCaravanId((int) $caravanId);
+
+            if ($line === null || !$line->isPending()) {
+                throw WeaningOrderDomainException::domainError("Una cría no está pendiente en la orden {$this->code}.", 'NOT_PENDING_IN_ORDER');
+            }
+
+            if ($this->destinationByKey($key) === null) {
+                throw WeaningOrderDomainException::domainError("Una cría apunta a un lote de destete que no se declaró ({$key}).", 'UNKNOWN_DESTINATION');
+            }
+
+            $line->redirectTo($key);
+        }
+
+        $usedKeys = array_unique(array_filter(array_map(fn (WeaningOrderAnimalEntity $a) => $a->getDestinationKey(), $this->animals)));
+
+        if ($this->destinationMode === self::MODE_SINGLE && count($usedKeys) > 1) {
+            $this->destinationMode = self::MODE_PER_ANIMAL;
+        }
+
+        $this->destinationsRedeclared = true;
+    }
+
+    /**
+     * What weaning these calves changes from the plan, for the history: each one sent somewhere
+     * other than planned, and the weaning type when the one declared differs. Empty when the
+     * weaning follows the plan.
+     *
+     * @param list<int> $caravanIds the calves weaned now
+     * @return array{destinations?: list<array{caravan_id: int, identification: ?string, planned: ?string, actual: ?string}>, weaning_type?: array{planned: ?string, declared: string, head_count: int}}
+     */
+    public function deviationsFor(array $caravanIds, ?WeaningType $declaredType): array
+    {
+        $deviations = [];
+        $redirected = [];
+
+        foreach ($caravanIds as $caravanId) {
+            $line = $this->animalByCaravanId((int) $caravanId);
+
+            if ($line !== null && $line->isRedirected()) {
+                $redirected[] = [
+                    'caravan_id' => $line->getCaravanId(),
+                    'identification' => $line->getIdentification(),
+                    'planned' => $this->destinationByKey((string) $line->getPlannedDestinationKey())?->getLabel(),
+                    'actual' => $this->destinationByKey((string) $line->getDestinationKey())?->getLabel(),
+                ];
+            }
+        }
+
+        if ($redirected !== []) {
+            $deviations['destinations'] = $redirected;
+        }
+
+        if ($declaredType !== null && $declaredType !== $this->weaningType) {
+            $deviations['weaning_type'] = [
+                'planned' => $this->weaningType?->value,
+                'declared' => $declaredType->value,
+                'head_count' => count($caravanIds),
+            ];
+        }
+
+        return $deviations;
+    }
+
+    public function areDestinationsRedeclared(): bool
+    {
+        return $this->destinationsRedeclared;
     }
 
     public function isRosterReplaced(): bool

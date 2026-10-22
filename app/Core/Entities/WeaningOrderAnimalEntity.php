@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Entities;
 
 use App\Core\Enums\WeaningOrderAnimalStatus;
+use App\Core\Enums\WeaningType;
 use DateTimeImmutable;
 use DateTimeInterface;
 
@@ -22,7 +23,7 @@ final class WeaningOrderAnimalEntity
         private readonly ?int $id,
         private readonly int $caravanId,
         private readonly ?int $sourceBatchId,
-        private readonly ?string $destinationKey,
+        private ?string $destinationKey,
         private WeaningOrderAnimalStatus $status = WeaningOrderAnimalStatus::PENDING,
         private ?DateTimeInterface $weanedAt = null,
         private ?int $caravanMovementId = null,
@@ -40,8 +41,46 @@ final class WeaningOrderAnimalEntity
         private readonly ?string $birthDate = null,
         /** The C/S the calf has now: the reference a new one is chosen against. Read-only. */
         private readonly ?int $currentCategoryId = null,
-        private readonly ?int $currentSubcategoryId = null
+        private readonly ?int $currentSubcategoryId = null,
+        /**
+         * Where the order planned to send the calf, kept when it went elsewhere. Null on a line not
+         * saved yet (the plan is its destination) or one decided at the chute.
+         */
+        private readonly ?string $plannedDestinationKey = null,
+        /** How it was actually weaned, from its lineage. Read-only. */
+        private readonly ?WeaningType $weaningTypeApplied = null,
+        /** Its deviations from the plan: null = none, else whether they all were reviewed. Read-only. */
+        private readonly ?bool $deviationsReviewed = null
     ) {
+    }
+
+    public function hasDeviations(): bool
+    {
+        return $this->deviationsReviewed !== null;
+    }
+
+    public function areDeviationsReviewed(): ?bool
+    {
+        return $this->deviationsReviewed;
+    }
+
+    /** What the order planned: for a line not saved yet, the destination it was created with. */
+    public function getPlannedDestinationKey(): ?string
+    {
+        return $this->id === null ? $this->destinationKey : $this->plannedDestinationKey;
+    }
+
+    /** The calf went somewhere other than where the order planned. */
+    public function isRedirected(): bool
+    {
+        $planned = $this->getPlannedDestinationKey();
+
+        return $planned !== null && $this->destinationKey !== null && $planned !== $this->destinationKey;
+    }
+
+    public function getWeaningTypeApplied(): ?WeaningType
+    {
+        return $this->weaningTypeApplied;
     }
 
     public function getCurrentCategoryId(): ?int
@@ -67,6 +106,14 @@ final class WeaningOrderAnimalEntity
     public function getSourceBatchId(): ?int
     {
         return $this->sourceBatchId;
+    }
+
+    /**
+     * The batch it actually went to, declared when it was weaned: it may differ from the plan.
+     */
+    public function redirectTo(string $destinationKey): void
+    {
+        $this->destinationKey = $destinationKey;
     }
 
     public function getDestinationKey(): ?string
