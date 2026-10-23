@@ -16,12 +16,12 @@ abstract class WarehouseTestCase extends DeliveryNoteTestCase
 {
     protected function defaultWarehouseId(): int
     {
-        return (int) collect($this->apiAs('GET', '/warehouses')->assertOk()->json())->firstWhere('is_default', true)['id'];
+        return (int) collect($this->apiAs('GET', '/warehouses')->assertOk()->json())->where('kind', 'GENERAL')->firstWhere('is_default', true)['id'];
     }
 
-    protected function newWarehouse(string $code, string $name): int
+    protected function newWarehouse(string $code, string $name, string $kind = 'GENERAL'): int
     {
-        return (int) $this->apiAs('POST', '/warehouses', ['code' => $code, 'name' => $name])->assertStatus(201)->json('id');
+        return (int) $this->apiAs('POST', '/warehouses', ['code' => $code, 'name' => $name, 'kind' => $kind])->assertStatus(201)->json('id');
     }
 
     /** Initial stock in ml at a price per ml, into the given warehouse. */

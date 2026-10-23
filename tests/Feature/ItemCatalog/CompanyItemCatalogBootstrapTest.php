@@ -18,7 +18,7 @@ class CompanyItemCatalogBootstrapTest extends ItemCatalogTestCase
     {
         $company = Company::create(['name' => 'Campo Nuevo Test']);
 
-        $this->assertSame(13, UnitOfMeasure::withoutGlobalScopes()->where('company_id', $company->id)->count());
+        $this->assertSame(14, UnitOfMeasure::withoutGlobalScopes()->where('company_id', $company->id)->count());
         $this->assertSame(13, ItemCategory::withoutGlobalScopes()->where('company_id', $company->id)->whereNull('parent_id')->where('is_system', true)->count());
         $this->assertSame('Alimentos', ItemCategory::withoutGlobalScopes()->where('company_id', $company->id)->where('code', 'FEED')->value('name'));
         $this->assertSame(['LIVESTOCK_TREATMENT', 'PADDOCK_TREATMENT', 'SEMEN'], ItemCategory::withoutGlobalScopes()->where('company_id', $company->id)->whereIn('code', ['LIVESTOCK_TREATMENT', 'PADDOCK_TREATMENT', 'SEMEN'])->where('is_system', true)->orderBy('code')->pluck('code')->all());
@@ -33,7 +33,7 @@ class CompanyItemCatalogBootstrapTest extends ItemCatalogTestCase
 
         app(BootstrapCompanyItemCatalogUseCase::class)((int) $company->id);
 
-        $this->assertSame(13, UnitOfMeasure::withoutGlobalScopes()->where('company_id', $company->id)->count());
+        $this->assertSame(14, UnitOfMeasure::withoutGlobalScopes()->where('company_id', $company->id)->count());
         $this->assertSame('Kilo', UnitOfMeasure::withoutGlobalScopes()->where('company_id', $company->id)->where('code', 'KG')->value('name'));
     }
 

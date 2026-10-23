@@ -20,6 +20,8 @@ final readonly class StockOperationDTO
         public ?string $notes = null,
         public ?int $createdBy = null,
         public ?int $warehouseId = null,
+        /** The AI order whose inseminations generate this consumption (semen S-B, DB8): never from the API. */
+        public ?int $serviceOrderId = null,
     ) {
     }
 

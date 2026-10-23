@@ -22,6 +22,8 @@ class ItemDocument extends Model
         'number',
         'type',
         'warehouse_id',
+        'provider_id',
+        'service_order_id',
         'fiscal_document_id',
         'batch_id',
         'heads_treated',
@@ -87,6 +89,17 @@ class ItemDocument extends Model
     public function pairedBy(): HasOne
     {
         return $this->hasOne(self::class, 'paired_document_id')->withoutGlobalScopes();
+    }
+
+    public function provider(): BelongsTo
+    {
+        return $this->belongsTo(Provider::class);
+    }
+
+    /** The AI order whose inseminations generated this consumption (semen S-B). */
+    public function serviceOrder(): BelongsTo
+    {
+        return $this->belongsTo(ServiceOrder::class)->withoutGlobalScopes();
     }
 
     public function creator(): BelongsTo

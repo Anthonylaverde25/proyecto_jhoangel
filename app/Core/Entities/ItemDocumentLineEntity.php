@@ -32,6 +32,8 @@ final class ItemDocumentLineEntity
         private readonly ?string $inputLabel = null,
         private string $unvaluedQuantity = '0',
         private ?string $unabsorbedCost = null,
+        private readonly ?int $semenLotId = null,
+        private readonly ?string $semenLotCode = null,
     ) {
     }
 
@@ -79,4 +81,7 @@ final class ItemDocumentLineEntity
     public function getItemName(): ?string { return $this->itemName; }
     public function getItemUnitSymbol(): ?string { return $this->itemUnitSymbol; }
     public function getInputLabel(): ?string { return $this->inputLabel; }
+    /** Semen S-A: the lot this line moves; NULL for every other item, or for semen with no lot yet (SL6). */
+    public function getSemenLotId(): ?int { return $this->semenLotId; }
+    public function getSemenLotCode(): ?string { return $this->semenLotCode; }
 }

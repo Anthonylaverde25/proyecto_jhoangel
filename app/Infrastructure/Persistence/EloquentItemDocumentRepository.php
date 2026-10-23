@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\DB;
 class EloquentItemDocumentRepository implements IItemDocumentRepository
 {
     private const RELATIONS = [
-        'lines.item.unit', 'lines.inputUnit', 'lines.inputPresentation', 'lines.movement',
+        'lines.item.unit', 'lines.inputUnit', 'lines.inputPresentation', 'lines.movement', 'lines.semenLot', 'provider', 'serviceOrder',
         'warehouse', 'fiscalDocument.type', 'batch', 'reverses', 'reversedBy', 'creator',
         'paired.warehouse', 'pairedBy.warehouse',
     ];
@@ -93,7 +93,7 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
 
         $total = (clone $query)->count();
         $models = $query
-            ->with(['lines.item.unit', 'warehouse', 'fiscalDocument.type', 'batch', 'reverses', 'reversedBy', 'paired.warehouse', 'pairedBy.warehouse'])
+            ->with(['lines.item.unit', 'warehouse', 'fiscalDocument.type', 'batch', 'reverses', 'reversedBy', 'paired.warehouse', 'pairedBy.warehouse', 'serviceOrder'])
             ->orderByDesc('id')
             ->forPage($filters->page, $filters->perPage)
             ->get();
@@ -113,6 +113,8 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
             'number' => $document->getNumber(),
             'type' => $document->getType()->value,
             'warehouse_id' => $document->getWarehouseId(),
+            'provider_id' => $document->getProviderId(),
+            'service_order_id' => $document->getServiceOrderId(),
             'fiscal_document_id' => $document->getFiscalDocumentId(),
             'batch_id' => $document->getBatchId(),
             'heads_treated' => $document->getHeadsTreated(),
@@ -132,6 +134,7 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
                 'item_document_id' => $model->id,
                 'position' => $line->getPosition(),
                 'item_id' => $line->getItemId(),
+                'semen_lot_id' => $line->getSemenLotId(),
                 'fiscal_document_line_id' => $line->getFiscalDocumentLineId(),
                 'input_quantity' => $line->getInputQuantity(),
                 'input_unit_id' => $line->getInputUnitId(),

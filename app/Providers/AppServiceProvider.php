@@ -96,6 +96,13 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(\App\Core\Interfaces\ISampleShipmentRepository::class, \App\Infrastructure\Persistence\EloquentSampleShipmentRepository::class);
         $this->app->bind(\App\Core\Interfaces\IUserInvitationRepository::class, \App\Infrastructure\Persistence\EloquentUserInvitationRepository::class);
         $this->app->bind(\App\Core\Interfaces\IVeterinaryPortalAccessTokenRepository::class, \App\Infrastructure\Persistence\EloquentVeterinaryPortalAccessTokenRepository::class);
+
+        // AI clients over MCP: connections, OAuth clients and codes, Sanctum-backed tokens.
+        $this->app->bind(\App\Core\Interfaces\IMcpConnectionRepository::class, \App\Infrastructure\Persistence\EloquentMcpConnectionRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IMcpOAuthClientRepository::class, \App\Infrastructure\Persistence\EloquentMcpOAuthClientRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IMcpAuthorizationCodeRepository::class, \App\Infrastructure\Persistence\EloquentMcpAuthorizationCodeRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IMcpTokenGateway::class, \App\Infrastructure\Auth\SanctumMcpTokenGateway::class);
+        $this->app->bind(\App\Core\Interfaces\ITenantDomains::class, \App\Infrastructure\Tenancy\StanclTenantDomains::class);
         $this->app->bind(\App\Core\Interfaces\IProtocolAttachmentStorage::class, \App\Infrastructure\Storage\LocalTenantAttachmentStorage::class);
 
         // ADR-12: extraction act numbers are minted by the system under a pessimistic lock.
@@ -138,6 +145,13 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(\App\Core\Interfaces\IFiscalCatalogRepository::class, \App\Infrastructure\Persistence\EloquentFiscalCatalogRepository::class);
         $this->app->bind(\App\Core\Interfaces\IFiscalDocumentRepository::class, \App\Infrastructure\Persistence\EloquentFiscalDocumentRepository::class);
         $this->app->bind(\App\Core\Interfaces\IWarehouseRepository::class, \App\Infrastructure\Persistence\EloquentWarehouseRepository::class);
+        // Semen S-A: sires, straw profiles, lots and straws without lot.
+        $this->app->bind(\App\Core\Interfaces\ISemenSireRepository::class, \App\Infrastructure\Persistence\EloquentSemenSireRepository::class);
+        $this->app->bind(\App\Core\Interfaces\ISemenProfileRepository::class, \App\Infrastructure\Persistence\EloquentSemenProfileRepository::class);
+        $this->app->bind(\App\Core\Interfaces\ISemenLotRepository::class, \App\Infrastructure\Persistence\EloquentSemenLotRepository::class);
+        $this->app->bind(\App\Core\Interfaces\ISemenUnidentifiedRepository::class, \App\Infrastructure\Persistence\EloquentSemenUnidentifiedRepository::class);
+        $this->app->bind(\App\Core\Interfaces\IServiceOrderInseminationRepository::class, \App\Infrastructure\Persistence\EloquentServiceOrderInseminationRepository::class);
+        $this->app->bind(\App\Core\Interfaces\ISemenInventoryReader::class, \App\Infrastructure\Persistence\EloquentSemenInventoryReader::class);
         $this->app->bind(\App\Core\Interfaces\IItemDocumentRepository::class, \App\Infrastructure\Persistence\EloquentItemDocumentRepository::class);
         $this->app->bind(\App\Core\Interfaces\IItemStockRepository::class, \App\Infrastructure\Persistence\EloquentItemStockRepository::class);
         $this->app->bind(\App\Core\Interfaces\IStockIncidentRepository::class, \App\Infrastructure\Persistence\EloquentStockIncidentRepository::class);

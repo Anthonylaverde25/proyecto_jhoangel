@@ -45,7 +45,7 @@ class WarehouseCatalogTest extends WarehouseTestCase
         $second = $this->newWarehouse('TST-02', 'Galpón');
 
         $list = $this->apiAs('PATCH', "/warehouses/{$second}/default")->assertOk()->json();
-        $this->assertSame([$second], collect($list)->where('is_default', true)->pluck('id')->all());
+        $this->assertSame([$second], collect($list)->where('kind', 'GENERAL')->where('is_default', true)->pluck('id')->values()->all());
         $this->assertSame($second, $list[0]['id'], 'default first');
 
         // DD3: the default leaves only naming the next one.

@@ -8,6 +8,7 @@ use App\Application\DTOs\Stock\StockOperationDTO;
 use App\Application\Services\Stock\FieldErrorBag;
 use App\Application\Services\Stock\ItemLineResolver;
 use App\Application\Services\Stock\LedgerResult;
+use App\Application\Services\Stock\SemenStorageRule;
 use App\Application\Services\Stock\StockLedger;
 use App\Application\Services\Stock\WarehouseGuard;
 use App\Core\Entities\ItemDocumentEntity;
@@ -30,6 +31,7 @@ final class RegisterInitialStockUseCase
         private readonly ItemLineResolver $resolver,
         private readonly FiscalDocumentCalculator $calculator,
         private readonly StockLedger $ledger,
+        private readonly SemenStorageRule $semen,
     ) {
     }
 
@@ -50,6 +52,10 @@ final class RegisterInitialStockUseCase
             $resolved = $this->resolver->resolve("lines.{$index}", $companyId, $line->itemId, $line->inputQuantity, $line->inputUnitId, $line->inputPresentationId, $errors, true);
             if ($line->inputUnitPrice === null) {
                 $errors->add("lines.{$index}.input_unit_price", 'Falta el costo (0 si no se conoce).');
+            }
+            // SI8, DA10: semen enters only through the semen entry, which records its lot.
+            if ($resolved !== null && $this->semen->isSemen($resolved->item)) {
+                $errors->add("lines.{$index}.item_id", "{$resolved->item->getName()} es semen: ingresalo desde Artículos y servicios › Semen › Ingresar semen.");
             }
             if ($resolved === null || $line->inputUnitPrice === null) {
                 continue;

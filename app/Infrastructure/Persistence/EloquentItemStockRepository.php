@@ -218,6 +218,8 @@ class EloquentItemStockRepository implements IItemStockRepository
             ->leftJoin('fiscal_documents as f', 'f.id', '=', 'd.fiscal_document_id')
             ->leftJoin('fiscal_document_types as ft', 'ft.id', '=', 'f.fiscal_document_type_id')
             ->leftJoin('providers as p', 'p.id', '=', 'f.provider_id')
+            // Semen S-A E9: the lot of the straws that moved.
+            ->leftJoin('semen_lots as sl', 'sl.id', '=', 'l.semen_lot_id')
             ->where('m.company_id', $companyId)
             ->where('m.item_id', $itemId)
             ->when($filters->warehouseId !== null, fn ($q) => $q->where('m.warehouse_id', $filters->warehouseId))
@@ -234,7 +236,7 @@ class EloquentItemStockRepository implements IItemStockRepository
                 'm.warehouse_id', 'w.name as warehouse_name', 'w.code as warehouse_code', 'wout.code as paired_out_code', 'win.code as paired_in_code',
                 'rev.type as reversed_type', 'wrout.code as reversed_out_code', 'wrin.code as reversed_in_code', 'd.id as document_id', 'd.number as document_number', 'd.type as document_type',
                 'd.occurred_at', 'd.batch_id', 'b.name as batch_name', 'f.id as fiscal_document_id', 'f.point_of_sale', 'f.number as fiscal_number',
-                'f.reference', 'ft.name as fiscal_type_name', 'p.name as provider_name',
+                'f.reference', 'ft.name as fiscal_type_name', 'p.name as provider_name', 'l.semen_lot_id', 'sl.code as semen_lot_code',
             ]);
 
         return [
@@ -250,6 +252,7 @@ class EloquentItemStockRepository implements IItemStockRepository
                 'batch' => $row->batch_name,
                 'batch_id' => $row->batch_id === null ? null : (int) $row->batch_id,
                 'transfer' => $this->transferRoute($row),
+                'semen_lot' => $row->semen_lot_id === null ? null : ['id' => (int) $row->semen_lot_id, 'code' => $row->semen_lot_code],
                 'fiscal_document' => $row->fiscal_document_id === null ? null : [
                     'id' => (int) $row->fiscal_document_id,
                     'label' => $row->fiscal_type_name . ' ' . FiscalDocumentEntity::formatNumber(
@@ -275,6 +278,7 @@ class EloquentItemStockRepository implements IItemStockRepository
     public function reconcile(): array
     {
         $differences = [];
+        $semen = $this->semenBalances();
         foreach (ItemStock::withoutGlobalScopes()->orderBy('id')->get() as $model) {
             $stock = StockMapper::stockToEntity($model);
             $sum = '0';
@@ -301,6 +305,14 @@ class EloquentItemStockRepository implements IItemStockRepository
             if ($last !== null && bccomp($last->unvaluedBalanceAfter, $stock->getUnvaluedQuantity(), 4) !== 0) {
                 $problems[] = "sin valorizar {$stock->getUnvaluedQuantity()} y último movimiento {$last->unvaluedBalanceAfter}";
             }
+            // Semen S-A (SL3): lots plus straws still without lot add up to the item's balance in the tank.
+            $key = "{$stock->getWarehouseId()}:{$stock->getItemId()}";
+            if (isset($semen['items'][$stock->getItemId()])) {
+                $lots = bcadd($semen['lots'][$key] ?? '0', $semen['pending'][$key] ?? '0', 4);
+                if (bccomp($lots, $stock->getQuantity(), 4) !== 0) {
+                    $problems[] = "saldo {$stock->getQuantity()} y partidas más sin identificar {$lots}";
+                }
+            }
             if ($problems !== []) {
                 $differences[] = [
                     'company_id' => $stock->getCompanyId(),
@@ -312,5 +324,25 @@ class EloquentItemStockRepository implements IItemStockRepository
         }
 
         return $differences;
+    }
+
+    /** @return array{items: array<int, true>, lots: array<string, string>, pending: array<string, string>} keyed "warehouse:item" */
+    private function semenBalances(): array
+    {
+        $items = DB::table('item_semen_details')->pluck('item_id')->mapWithKeys(fn ($id) => [(int) $id => true])->all();
+        $lots = DB::table('semen_lot_stocks as s')->join('semen_lots as l', 'l.id', '=', 's.semen_lot_id')
+            ->groupBy('s.warehouse_id', 'l.item_id')
+            ->selectRaw('s.warehouse_id, l.item_id, SUM(s.quantity) AS total')
+            ->get()
+            ->mapWithKeys(fn ($r) => ["{$r->warehouse_id}:{$r->item_id}" => DecimalColumn::read($r->total, 4)])
+            ->all();
+        $pending = DB::table('semen_unidentified_entries')->where('status', 'OPEN')
+            ->groupBy('warehouse_id', 'item_id')
+            ->selectRaw('warehouse_id, item_id, SUM(direction * (quantity - identified_quantity)) AS total')
+            ->get()
+            ->mapWithKeys(fn ($r) => ["{$r->warehouse_id}:{$r->item_id}" => DecimalColumn::read($r->total, 4)])
+            ->all();
+
+        return ['items' => $items, 'lots' => $lots, 'pending' => $pending];
     }
 }

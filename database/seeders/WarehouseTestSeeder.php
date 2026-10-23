@@ -11,6 +11,7 @@ use App\Application\UseCases\Stock\RegisterInitialStockUseCase;
 use App\Application\UseCases\Stock\RegisterStockTransferUseCase;
 use App\Application\UseCases\Warehouses\CreateWarehouseUseCase;
 use App\Application\UseCases\Warehouses\SetWarehouseActiveUseCase;
+use App\Core\Enums\WarehouseKind;
 use App\Core\Exceptions\FieldValidationException;
 use App\Models\Batch;
 use App\Models\Company;
@@ -37,7 +38,7 @@ class WarehouseTestSeeder extends Seeder
         }
         $this->companyId = (int) $company->id;
 
-        $main = Warehouse::withoutGlobalScopes()->where('company_id', $this->companyId)->where('is_default', true)->first();
+        $main = Warehouse::withoutGlobalScopes()->where('company_id', $this->companyId)->where('kind', WarehouseKind::GENERAL->value)->where('is_default', true)->first();
         $salt = $this->item('Sal mineral');
         $ivermectin = $this->item('Ivermectina 1%');
         $heifers = Batch::withoutGlobalScopes()->where('company_id', $this->companyId)->where('name', 'Vaquillonas')->first();
@@ -48,6 +49,8 @@ class WarehouseTestSeeder extends Seeder
         }
 
         $shed = $this->warehouse('ALM-02', 'Galpón de sanidad');
+        // S-0: the first tank, which becomes the tanks' default.
+        $this->warehouse('TER-01', 'Termo principal', kind: WarehouseKind::CRYO_TANK);
         $this->warehouse('ALM-03', 'Depósito viejo', $old);
         if ($old) {
             app(SetWarehouseActiveUseCase::class)($this->id('ALM-03'), false, null, $this->companyId);
@@ -73,7 +76,7 @@ class WarehouseTestSeeder extends Seeder
     }
 
     /** The warehouse's id, created when its code is missing. */
-    private function warehouse(string $code, string $name, ?bool &$created = null): int
+    private function warehouse(string $code, string $name, ?bool &$created = null, WarehouseKind $kind = WarehouseKind::GENERAL): int
     {
         $created = false;
         $existing = $this->id($code);
@@ -82,7 +85,7 @@ class WarehouseTestSeeder extends Seeder
         }
         $created = true;
 
-        return app(CreateWarehouseUseCase::class)($code, $name, $this->companyId)->id;
+        return app(CreateWarehouseUseCase::class)($code, $name, $kind, $this->companyId)->id;
     }
 
     private function id(string $code): ?int

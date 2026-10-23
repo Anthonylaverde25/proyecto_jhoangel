@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\ItemStockController;
 use App\Http\Controllers\Api\ItemPresentationController;
 use App\Http\Controllers\Api\StockIncidentController;
 use App\Http\Controllers\Api\UnitOfMeasureController;
+use App\Http\Controllers\Api\SemenController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\BatchController;
 use App\Http\Controllers\Api\AuthController;
@@ -44,6 +45,7 @@ use App\Http\Controllers\Api\BirthOrderController;
 use App\Http\Controllers\Api\ProcessLabResultsController;
 use App\Http\Controllers\Api\BatchTypeController;
 use App\Http\Controllers\Api\ServiceOrderController;
+use App\Http\Controllers\Api\ServiceOrderInseminationController;
 use App\Http\Controllers\Api\TransferOrderController;
 use App\Http\Controllers\Api\WeaningDeviationController;
 use App\Http\Controllers\Api\WeaningOrderController;
@@ -61,6 +63,9 @@ use App\Http\Controllers\Api\VeterinaryPortalController;
 use App\Http\Controllers\Api\VeterinaryPortalTokenController;
 use App\Http\Controllers\Api\OperationalKpiController;
 use App\Http\Controllers\Api\AssistantController;
+use App\Http\Controllers\Api\McpAuthorizationController;
+use App\Http\Controllers\Api\McpConnectionController;
+use App\Http\Controllers\Api\McpSessionController;
 use App\Http\Controllers\Api\CompanyController;
 use Illuminate\Support\Facades\Route;
 
@@ -161,6 +166,21 @@ Route::middleware([
         Route::post('/assistant/chat', [AssistantController::class, 'chat']);
     });
 
+    // AI clients over MCP (Claude, Gemini): read-only connections served by ai-agent.
+    // RestrictMcpTokenScope keeps MCP tokens out of everything here but /mcp/session.
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/mcp/connections', [McpConnectionController::class, 'index']);
+        Route::post('/mcp/connections', [McpConnectionController::class, 'store']);
+        Route::delete('/mcp/connections/{id}', [McpConnectionController::class, 'destroy'])->whereNumber('id');
+
+        // OAuth consent screen of the SPA.
+        Route::get('/mcp/oauth/authorization-request', [McpAuthorizationController::class, 'show']);
+        Route::post('/mcp/oauth/authorize', [McpAuthorizationController::class, 'approve']);
+
+        // Identity behind an MCP token, read by ai-agent's token verifier.
+        Route::get('/mcp/session', McpSessionController::class);
+    });
+
     // Órdenes de Transferencia (CACT-01)
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/transfer-orders', [TransferOrderController::class, 'index']);
@@ -252,6 +272,21 @@ Route::middleware([
         Route::patch('/warehouses/{id}/default', [WarehouseController::class, 'setDefault'])->whereNumber('id');
         Route::patch('/warehouses/{id}/active', [WarehouseController::class, 'setActive'])->whereNumber('id');
 
+        // Semen stock (semen S-A).
+        Route::get('/semen/sires', [SemenController::class, 'sires']);
+        Route::post('/semen/sires', [SemenController::class, 'storeSire']);
+        Route::patch('/semen/sires/{id}', [SemenController::class, 'updateSire'])->whereNumber('id');
+        Route::patch('/semen/sires/{id}/active', [SemenController::class, 'setSireActive'])->whereNumber('id');
+        Route::post('/semen/receipts', [SemenController::class, 'storeReceipt']);
+        Route::get('/semen/inventory', [SemenController::class, 'inventory']);
+        Route::get('/semen/coverage', [ServiceOrderInseminationController::class, 'coverage']);
+        Route::get('/inseminations', [ServiceOrderInseminationController::class, 'search']);
+        Route::get('/semen/lots', [SemenController::class, 'lots']);
+        Route::get('/semen/lots/{id}', [SemenController::class, 'lot'])->whereNumber('id');
+        Route::get('/semen/unidentified', [SemenController::class, 'unidentified']);
+        Route::post('/semen/unidentified/{id}/identify', [SemenController::class, 'identify'])->whereNumber('id');
+        Route::patch('/items/{itemId}/semen-profile', [SemenController::class, 'updateProfile'])->whereNumber('itemId');
+
         Route::get('/item-documents', [ItemDocumentController::class, 'index']);
         Route::get('/item-documents/{id}', [ItemDocumentController::class, 'show'])->whereNumber('id');
         Route::post('/item-documents/initial-stock', [ItemDocumentController::class, 'storeInitialStock']);
@@ -337,6 +372,15 @@ Route::middleware([
         Route::post('/sanitary-exposure-alerts/{id}/resolve', [\App\Http\Controllers\Api\SanitaryExposureAlertController::class, 'resolve'])->whereNumber('id');
         Route::get('/service-orders/{id}/bull-replacements', [ServiceOrderController::class, 'getBullReplacements'])->whereNumber('id');
         Route::post('/service-orders/{id}/close-service', [ServiceOrderController::class, 'closeService'])->whereNumber('id');
+
+        // AI service orders (semen S-B): inseminations, end of service, repaso bulls.
+        Route::get('/service-orders/{id}/inseminations', [ServiceOrderInseminationController::class, 'index'])->whereNumber('id');
+        Route::post('/service-orders/{id}/inseminations', [ServiceOrderInseminationController::class, 'store'])->whereNumber('id');
+        Route::post('/service-orders/{id}/inseminations/{inseminationId}/void', [ServiceOrderInseminationController::class, 'void'])
+            ->whereNumber('id')
+            ->whereNumber('inseminationId');
+        Route::post('/service-orders/{id}/end-service', [ServiceOrderInseminationController::class, 'endService'])->whereNumber('id');
+        Route::post('/service-orders/{id}/repaso-bulls', [ServiceOrderInseminationController::class, 'addRepasoBulls'])->whereNumber('id');
 
         // Pre-Servicio, Salud del Toro & Diagnósticos Veterinarios
         Route::get('/pre-service/bulls', [\App\Http\Controllers\Api\BullHealthEvaluationController::class, 'getBulls']);

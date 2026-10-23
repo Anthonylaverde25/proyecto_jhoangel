@@ -26,4 +26,17 @@ final class EmptyVerdictValidity
 
         return substr($diagnosedAt, 0, 10) >= substr($end, 0, 10);
     }
+
+    /**
+     * AI without repaso bulls (semen S-B, IA11): the straws are the only exposure, so an empty
+     * scanned on or after her last insemination is final. A new insemination makes it pending again.
+     */
+    public static function isFinalAfterInsemination(?string $diagnosedAt, ?string $lastInseminationOn): bool
+    {
+        if ($diagnosedAt === null || $lastInseminationOn === null) {
+            return false;
+        }
+
+        return substr($diagnosedAt, 0, 10) >= substr($lastInseminationOn, 0, 10);
+    }
 }

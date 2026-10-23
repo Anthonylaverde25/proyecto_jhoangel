@@ -19,7 +19,8 @@ class StartBatchServiceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'male_caravan_ids'              => 'required|array|min:1',
+            'service_method'                => 'sometimes|string|in:NATURAL,AI',
+            'male_caravan_ids'              => 'required_unless:service_method,AI|array',
             'male_caravan_ids.*'            => 'required|integer|exists:caravans,id',
             'selected_female_caravan_ids'   => 'nullable|array|min:1',
             'selected_female_caravan_ids.*' => 'required|integer|exists:caravans,id',
@@ -32,6 +33,9 @@ class StartBatchServiceRequest extends FormRequest
             'female_sire_assignments.*.female_caravan_id'        => 'required_with:female_sire_assignments|integer|exists:caravans,id',
             'female_sire_assignments.*.assigned_male_caravan_id' => 'required_with:female_sire_assignments|integer|exists:caravans,id',
             'observations'                  => 'nullable|string|max:1000',
+            'planned_semen'                 => 'nullable|array',
+            'planned_semen.*.female_caravan_id' => 'required_with:planned_semen|integer',
+            'planned_semen.*.item_id'       => 'nullable|integer',
         ];
     }
 }

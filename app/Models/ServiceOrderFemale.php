@@ -31,6 +31,8 @@ class ServiceOrderFemale extends Model
         'exposed_until',
         'exit_reason',
         'joined_after_start',
+        'planned_semen_item_id',
+        'not_inseminated_reason',
     ];
 
     protected $casts = [
@@ -46,6 +48,7 @@ class ServiceOrderFemale extends Model
         'exposed_from' => 'date:Y-m-d',
         'exposed_until' => 'date:Y-m-d',
         'joined_after_start' => 'boolean',
+        'planned_semen_item_id' => 'integer',
     ];
 
     public function serviceOrder(): BelongsTo

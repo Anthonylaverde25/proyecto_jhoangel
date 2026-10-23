@@ -18,6 +18,7 @@ class Warehouse extends Model
         'company_id',
         'code',
         'name',
+        'kind',
         'is_default',
         'is_active',
     ];

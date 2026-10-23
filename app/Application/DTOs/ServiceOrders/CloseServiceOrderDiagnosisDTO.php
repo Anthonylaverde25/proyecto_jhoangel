@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\DTOs\ServiceOrders;
 
 use App\Application\DTOs\RegisterGestationDiagnosisDTO;
+use App\Core\Enums\NotInseminatedReason;
 use App\Core\Enums\ServiceClosureBullAction;
 use App\Core\Enums\ServiceClosureRemainingFemalesAction;
 
@@ -18,6 +19,7 @@ final readonly class CloseServiceOrderDiagnosisDTO
      * @param RegisterGestationDiagnosisDTO[] $diagnoses
      * @param list<array{female_caravan_id: int, reason: string, notes: ?string}> $notDiagnosed
      * @param array<int, int> $bullDestinations male_caravan_id => destination batch id (bulls leaving now)
+     * @param array<int, ?NotInseminatedReason> $notInseminatedReasons AI only: optional note per female never inseminated (IA12)
      */
     public function __construct(
         public int $serviceOrderId,
@@ -34,7 +36,8 @@ final readonly class CloseServiceOrderDiagnosisDTO
         public ?string $scheduledMovementDate = null,
         public ?ServiceClosureRemainingFemalesAction $remainingFemalesAction = null,
         public ?int $remainingFemalesTargetBatchId = null,
-        public ?string $observations = null
+        public ?string $observations = null,
+        public array $notInseminatedReasons = []
     ) {
     }
 }

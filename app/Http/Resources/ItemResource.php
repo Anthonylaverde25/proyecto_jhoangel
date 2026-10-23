@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Resources;
 
 use App\Core\Entities\ItemEntity;
+use App\Application\Services\Stock\SemenStorageRule;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -46,6 +47,8 @@ class ItemResource extends JsonResource
             'track_stock' => $this->resource->tracksStock(),
             'behavior' => $this->resource->getBehavior()->value,
             'is_active' => $this->resource->isActive(),
+            // Semen S-A (DA7): the screens show the lot column and the semen tab from it.
+            'is_semen' => app(SemenStorageRule::class)->isSemen($this->resource),
             'unit' => $unit === null ? null : [
                 'id' => $unit->getId(),
                 'code' => $unit->getCode(),

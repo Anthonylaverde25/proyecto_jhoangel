@@ -6,6 +6,7 @@ namespace App\Http\Resources;
 
 use App\Core\Entities\ItemEntity;
 use App\Core\Entities\ItemProviderLinkEntity;
+use App\Core\Interfaces\ISemenProfileRepository;
 use Illuminate\Http\Request;
 
 /**
@@ -31,6 +32,7 @@ class ItemDetailResource extends ItemResource
     {
         return parent::toArray($request) + [
             'has_movements' => $this->usage['has_movements'],
+            'semen_profile' => SemenProfileResource::of(app(ISemenProfileRepository::class)->findByItem((int) $this->resource->getId(), $this->resource->getCompanyId())),
             'presentations' => ItemPresentationResource::collection($this->resource->getPresentations())->resolve($request),
             'providers' => array_map(fn (ItemProviderLinkEntity $link) => [
                 'provider_id' => $link->getProviderId(),

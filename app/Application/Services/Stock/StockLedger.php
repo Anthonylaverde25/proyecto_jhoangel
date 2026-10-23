@@ -45,6 +45,7 @@ final class StockLedger
         private readonly IUnvaluedLotRepository $lots,
         private readonly WeightedAverageCost $costs,
         private readonly StockIncidentRaiser $incidents,
+        private readonly SemenLotLedger $semenLots,
     ) {
     }
 
@@ -130,13 +131,14 @@ final class StockLedger
         string $occurredAt,
         ?string $idempotencyKey,
         ?int $userId,
+        ?int $semenLotId = null,
     ): LedgerResult {
         $itemId = (int) $resolved->item->getId();
         $counted = $resolved->quantity;
         $system = null;
         $taken = [];
 
-        return $this->commit($companyId, $warehouseId, [$itemId], $userId, function (array $locked) use ($companyId, $warehouseId, $resolved, $itemId, $counted, $seen, $reason, $occurredAt, $idempotencyKey, $userId, &$system, &$taken) {
+        return $this->commit($companyId, $warehouseId, [$itemId], $userId, function (array $locked) use ($companyId, $warehouseId, $resolved, $itemId, $counted, $seen, $reason, $occurredAt, $idempotencyKey, $userId, $semenLotId, &$system, &$taken) {
             $state = $this->states($locked);
             $current = &$state[$itemId];
             $balance = $current['balance'];
@@ -163,6 +165,7 @@ final class StockLedger
                 unitCost: $average->toScale(self::COST_SCALE),
                 totalCost: $total->toScale(self::QUANTITY_SCALE),
                 countedQuantity: $counted->toScale(self::QUANTITY_SCALE),
+                semenLotId: $semenLotId,
             );
             $draft = new ItemDocumentEntity(
                 null, $companyId, null, ItemDocumentType::COUNT_ADJUSTMENT, $warehouseId, $occurredAt, [$line],
@@ -378,6 +381,7 @@ final class StockLedger
                     $quantity->toScale(self::QUANTITY_SCALE),
                     unitCost: $average->toScale(self::COST_SCALE),
                     totalCost: $total->toScale(self::QUANTITY_SCALE),
+                    semenLotId: $line->getSemenLotId(),
                 );
             }
             $errors->throwIfAny(ItemDocumentException::class);
@@ -485,6 +489,7 @@ final class StockLedger
                 $line->getCountedQuantity(),
                 $line->getId(),
                 unvaluedQuantity: $line->getUnvaluedQuantity(),
+                semenLotId: $line->getSemenLotId(),
             );
         }
 
@@ -764,6 +769,7 @@ final class StockLedger
         $now = now()->toIso8601String();
 
         $raised = [];
+        $moved = [];
         foreach ($saved->getLines() as $line) {
             $plan = $plans[$line->getPosition()] ?? null;
             if ($plan === null) {
@@ -791,6 +797,12 @@ final class StockLedger
             foreach ($afterMovement !== null ? $afterMovement($saved, $stock, $movement) : [] as $incident) {
                 $raised[(int) $incident->getId()] = $incident;
             }
+            $moved[] = [$line, $movement];
+        }
+
+        // Semen S-A: the lots follow their lines in the same transaction (SL3), after the item rows (DA11).
+        foreach ($this->semenLots->afterApply($saved, $moved, $userId) as $incident) {
+            $raised[(int) $incident->getId()] = $incident;
         }
 
         return $raised;

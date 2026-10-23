@@ -6,6 +6,7 @@ namespace App\Application\Mappers;
 
 use App\Core\Entities\ServiceOrderEntity;
 use App\Core\Entities\ServiceOrderHistoryEntity;
+use App\Core\Enums\ServiceMethod;
 use App\Core\Enums\ServiceOrderStatus;
 use App\Models\ServiceOrder;
 
@@ -30,6 +31,12 @@ class ServiceOrderMapper
         $femaleIds = [];
         $femaleSireAssignments = [];
         $femaleExposures = [];
+        $lastInsemination = [];
+        if ($model->relationLoaded('lastInseminations')) {
+            foreach ($model->lastInseminations as $row) {
+                $lastInsemination[(int) $row->female_caravan_id] = self::dateOrNull($row->last_inseminated_on);
+            }
+        }
         if ($model->relationLoaded('females') && $model->females !== null) {
             $femaleIds = $model->females->pluck('id')->map(fn($id) => (int)$id)->toArray();
             foreach ($model->females as $female) {
@@ -41,6 +48,9 @@ class ServiceOrderMapper
                     'joined_after_start' => (bool) ($female->pivot->joined_after_start ?? false),
                     'reproductive_status' => $female->pivot->reproductive_status ?? 'UNCHECKED',
                     'diagnosed_at' => self::dateOrNull($female->pivot->diagnosed_at ?? null),
+                    'last_insemination_on' => $lastInsemination[(int) $female->id] ?? null,
+                    'planned_semen_item_id' => isset($female->pivot->planned_semen_item_id) ? (int) $female->pivot->planned_semen_item_id : null,
+                    'not_inseminated_reason' => $female->pivot->not_inseminated_reason ?? null,
                 ];
 
                 if (isset($female->pivot) && $female->pivot->assigned_male_caravan_id !== null) {
@@ -150,7 +160,8 @@ class ServiceOrderMapper
             femaleExposures: $femaleExposures,
             batchName: $model->relationLoaded('batch') ? $model->batch?->name : null,
             diagnosisCompletedAt: self::dateOrNull($model->diagnosis_completed_at),
-            parentServiceOrderId: $model->parent_service_order_id !== null ? (int) $model->parent_service_order_id : null
+            parentServiceOrderId: $model->parent_service_order_id !== null ? (int) $model->parent_service_order_id : null,
+            serviceMethod: ServiceMethod::tryFrom((string) ($model->service_method ?? '')) ?? ServiceMethod::NATURAL
         );
 
     }
@@ -183,6 +194,7 @@ class ServiceOrderMapper
         $model->rejection_reason = $entity->getRejectionReason();
         $model->service_type = $entity->getServiceType();
         $model->is_controlled_service = $entity->isControlledService();
+        $model->service_method = $entity->getServiceMethod()->value;
 
         return $model;
     }

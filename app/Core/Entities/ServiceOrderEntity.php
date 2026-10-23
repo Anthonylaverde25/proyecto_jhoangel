@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Core\Entities;
 
+use App\Core\Enums\ServiceMethod;
 use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Exceptions\ServiceOrderDomainException;
 use App\Core\ValueObjects\ServiceOrderDiagnosisSummary;
@@ -15,11 +16,14 @@ final class ServiceOrderEntity
     /** Days after the bull withdrawal from which a pregnancy is reliably detected at the chute. */
     public const SUGGESTED_DIAGNOSIS_DELAY_DAYS = 45;
 
+    /** Days after the last insemination for the early scan of an AI service (DB9). */
+    public const SUGGESTED_AI_DIAGNOSIS_DELAY_DAYS = 30;
+
     /**
      * @param int[] $maleCaravanIds
      * @param int[] $femaleCaravanIds
      * @param ServiceOrderHistoryEntity[] $history
-     * @param array<int, array{female_caravan_id: int, exposed_from: ?string, exposed_until: ?string, exit_reason: ?string, joined_after_start: bool, reproductive_status?: ?string, diagnosed_at?: ?string}> $femaleExposures
+     * @param array<int, array{female_caravan_id: int, exposed_from: ?string, exposed_until: ?string, exit_reason: ?string, joined_after_start: bool, reproductive_status?: ?string, diagnosed_at?: ?string, last_insemination_on?: ?string, planned_semen_item_id?: ?int, not_inseminated_reason?: ?string}> $femaleExposures
      */
     public function __construct(
         private readonly ?int $id,
@@ -55,7 +59,8 @@ final class ServiceOrderEntity
         private array $femaleExposures = [],
         private ?string $batchName = null,
         private ?string $diagnosisCompletedAt = null,
-        private ?int $parentServiceOrderId = null
+        private ?int $parentServiceOrderId = null,
+        private ServiceMethod $serviceMethod = ServiceMethod::NATURAL
     ) {
         if (empty($this->allMaleCaravanIds)) {
             $this->allMaleCaravanIds = $this->maleCaravanIds;
@@ -89,7 +94,65 @@ final class ServiceOrderEntity
      */
     public function getDiagnosisSummary(?string $exposureEndsOn = null): ServiceOrderDiagnosisSummary
     {
-        return ServiceOrderDiagnosisSummary::fromFemales($this->femaleExposures, $exposureEndsOn);
+        return $this->isInsemination()
+            ? ServiceOrderDiagnosisSummary::fromInseminatedFemales($this->femaleExposures, $this->hadRepasoBulls(), $exposureEndsOn)
+            : ServiceOrderDiagnosisSummary::fromFemales($this->femaleExposures, $exposureEndsOn);
+    }
+
+    public function getServiceMethod(): ServiceMethod
+    {
+        return $this->serviceMethod;
+    }
+
+    public function isInsemination(): bool
+    {
+        return $this->serviceMethod === ServiceMethod::AI;
+    }
+
+    /** Bulls in an AI order only come as repaso (IA10): any of them ever means the females were exposed. */
+    public function hadRepasoBulls(): bool
+    {
+        return $this->isInsemination() && $this->getAllMaleCaravanIds() !== [];
+    }
+
+    /**
+     * Where the inseminations of an AI order stand (semen S-B): derived, never stored. Null for a
+     * natural order.
+     *
+     * @return array{females: int, inseminated: int, not_inseminated: int, last_insemination_on: ?string, repaso_bulls_active: int, had_repaso_bulls: bool}|null
+     */
+    public function getInseminationSummary(): ?array
+    {
+        if (!$this->isInsemination()) {
+            return null;
+        }
+
+        $inseminated = 0;
+        foreach ($this->femaleExposures as $female) {
+            if (($female['last_insemination_on'] ?? null) !== null) {
+                $inseminated++;
+            }
+        }
+
+        return [
+            'females' => count($this->femaleExposures),
+            'inseminated' => $inseminated,
+            'not_inseminated' => count($this->femaleExposures) - $inseminated,
+            'last_insemination_on' => $this->getLastInseminationDate(),
+            'repaso_bulls_active' => count($this->getActiveMaleCaravanIds()),
+            'had_repaso_bulls' => $this->hadRepasoBulls(),
+        ];
+    }
+
+    /** Latest live insemination of the whole order, or null before the first one. */
+    public function getLastInseminationDate(): ?string
+    {
+        $dates = array_filter(array_map(
+            static fn (array $female): ?string => $female['last_insemination_on'] ?? null,
+            $this->femaleExposures
+        ));
+
+        return $dates === [] ? null : max($dates);
     }
 
     public function getDiagnosisCompletedAt(): ?string
@@ -112,13 +175,42 @@ final class ServiceOrderEntity
      */
     public function getSuggestedDiagnosisDate(): ?string
     {
+        if ($this->isInsemination()) {
+            return $this->getSuggestedInseminationDiagnosisDate();
+        }
+
         if ($this->actualEndDate === null || $this->status === ServiceOrderStatus::APPROVED) {
             return null;
         }
 
-        return (new DateTimeImmutable(substr($this->actualEndDate, 0, 10)))
-            ->modify('+' . self::SUGGESTED_DIAGNOSIS_DELAY_DAYS . ' days')
-            ->format('Y-m-d');
+        return self::addDays($this->actualEndDate, self::SUGGESTED_DIAGNOSIS_DELAY_DAYS);
+    }
+
+    /**
+     * DB9: an AI service is scanned 30 days after its last insemination; with repaso bulls, not
+     * before 45 days after they left either.
+     */
+    private function getSuggestedInseminationDiagnosisDate(): ?string
+    {
+        $lastInsemination = $this->getLastInseminationDate();
+        if ($lastInsemination === null) {
+            return null;
+        }
+
+        $suggested = self::addDays($lastInsemination, self::SUGGESTED_AI_DIAGNOSIS_DELAY_DAYS);
+        if ($this->hadRepasoBulls()) {
+            if ($this->status === ServiceOrderStatus::APPROVED || $this->actualEndDate === null) {
+                return null;
+            }
+            $suggested = max($suggested, self::addDays($this->actualEndDate, self::SUGGESTED_DIAGNOSIS_DELAY_DAYS));
+        }
+
+        return $suggested;
+    }
+
+    private static function addDays(string $date, int $days): string
+    {
+        return (new DateTimeImmutable(substr($date, 0, 10)))->modify("+{$days} days")->format('Y-m-d');
     }
 
     public function getTargetBullRatio(): ?float
@@ -315,7 +407,7 @@ final class ServiceOrderEntity
             throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::APPROVED->value);
         }
 
-        if (empty($this->maleCaravanIds)) {
+        if ($this->serviceMethod->needsBulls() && empty($this->maleCaravanIds)) {
             throw ServiceOrderDomainException::domainError("Cannot approve order without bulls");
         }
 
@@ -367,12 +459,43 @@ final class ServiceOrderEntity
      */
     public function withdrawBulls(string $withdrawalDate, ?string $observations = null): void
     {
+        // The repaso bulls of an AI order leave the same way, and with them its service ends (IA10).
+        $ended = $this->isInsemination() ? ServiceOrderStatus::SERVICE_ENDED : ServiceOrderStatus::BULLS_WITHDRAWN;
         if ($this->status !== ServiceOrderStatus::APPROVED) {
-            throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::BULLS_WITHDRAWN->value);
+            throw ServiceOrderDomainException::invalidStateTransition($this->status->value, $ended->value);
         }
 
-        $this->status = ServiceOrderStatus::BULLS_WITHDRAWN;
+        $this->status = $ended;
         $this->actualEndDate = substr($withdrawalDate, 0, 10);
+        $this->appendObservations($observations);
+    }
+
+    /**
+     * Ends an AI service without closing the order, so the batch is free before the diagnosis
+     * (APPROVED -> SERVICE_ENDED). With repaso bulls in the batch the end is their withdrawal.
+     *
+     * @throws ServiceOrderDomainException
+     */
+    public function endService(string $endDate, ?string $observations = null): void
+    {
+        if (!$this->isInsemination()) {
+            throw ServiceOrderDomainException::domainError('Una monta natural termina al retirar la torada.');
+        }
+        if ($this->status !== ServiceOrderStatus::APPROVED) {
+            throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::SERVICE_ENDED->value);
+        }
+        if ($this->getActiveMaleCaravanIds() !== []) {
+            throw ServiceOrderDomainException::domainError('Hay toros de repaso en el lote: el servicio termina al retirar la torada.');
+        }
+
+        $endDate = substr($endDate, 0, 10);
+        $lastInsemination = $this->getLastInseminationDate();
+        if ($lastInsemination !== null && $endDate < $lastInsemination) {
+            throw ServiceOrderDomainException::domainError("El servicio no puede terminar antes de la última inseminación ({$lastInsemination}).");
+        }
+
+        $this->status = ServiceOrderStatus::SERVICE_ENDED;
+        $this->actualEndDate = $endDate;
         $this->appendObservations($observations);
     }
 
@@ -420,8 +543,14 @@ final class ServiceOrderEntity
      *
      * @throws ServiceOrderDomainException
      */
-    public function cancel(): void
+    public function cancel(int $liveInseminations = 0): void
     {
+        if ($liveInseminations > 0) {
+            throw ServiceOrderDomainException::domainError(
+                "La orden tiene {$liveInseminations} inseminación(es) vigente(s): anulalas antes de cancelarla."
+            );
+        }
+
         $allowed = [
             ServiceOrderStatus::DRAFT,
             ServiceOrderStatus::APPROVED
@@ -440,7 +569,7 @@ final class ServiceOrderEntity
      *
      * @throws ServiceOrderDomainException
      */
-    public function changeStatus(ServiceOrderStatus $newStatus, int $userId): void
+    public function changeStatus(ServiceOrderStatus $newStatus, int $userId, int $liveInseminations = 0): void
     {
         if ($this->status === $newStatus) {
             return;
@@ -453,11 +582,11 @@ final class ServiceOrderEntity
 
         // Closing goes through the diagnosis, and the end of the service through the bull withdrawal:
         // an administrative patch cannot skip either.
-        if ($newStatus === ServiceOrderStatus::SUCCESS || $newStatus === ServiceOrderStatus::BULLS_WITHDRAWN) {
+        if ($newStatus === ServiceOrderStatus::SUCCESS || $newStatus->hasServiceEnded()) {
             throw ServiceOrderDomainException::domainError(
                 $newStatus === ServiceOrderStatus::SUCCESS
                     ? 'Una orden de servicio se cierra con su diagnóstico de gestación ("Cerrar orden").'
-                    : 'La torada se retira con "Retirar torada", que mueve los toros y cierra la exposición.'
+                    : 'El servicio termina con "Retirar torada" (o "Terminar servicio" en una IA sin toros), que cierra la exposición.'
             );
         }
 
@@ -467,13 +596,13 @@ final class ServiceOrderEntity
         }
 
         if ($newStatus === ServiceOrderStatus::CANCELLED) {
-            $this->cancel();
+            $this->cancel($liveInseminations);
             return;
         }
 
         if ($newStatus === ServiceOrderStatus::DRAFT) {
             // Once the bulls left, the service happened: its exposures and verdicts stay.
-            if (in_array($this->status, [ServiceOrderStatus::BULLS_WITHDRAWN, ServiceOrderStatus::SUCCESS], true)) {
+            if ($this->status->hasServiceEnded() || $this->status === ServiceOrderStatus::SUCCESS) {
                 throw ServiceOrderDomainException::invalidStateTransition($this->status->value, ServiceOrderStatus::DRAFT->value);
             }
 

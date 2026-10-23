@@ -8,6 +8,7 @@ use App\Application\DTOs\RegisterGestationDiagnosisDTO;
 use App\Application\DTOs\ServiceOrders\CloseServiceOrderDiagnosisDTO;
 use App\Application\DTOs\ServiceOrders\MarkFemalesNotDiagnosedDTO;
 use App\Core\Enums\NotDiagnosedReason;
+use App\Core\Enums\NotInseminatedReason;
 use App\Core\Enums\ServiceClosureBullAction;
 use App\Core\Enums\ServiceClosureRemainingFemalesAction;
 use Illuminate\Foundation\Http\FormRequest;
@@ -55,6 +56,11 @@ class CloseServiceOrderDiagnosisRequest extends FormRequest
 
             'remaining_females_action'              => ['nullable', Rule::enum(ServiceClosureRemainingFemalesAction::class)],
             'remaining_females_target_batch_id'     => 'nullable|integer|exists:batches,id',
+
+            // AI (semen S-B): optional note on the females never inseminated (IA12).
+            'not_inseminated_reasons'               => 'nullable|array',
+            'not_inseminated_reasons.*.female_caravan_id' => 'required|integer',
+            'not_inseminated_reasons.*.reason'      => ['nullable', Rule::enum(NotInseminatedReason::class)],
         ];
     }
 
@@ -110,7 +116,22 @@ class CloseServiceOrderDiagnosisRequest extends FormRequest
                 ? ServiceClosureRemainingFemalesAction::from((string) $validated['remaining_females_action'])
                 : null,
             remainingFemalesTargetBatchId: isset($validated['remaining_females_target_batch_id']) ? (int) $validated['remaining_females_target_batch_id'] : null,
-            observations: $validated['observations'] ?? null
+            observations: $validated['observations'] ?? null,
+            notInseminatedReasons: self::notInseminatedReasons((array) ($validated['not_inseminated_reasons'] ?? []))
         );
+    }
+
+    /**
+     * @param array<int, array{female_caravan_id: int, reason?: ?string}> $rows
+     * @return array<int, ?NotInseminatedReason>
+     */
+    public static function notInseminatedReasons(array $rows): array
+    {
+        $reasons = [];
+        foreach ($rows as $row) {
+            $reasons[(int) $row['female_caravan_id']] = isset($row['reason']) ? NotInseminatedReason::tryFrom((string) $row['reason']) : null;
+        }
+
+        return $reasons;
     }
 }

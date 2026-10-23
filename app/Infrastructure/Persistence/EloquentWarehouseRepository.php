@@ -7,6 +7,7 @@ namespace App\Infrastructure\Persistence;
 use App\Application\Mappers\DecimalColumn;
 use App\Application\Mappers\StockMapper;
 use App\Core\Entities\WarehouseEntity;
+use App\Core\Enums\WarehouseKind;
 use App\Core\Interfaces\IWarehouseRepository;
 use App\Core\ValueObjects\WarehouseSummary;
 use App\Models\Warehouse;
@@ -19,9 +20,9 @@ use Illuminate\Support\Facades\DB;
  */
 class EloquentWarehouseRepository implements IWarehouseRepository
 {
-    public function findDefault(int $companyId): ?WarehouseEntity
+    public function findDefault(int $companyId, WarehouseKind $kind = WarehouseKind::GENERAL): ?WarehouseEntity
     {
-        $model = $this->query($companyId)->where('is_default', true)->first();
+        $model = $this->query($companyId)->where('kind', $kind->value)->where('is_default', true)->first();
 
         return $model ? StockMapper::warehouseToEntity($model) : null;
     }
@@ -36,6 +37,7 @@ class EloquentWarehouseRepository implements IWarehouseRepository
     public function findAll(int $companyId): array
     {
         return $this->query($companyId)
+            ->orderByRaw("CASE WHEN kind = 'GENERAL' THEN 0 ELSE 1 END")
             ->orderByDesc('is_default')
             ->orderBy('code')
             ->get()
@@ -54,6 +56,7 @@ class EloquentWarehouseRepository implements IWarehouseRepository
             'company_id' => $companyId,
             'code' => WarehouseEntity::DEFAULT_CODE,
             'name' => WarehouseEntity::DEFAULT_NAME,
+            'kind' => WarehouseKind::GENERAL->value,
             'is_default' => true,
             'is_active' => true,
         ]);
@@ -61,13 +64,14 @@ class EloquentWarehouseRepository implements IWarehouseRepository
         return StockMapper::warehouseToEntity($model);
     }
 
-    public function create(int $companyId, string $code, string $name): WarehouseEntity
+    public function create(int $companyId, string $code, string $name, WarehouseKind $kind): WarehouseEntity
     {
         $model = Warehouse::withoutGlobalScopes()->create([
             'company_id' => $companyId,
             'code' => $code,
             'name' => $name,
-            'is_default' => false,
+            'kind' => $kind->value,
+            'is_default' => $this->findDefault($companyId, $kind) === null,
             'is_active' => true,
         ]);
 
@@ -77,7 +81,13 @@ class EloquentWarehouseRepository implements IWarehouseRepository
     public function save(WarehouseEntity $warehouse): WarehouseEntity
     {
         $model = $this->query($warehouse->companyId)->findOrFail($warehouse->id);
-        $model->update(['code' => $warehouse->code, 'name' => $warehouse->name, 'is_active' => $warehouse->isActive]);
+        $model->update([
+            'code' => $warehouse->code,
+            'name' => $warehouse->name,
+            'kind' => $warehouse->kind->value,
+            'is_default' => $model->is_default && $warehouse->isDefault,
+            'is_active' => $warehouse->isActive,
+        ]);
 
         return StockMapper::warehouseToEntity($model);
     }
@@ -85,10 +95,17 @@ class EloquentWarehouseRepository implements IWarehouseRepository
     public function swapDefault(int $companyId, int $newDefaultId): void
     {
         DB::transaction(function () use ($companyId, $newDefaultId) {
-            // Down first: uq_wh_one_default never sees two defaults.
-            $this->query($companyId)->where('is_default', true)->where('id', '!=', $newDefaultId)->update(['is_default' => false]);
+            $kind = $this->query($companyId)->whereKey($newDefaultId)->value('kind');
+            // Down first: uq_wh_one_default never sees two defaults of a kind.
+            $this->query($companyId)->where('kind', $kind)->where('is_default', true)->where('id', '!=', $newDefaultId)->update(['is_default' => false]);
             $this->query($companyId)->where('id', $newDefaultId)->update(['is_default' => true, 'is_active' => true]);
         });
+    }
+
+    public function hasMovements(int $id, int $companyId): bool
+    {
+        return DB::table('stock_movements')->where('company_id', $companyId)->where('warehouse_id', $id)->exists()
+            || DB::table('item_documents')->where('company_id', $companyId)->where('warehouse_id', $id)->exists();
     }
 
     public function codes(int $companyId): array

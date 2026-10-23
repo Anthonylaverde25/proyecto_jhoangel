@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\UseCases\Batches;
 
 use App\Application\DTOs\ServiceOrders\StartBatchServiceOrderDTO;
+use App\Application\Services\Insemination\PlannedSemenGuard;
 use App\Core\Entities\ServiceOrderEntity;
 use App\Core\Enums\AnimalSex;
 use App\Core\Enums\BatchWeightCause;
@@ -31,6 +32,9 @@ use Illuminate\Support\Facades\DB;
  * The service is an order over the batch, not a batch of its own: the females stay where they
  * are, the bulls join them, and the order keeps the policies (type, bull ratio, window), the
  * exposure window of every female and the trace of the campaign.
+ *
+ * An AI service (semen S-B) starts the same way without bulls: its females are picked one by one,
+ * each with the semen planned for her, and no animal moves (IA1-IA4).
  */
 final class StartBatchServiceOrderUseCase
 {
@@ -41,7 +45,8 @@ final class StartBatchServiceOrderUseCase
         private readonly ServiceStartPolicy $startPolicy,
         private readonly ServiceOrderCodeGenerator $codeGenerator,
         private readonly BullServiceFitnessPolicy $fitnessPolicy,
-        private readonly BatchWeightService $batchWeightService
+        private readonly BatchWeightService $batchWeightService,
+        private readonly PlannedSemenGuard $plannedSemenGuard
     ) {
     }
 
@@ -64,24 +69,31 @@ final class StartBatchServiceOrderUseCase
         // 2. Exposed females: the whole batch in natural service (the owner's breeding exclusion
         // cannot keep a cow away from bulls sharing her paddock), only eligible ones in a
         // controlled service / AI.
+        $individually = $dto->picksFemalesIndividually();
         $femaleIds = $this->startPolicy->resolveExposedFemales(
-            $dto->isControlledService,
-            $this->caravanRepository->findServiceableFemaleIdsInBatch($dto->batchId, $dto->isControlledService),
+            $individually,
+            $this->caravanRepository->findServiceableFemaleIdsInBatch($dto->batchId, $individually),
             $dto->selectedFemaleCaravanIds,
             $this->caravanRepository->findBreedingExcludedFemaleIdsInBatch($dto->batchId)
         );
+        $plannedSemen = $this->plannedSemenGuard->check($dto->plannedSemen, $femaleIds, $dto->companyId);
+        $isInsemination = !$dto->serviceMethod->needsBulls();
 
-        // 3. Bulls: males that pass the admission guard (owner decision + veterinary verdict).
-        $this->startPolicy->assertHasBulls($dto->maleCaravanIds);
+        // 3. Bulls: males that pass the admission guard (owner decision + veterinary verdict). An AI
+        // service needs none; its repaso bulls join later (IA10).
+        $maleCaravanIdsToStart = $isInsemination ? [] : $dto->maleCaravanIds;
+        if (!$isInsemination) {
+            $this->startPolicy->assertHasBulls($dto->maleCaravanIds);
+        }
         $maleCaravans = Caravan::withoutGlobalScopes()
             ->where('company_id', $dto->companyId)
-            ->whereIn('id', $dto->maleCaravanIds)
+            ->whereIn('id', $maleCaravanIdsToStart)
             ->with('bullHealthEvaluation')
             ->get()
             ->keyBy('id');
 
         $sanitaryStatusByBull = [];
-        foreach ($dto->maleCaravanIds as $maleId) {
+        foreach ($maleCaravanIdsToStart as $maleId) {
             $bull = $maleCaravans->get($maleId);
             if ($bull === null) {
                 throw ServiceOrderDomainException::domainError("El reproductor macho con ID {$maleId} no fue encontrado.");
@@ -97,7 +109,7 @@ final class StartBatchServiceOrderUseCase
 
         // 4. No animal may be in another active service.
         $conflicts = $this->serviceOrderRepository->findActiveOrdersByCaravans(
-            array_merge($femaleIds, $dto->maleCaravanIds),
+            array_merge($femaleIds, $maleCaravanIdsToStart),
             $dto->companyId
         );
         if ($conflicts !== []) {
@@ -110,7 +122,7 @@ final class StartBatchServiceOrderUseCase
             ->get();
 
         try {
-            $orderId = DB::transaction(function () use ($dto, $batch, $femaleCaravans, $maleCaravans, $sanitaryStatusByBull): int {
+            $orderId = DB::transaction(function () use ($dto, $batch, $femaleCaravans, $maleCaravans, $sanitaryStatusByBull, $plannedSemen, $isInsemination, $maleCaravanIdsToStart): int {
                 $orderCode = $this->codeGenerator->next($dto->companyId, $dto->plannedStartDate);
 
                 $order = ServiceOrder::create([
@@ -120,6 +132,7 @@ final class StartBatchServiceOrderUseCase
                     'code'                  => $orderCode,
                     'status'                => ServiceOrderStatus::APPROVED->value,
                     'service_type'          => $dto->serviceType,
+                    'service_method'        => $dto->serviceMethod->value,
                     'is_controlled_service' => $dto->isControlledService,
                     'target_bull_ratio'     => $dto->targetBullRatio,
                     'planned_start_date'    => $dto->plannedStartDate,
@@ -145,6 +158,7 @@ final class StartBatchServiceOrderUseCase
                         'service_order_id'         => $order->id,
                         'female_caravan_id'        => $female->id,
                         'assigned_male_caravan_id' => $sireByFemale[(int) $female->id] ?? null,
+                        'planned_semen_item_id'    => $plannedSemen[(int) $female->id] ?? null,
                         'snapshot_entry_weight'    => $female->currentWeight?->weight ?? $female->entry_weight,
                         'snapshot_body_condition'  => $female->currentBodyCondition?->score ?? $female->femaleDetail?->body_condition,
                         'reproductive_status'      => 'UNCHECKED',
@@ -166,17 +180,19 @@ final class StartBatchServiceOrderUseCase
                 }
 
                 // The bulls join the females in the batch; both sides of the move are recomputed.
-                $donorBatchIds = $this->serviceOrderRepository->moveBullsToBatch(
-                    $dto->maleCaravanIds,
-                    (int) $batch->getId(),
-                    $dto->companyId,
-                    $dto->plannedStartDate,
-                    $orderCode
-                );
-                foreach ($donorBatchIds as $donorBatchId) {
-                    $this->batchWeightService->recalculateBatchWeight($donorBatchId, BatchWeightCause::MOVEMENT_OUT);
+                if ($maleCaravanIdsToStart !== []) {
+                    $donorBatchIds = $this->serviceOrderRepository->moveBullsToBatch(
+                        $maleCaravanIdsToStart,
+                        (int) $batch->getId(),
+                        $dto->companyId,
+                        $dto->plannedStartDate,
+                        $orderCode
+                    );
+                    foreach ($donorBatchIds as $donorBatchId) {
+                        $this->batchWeightService->recalculateBatchWeight($donorBatchId, BatchWeightCause::MOVEMENT_OUT);
+                    }
+                    $this->batchWeightService->recalculateBatchWeight((int) $batch->getId(), BatchWeightCause::MOVEMENT_IN);
                 }
-                $this->batchWeightService->recalculateBatchWeight((int) $batch->getId(), BatchWeightCause::MOVEMENT_IN);
 
                 ServiceOrderHistory::create([
                     'company_id'       => $dto->companyId,
@@ -184,7 +200,9 @@ final class StartBatchServiceOrderUseCase
                     'action_user_id'   => $dto->userId,
                     'from_status'      => ServiceOrderStatus::DRAFT->value,
                     'to_status'        => ServiceOrderStatus::APPROVED->value,
-                    'action_reason'    => "Servicio iniciado sobre el lote '{$batch->getName()}'",
+                    'action_reason'    => $isInsemination
+                        ? "Servicio de IA iniciado sobre el lote '{$batch->getName()}'"
+                        : "Servicio iniciado sobre el lote '{$batch->getName()}'",
                 ]);
 
                 return (int) $order->id;

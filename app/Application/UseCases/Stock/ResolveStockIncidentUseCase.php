@@ -25,6 +25,9 @@ final class ResolveStockIncidentUseCase
     {
         $incident = $this->incidents->findById($id, $companyId)
             ?? throw new ModelNotFoundException("Stock incident {$id} not found.");
+        if ($incident->getType()->resolvesByIdentification()) {
+            throw ItemDocumentException::on('domain', 'Se resuelve identificando la partida de las pajuelas.');
+        }
         if ($incident->getType()->resolvesItself()) {
             throw ItemDocumentException::on('domain', "{$incident->getType()->label()} se resuelve sola cuando el saldo se recupera.");
         }

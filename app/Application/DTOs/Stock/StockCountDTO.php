@@ -21,6 +21,7 @@ final readonly class StockCountDTO
         public string $occurredAt,
         public string $idempotencyKey,
         public ?int $createdBy = null,
+        public ?int $semenLotId = null,
     ) {
     }
 
@@ -40,6 +41,7 @@ final readonly class StockCountDTO
             (string) $data['occurred_at'],
             (string) $data['idempotency_key'],
             $createdBy,
+            isset($data['semen_lot_id']) ? (int) $data['semen_lot_id'] : null,
         );
     }
 }

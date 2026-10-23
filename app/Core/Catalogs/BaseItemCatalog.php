@@ -32,6 +32,7 @@ final class BaseItemCatalog
             ['code' => 'WORKDAY', 'name' => 'Jornada', 'symbol' => 'jor', 'dimension' => UnitDimension::TIME, 'factor' => null, 'is_base' => false, 'order' => 11],
             ['code' => 'HA', 'name' => 'Hectárea', 'symbol' => 'ha', 'dimension' => UnitDimension::AREA, 'factor' => '1', 'is_base' => true, 'order' => 12],
             ['code' => 'M', 'name' => 'Metro', 'symbol' => 'm', 'dimension' => UnitDimension::LENGTH, 'factor' => '1', 'is_base' => true, 'order' => 13],
+            ['code' => 'STRAW', 'name' => 'Pajuela', 'symbol' => 'paj', 'dimension' => UnitDimension::COUNT, 'factor' => null, 'is_base' => false, 'order' => 14],
         ];
     }
 

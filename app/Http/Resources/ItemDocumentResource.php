@@ -41,6 +41,9 @@ class ItemDocumentResource extends JsonResource
             'type_label' => $document->getType()->label(),
             'occurred_at' => $document->getOccurredAt(),
             'warehouse' => ['id' => $document->getWarehouseId(), 'code' => $document->getWarehouseCode(), 'name' => $document->getWarehouseName()],
+            // Semen S-A: where a semen entry came from (no debt nor invoice).
+            'provider' => $document->getProviderId() === null ? null : ['id' => $document->getProviderId(), 'name' => $document->getProviderName()],
+            'service_order' => $document->getServiceOrderId() === null ? null : ['id' => $document->getServiceOrderId(), 'code' => $document->getServiceOrderCode()],
             // Delivery D: the other half of a transfer.
             'paired' => $document->getCounterpart() === null ? null : [
                 'id' => $document->getCounterpart()->id,
@@ -71,6 +74,7 @@ class ItemDocumentResource extends JsonResource
                 'id' => $line->getId(),
                 'position' => $line->getPosition(),
                 'item' => ['id' => $line->getItemId(), 'name' => $line->getItemName(), 'unit_symbol' => $line->getItemUnitSymbol()],
+                'semen_lot' => $line->getSemenLotId() === null ? null : ['id' => $line->getSemenLotId(), 'code' => $line->getSemenLotCode()],
                 'input_quantity' => $line->getInputQuantity(),
                 'input_label' => $line->getInputLabel(),
                 'quantity' => $line->getQuantity(),

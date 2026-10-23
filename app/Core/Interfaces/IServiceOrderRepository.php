@@ -60,7 +60,7 @@ interface IServiceOrderRepository
     /**
      * The active (DRAFT or APPROVED) service running on a batch, as a lightweight reference.
      *
-     * @return array{id: int, status: string, is_controlled_service: bool}|null
+     * @return array{id: int, status: string, is_controlled_service: bool, service_method: string}|null
      */
     public function findActiveServiceOnBatch(int $batchId): ?array;
 

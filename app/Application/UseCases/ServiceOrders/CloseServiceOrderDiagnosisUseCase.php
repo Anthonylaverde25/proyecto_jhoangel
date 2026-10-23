@@ -22,6 +22,7 @@ use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Exceptions\DomainException;
 use App\Core\Exceptions\ServiceOrderDomainException;
 use App\Core\Interfaces\IBatchRepository;
+use App\Core\Interfaces\IServiceOrderInseminationRepository;
 use App\Core\Interfaces\IServiceOrderRepository;
 use Illuminate\Support\Facades\DB;
 
@@ -47,7 +48,8 @@ final class CloseServiceOrderDiagnosisUseCase
         private readonly ServiceBullWithdrawal $bullWithdrawal,
         private readonly CaravanBatchRelocation $relocation,
         private readonly StartBatchServiceOrderUseCase $startServiceOrder,
-        private readonly CreateTransferOrderUseCase $createTransferOrder
+        private readonly CreateTransferOrderUseCase $createTransferOrder,
+        private readonly IServiceOrderInseminationRepository $inseminations
     ) {
     }
 
@@ -105,6 +107,11 @@ final class CloseServiceOrderDiagnosisUseCase
                 females: $dto->notDiagnosed,
                 duringClosing: true
             ));
+        }
+
+        // AI (semen S-B): closing ends the service too (DB5); the never inseminated just get their note.
+        if ($order->isInsemination() && $dto->notInseminatedReasons !== []) {
+            $this->inseminations->setNotInseminatedReasons($orderId, EndInseminationServiceUseCase::notInseminatedOnly($order, $dto->notInseminatedReasons));
         }
 
         // 2. Every female with a final verdict as of the closing day.

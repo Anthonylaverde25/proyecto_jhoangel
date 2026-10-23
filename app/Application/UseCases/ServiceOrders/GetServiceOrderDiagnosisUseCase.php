@@ -36,8 +36,34 @@ final class GetServiceOrderDiagnosisUseCase
         $detail = $this->serviceOrderRepository->getDiagnosisDetail($orderId, $companyId);
         $today = date('Y-m-d');
 
-        $females = array_map(static function (array $female) use ($today): array {
+        // AI without repaso (semen S-B): the straws are the only exposure (IA11), and a female never
+        // inseminated is not scanned (IA12).
+        $strawsOnly = $order->isInsemination() && !$order->hadRepasoBulls();
+        $lastInsemination = [];
+        $notInseminatedReason = [];
+        foreach ($order->getFemaleExposures() as $exposure) {
+            $lastInsemination[(int) $exposure['female_caravan_id']] = $exposure['last_insemination_on'] ?? null;
+            $notInseminatedReason[(int) $exposure['female_caravan_id']] = $exposure['not_inseminated_reason'] ?? null;
+        }
+
+        $females = array_map(static function (array $female) use ($today, $strawsOnly, $lastInsemination, $notInseminatedReason): array {
+            $id = (int) $female['female_caravan_id'];
+            $last = $lastInsemination[$id] ?? null;
             $isEmpty = $female['reproductive_status'] === 'EMPTY';
+            $female['last_insemination_on'] = $last;
+            $female['not_inseminated_reason'] = $notInseminatedReason[$id] ?? null;
+            $female['is_not_inseminated'] = $strawsOnly && $last === null;
+            // The day from which an empty is final: her last insemination under AI without repaso (IA11).
+            $female['empty_final_after'] = $strawsOnly ? $last : null;
+
+            if ($strawsOnly) {
+                $final = EmptyVerdictValidity::isFinalAfterInsemination($female['diagnosed_at'], $last);
+                $female['is_provisional_empty'] = $isEmpty && !$final;
+                $female['is_final_if_closed_today'] = $female['is_not_inseminated'] || ($isEmpty ? $final : $female['reproductive_status'] !== 'UNCHECKED');
+
+                return $female;
+            }
+
             // Provisional: scanned empty while still exposed. Closing today would or would not
             // make it final depending on the day of the verdict.
             $female['is_provisional_empty'] = $isEmpty
@@ -52,6 +78,7 @@ final class GetServiceOrderDiagnosisUseCase
         return [
             'order_id' => $orderId,
             'status' => $order->getStatus()->value,
+            'service_method' => $order->getServiceMethod()->value,
             'suggested_diagnosis_date' => $order->getSuggestedDiagnosisDate(),
             'summary' => $order->getDiagnosisSummary()->toArray(),
             'pending_if_closed_today' => $order->getDiagnosisSummary($today)->pendingCount(),

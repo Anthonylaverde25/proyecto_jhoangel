@@ -10,14 +10,24 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        then: function (): void {
+            // OAuth server for AI clients (MCP): tenant by domain, stateless, no /api prefix.
+            \Illuminate\Support\Facades\Route::middleware([
+                \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
+                \Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains::class,
+            ])->group(base_path('routes/mcp-oauth.php'));
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->validateCsrfTokens(except: [
             'api/*',
+            'oauth/*',
         ]);
 
         $middleware->api(append: [
             \App\Http\Middleware\CompanyContextMiddleware::class,
+            // AI client tokens (MCP): read only, pinned to their company.
+            \App\Http\Middleware\RestrictMcpTokenScope::class,
         ]);
 
         $middleware->alias([

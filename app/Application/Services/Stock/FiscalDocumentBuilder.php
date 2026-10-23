@@ -38,6 +38,7 @@ final class FiscalDocumentBuilder
         private readonly BatchConsumptionGuard $batches,
         private readonly FiscalDocumentCalculator $calculator,
         private readonly DeliveryNoteRules $deliveryNotes,
+        private readonly SemenStorageRule $semen,
     ) {
     }
 
@@ -187,6 +188,10 @@ final class FiscalDocumentBuilder
     {
         $prefix = "lines.{$index}";
         $resolved = $this->lines->resolve($prefix, $companyId, $dto->itemId, $dto->inputQuantity, $dto->inputUnitId, $dto->inputPresentationId, $errors, false);
+        // S-0: semen enters through the semen entry, into a tank; a provider document only reaches the general default.
+        if ($resolved !== null && $resolved->item->tracksStock() && $this->semen->isSemen($resolved->item)) {
+            $errors->add("{$prefix}.item_id", "{$resolved->item->getName()} es semen: todavía no entra por comprobante. Ingresalo desde Artículos y servicios › Semen › Ingresar semen.");
+        }
 
         if ($type->kind === FiscalDocumentKind::DELIVERY_NOTE) {
             return $this->deliveryNoteLine($index, $dto, $resolved, $deliveryNoteIsValued, $errors);

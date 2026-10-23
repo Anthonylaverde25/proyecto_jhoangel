@@ -45,6 +45,13 @@ final class CloseServiceOrderWithBullWithdrawalUseCase
             );
         }
 
+        // An AI order without repaso bulls has nothing to withdraw: its service ends from the menu.
+        if ($order->isInsemination() && $order->getActiveMaleCaravanIds() === []) {
+            throw ServiceOrderDomainException::domainError(
+                "La orden {$order->getCode()} no tiene toros de repaso: el servicio se termina con \"Terminar servicio\" o al cerrar la orden."
+            );
+        }
+
         return DB::transaction(function () use ($dto, $order): array {
             $bulls = $this->bullWithdrawal->withdraw(
                 orderId: (int) $order->getId(),

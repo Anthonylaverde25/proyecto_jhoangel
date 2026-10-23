@@ -35,6 +35,7 @@ class StoreStockTransferRequest extends FormRequest
             'lines.*.input_quantity' => ['required', 'decimal:0,4', 'gt:0'],
             'lines.*.input_unit_id' => ['nullable', 'integer'],
             'lines.*.input_presentation_id' => ['nullable', 'integer'],
+            'lines.*.semen_lot_id' => ['nullable', 'integer'],
         ];
     }
 

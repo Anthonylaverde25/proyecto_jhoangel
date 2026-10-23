@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Application\DTOs\ServiceOrders;
 
+use App\Core\Enums\ServiceMethod;
+
 final class StartBatchServiceOrderDTO
 {
     /**
      * @param int[] $maleCaravanIds
      * @param int[]|null $selectedFemaleCaravanIds
      * @param array<int, array{female_caravan_id: int, assigned_male_caravan_id: int}> $femaleSireAssignments
+     * @param array<int, int> $plannedSemen female_caravan_id => semen item id (AI only, IA4)
      */
     public function __construct(
         public readonly int $batchId,
@@ -25,7 +28,9 @@ final class StartBatchServiceOrderDTO
         public readonly array $femaleSireAssignments = [],
         public readonly ?string $observations = null,
         /** The order this one continues: the bulls stayed with the empty females of a closed one. */
-        public readonly ?int $parentServiceOrderId = null
+        public readonly ?int $parentServiceOrderId = null,
+        public readonly ServiceMethod $serviceMethod = ServiceMethod::NATURAL,
+        public readonly array $plannedSemen = []
     ) {
     }
 
@@ -50,7 +55,31 @@ final class StartBatchServiceOrderDTO
             serviceType: (string) ($data['service_type'] ?? 'multi'),
             isControlledService: (bool) ($data['is_controlled_service'] ?? false),
             femaleSireAssignments: (array) ($data['female_sire_assignments'] ?? []),
-            observations: isset($data['observations']) ? (string) $data['observations'] : null
+            observations: isset($data['observations']) ? (string) $data['observations'] : null,
+            serviceMethod: ServiceMethod::tryFrom((string) ($data['service_method'] ?? '')) ?? ServiceMethod::NATURAL,
+            plannedSemen: self::plannedSemen((array) ($data['planned_semen'] ?? []))
         );
+    }
+
+    /**
+     * @param array<int, mixed> $rows
+     * @return array<int, int>
+     */
+    private static function plannedSemen(array $rows): array
+    {
+        $planned = [];
+        foreach ($rows as $row) {
+            if (is_array($row) && isset($row['female_caravan_id'], $row['item_id']) && $row['item_id'] !== null) {
+                $planned[(int) $row['female_caravan_id']] = (int) $row['item_id'];
+            }
+        }
+
+        return $planned;
+    }
+
+    /** Females picked one by one: a controlled service or an AI one (IA2). */
+    public function picksFemalesIndividually(): bool
+    {
+        return $this->isControlledService || $this->serviceMethod->picksFemalesIndividually();
     }
 }

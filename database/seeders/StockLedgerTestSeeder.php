@@ -122,7 +122,7 @@ class StockLedgerTestSeeder extends Seeder
         ], related: $invoice);
 
         // Nivel crítico de la sal: queda en 150 kg, por debajo de 200 kg
-        $warehouse = (int) Warehouse::withoutGlobalScopes()->where('company_id', $this->companyId)->where('is_default', true)->value('id');
+        $warehouse = (int) Warehouse::withoutGlobalScopes()->where('company_id', $this->companyId)->where('kind', 'GENERAL')->where('is_default', true)->value('id');
         app(SetCriticalStockUseCase::class)((int) $salt->id, $warehouse, '200', $this->companyId, null);
     }
 

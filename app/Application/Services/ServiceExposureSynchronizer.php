@@ -6,6 +6,7 @@ namespace App\Application\Services;
 
 use App\Core\Enums\AnimalSex;
 use App\Core\Enums\ServiceExposureExitReason;
+use App\Core\Enums\ServiceMethod;
 use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Interfaces\IServiceOrderRepository;
@@ -59,7 +60,9 @@ final class ServiceExposureSynchronizer
         $joinedService = $this->serviceOrderRepository->findActiveServiceOnBatch($toBatchId);
         if ($joinedService === null
             || $joinedService['status'] !== ServiceOrderStatus::APPROVED->value
-            || $joinedService['is_controlled_service']) {
+            || $joinedService['is_controlled_service']
+            // An AI order picks its females one by one: a newcomer is not inseminated by being there (IA2).
+            || $joinedService['service_method'] === ServiceMethod::AI->value) {
             return;
         }
 

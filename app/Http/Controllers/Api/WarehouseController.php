@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Application\UseCases\Warehouses\WarehouseListing;
 use App\Application\UseCases\Warehouses\WarehouseUseCases;
 use App\Core\Entities\WarehouseEntity;
+use App\Core\Enums\WarehouseKind;
 use App\Http\Controllers\Api\Concerns\ResolvesActiveCompany;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Warehouses\SetWarehouseActiveRequest;
@@ -41,14 +42,25 @@ class WarehouseController extends Controller
 
     public function store(StoreWarehouseRequest $request): JsonResponse
     {
-        $warehouse = ($this->warehouses->create)((string) $request->validated('code'), (string) $request->validated('name'), $this->activeCompanyId());
+        $warehouse = ($this->warehouses->create)(
+            (string) $request->validated('code'),
+            (string) $request->validated('name'),
+            $request->kind() ?? WarehouseKind::GENERAL,
+            $this->activeCompanyId(),
+        );
 
         return $this->one($request, $warehouse, 201);
     }
 
     public function update(StoreWarehouseRequest $request, int $id): JsonResponse
     {
-        $warehouse = ($this->warehouses->update)($id, (string) $request->validated('code'), (string) $request->validated('name'), $this->activeCompanyId());
+        $warehouse = ($this->warehouses->update)(
+            $id,
+            (string) $request->validated('code'),
+            (string) $request->validated('name'),
+            $request->kind(),
+            $this->activeCompanyId(),
+        );
 
         return $this->one($request, $warehouse, 200);
     }

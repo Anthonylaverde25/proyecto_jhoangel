@@ -54,6 +54,9 @@ class ServiceOrderResource extends JsonResource
             'female_exposures'        => $this->resource->getFemaleExposures(),
             'male_details'            => $this->resource->getMaleDetails(),
             'bull_replacements'       => $this->resource->getBullReplacements(),
+            'service_method'            => $this->resource->getServiceMethod()->value,
+            // AI only (semen S-B): inseminated, not inseminated and repaso bulls, derived.
+            'insemination_summary'      => $this->resource->getInseminationSummary(),
             'service_type'              => $this->resource->getServiceType(),
             'is_controlled_service'     => $this->resource->isControlledService(),
             'female_sire_assignments'   => $this->resource->getFemaleSireAssignments(),

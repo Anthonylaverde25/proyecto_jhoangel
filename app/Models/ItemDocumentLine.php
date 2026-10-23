@@ -21,6 +21,7 @@ class ItemDocumentLine extends Model
         'item_document_id',
         'position',
         'item_id',
+        'semen_lot_id',
         'fiscal_document_line_id',
         'input_quantity',
         'input_unit_id',
@@ -59,6 +60,11 @@ class ItemDocumentLine extends Model
     public function inputPresentation(): BelongsTo
     {
         return $this->belongsTo(ItemPresentation::class, 'input_presentation_id');
+    }
+
+    public function semenLot(): BelongsTo
+    {
+        return $this->belongsTo(SemenLot::class);
     }
 
     public function movement(): HasOne

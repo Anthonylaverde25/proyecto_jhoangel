@@ -43,6 +43,10 @@ final class ItemDocumentEntity
         private readonly ?int $pairedDocumentId = null,
         private readonly ?string $warehouseCode = null,
         private readonly ?TransferCounterpart $counterpart = null,
+        private readonly ?int $providerId = null,
+        private readonly ?string $providerName = null,
+        private readonly ?int $serviceOrderId = null,
+        private readonly ?string $serviceOrderCode = null,
     ) {
         if ($lines === []) {
             throw ItemDocumentException::on('lines', 'La operación no tiene renglones.');
@@ -57,6 +61,10 @@ final class ItemDocumentEntity
         }
         if (($batchId === null) !== ($headsTreated === null) || ($headsTreated !== null && $headsTreated <= 0)) {
             throw ItemDocumentException::on('heads_treated', 'Indicá cuántas cabezas recibieron el consumo.');
+        }
+        // DB7: only the consumption of an AI order points to it (also guarded by a MySQL CHECK).
+        if ($serviceOrderId !== null && $type !== ItemDocumentType::CONSUMPTION) {
+            throw ItemDocumentException::on('domain', 'Sólo un consumo puede venir de una orden de servicio.');
         }
         if (($type === ItemDocumentType::TRANSFER_IN) !== ($pairedDocumentId !== null)) {
             throw ItemDocumentException::on('domain', 'La entrada de una transferencia apunta a su salida, y sólo ella.');
@@ -84,6 +92,12 @@ final class ItemDocumentEntity
         if ($this->type->comesFromFiscalDocument()) {
             return "Este movimiento viene de {$this->fiscalDocumentLabel}: anulá el comprobante.";
         }
+        // IA14: the straws left with an insemination; voiding it is what gives them back.
+        if ($this->serviceOrderId !== null) {
+            $order = $this->serviceOrderCode ?? "N.º {$this->serviceOrderId}";
+
+            return "Este consumo viene de la orden {$order}: anulá la inseminación en la orden.";
+        }
 
         return null;
     }
@@ -106,6 +120,8 @@ final class ItemDocumentEntity
     public function getCreatedBy(): ?int { return $this->createdBy; }
     public function getWarehouseName(): ?string { return $this->warehouseName; }
     public function getFiscalDocumentLabel(): ?string { return $this->fiscalDocumentLabel; }
+    public function getServiceOrderId(): ?int { return $this->serviceOrderId; }
+    public function getServiceOrderCode(): ?string { return $this->serviceOrderCode; }
     public function getBatchName(): ?string { return $this->batchName; }
     public function getReversesNumber(): ?int { return $this->reversesNumber; }
     public function getReversedById(): ?int { return $this->reversedById; }
@@ -115,6 +131,9 @@ final class ItemDocumentEntity
     public function getPairedDocumentId(): ?int { return $this->pairedDocumentId; }
     public function getWarehouseCode(): ?string { return $this->warehouseCode; }
     public function getCounterpart(): ?TransferCounterpart { return $this->counterpart; }
+    /** Semen S-A: where an entry's semen came from; no debt nor invoice. */
+    public function getProviderId(): ?int { return $this->providerId; }
+    public function getProviderName(): ?string { return $this->providerName; }
 
     public function totalCost(): string
     {

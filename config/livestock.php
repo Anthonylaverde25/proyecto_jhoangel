@@ -148,4 +148,33 @@ return [
             'http://localhost:3000/vet-portal/:token'
         ),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | AI clients over MCP (Claude, Gemini)
+    |--------------------------------------------------------------------------
+    | Every URL carries {hostname}, the tenant domain without port: each tenant is its own MCP
+    | resource and its own OAuth issuer. In production all three share the tenant's https origin
+    | (the reverse proxy sends /mcp/ to ai-agent and /oauth, /.well-known to this API).
+    */
+    'mcp' => [
+        'public_url' => env('MCP_PUBLIC_URL', 'http://{hostname}:8001/mcp'),
+        'issuer_url' => env('MCP_ISSUER_URL', 'http://{hostname}:8000'),
+        'consent_url' => env('MCP_CONSENT_URL', 'http://{hostname}:3000/oauth/consent'),
+        // Development with a public tunnel: the host shown in /settings (null = the request's host).
+        'public_hostname' => env('MCP_PUBLIC_HOSTNAME'),
+
+        // Connections created by hand (token pasted into the client).
+        'default_ttl_days' => 90,
+        'max_ttl_days' => (int) env('MCP_MAX_TTL_DAYS', 180),
+        'max_active_per_user' => 5,
+
+        // Connections created through OAuth ("add connector" in Claude / Gemini).
+        'oauth' => [
+            'access_token_ttl_minutes' => 60,
+            'connection_ttl_days' => (int) env('MCP_OAUTH_CONNECTION_TTL_DAYS', 90),
+            'code_ttl_minutes' => 10,
+            'max_redirect_uris' => 10,
+        ],
+    ],
 ];

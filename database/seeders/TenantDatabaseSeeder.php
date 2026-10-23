@@ -45,6 +45,10 @@ class TenantDatabaseSeeder extends Seeder
             StockLedgerTestSeeder::class,
             DeliveryNoteTestSeeder::class,
             WarehouseTestSeeder::class,
+            // Semen stock (semen S-A): tanks, sires, lots and straws without lot.
+            SemenStockTestSeeder::class,
+            // AI service orders (semen S-B): a batch ready for AI and one already inseminating.
+            InseminationServiceTestSeeder::class,
             // Sanitary diagnostics module: catalogues, evidentiary protocols, portal access
             // links, and a final aptitude recomputation under the venereal rule (ADR-4).
             VeterinaryCatalogSeeder::class,

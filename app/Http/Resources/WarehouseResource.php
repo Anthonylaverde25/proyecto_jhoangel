@@ -35,6 +35,7 @@ class WarehouseResource extends JsonResource
             'id' => $w->id,
             'code' => $w->code,
             'name' => $w->name,
+            'kind' => $w->kind->value,
             'is_default' => $w->isDefault,
             'is_active' => $w->isActive,
             'summary' => $this->summary === null ? null : [

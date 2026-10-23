@@ -36,7 +36,7 @@ final class MarkFemalesNotDiagnosedUseCase
             throw ServiceOrderDomainException::domainError('La orden de servicio no existe.');
         }
 
-        $allowed = $order->getStatus() === ServiceOrderStatus::BULLS_WITHDRAWN
+        $allowed = $order->getStatus()->hasServiceEnded()
             || ($dto->duringClosing && $order->getStatus() === ServiceOrderStatus::APPROVED);
         if (!$allowed) {
             throw ServiceOrderDomainException::domainError(

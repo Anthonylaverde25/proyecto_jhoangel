@@ -7,6 +7,7 @@ namespace App\Application\UseCases\ServiceOrders;
 use App\Core\Entities\ServiceOrderEntity;
 use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Exceptions\ServiceOrderDomainException;
+use App\Core\Interfaces\IServiceOrderInseminationRepository;
 use App\Core\Interfaces\IServiceOrderRepository;
 use App\Core\Enums\BatchWeightCause;
 use App\Core\Services\BatchWeightService;
@@ -16,7 +17,8 @@ final class UpdateServiceOrderStatusUseCase
 {
     public function __construct(
         private readonly IServiceOrderRepository $repository,
-        private readonly BatchWeightService $batchWeightService
+        private readonly BatchWeightService $batchWeightService,
+        private readonly IServiceOrderInseminationRepository $inseminations
     ) {
     }
 
@@ -33,7 +35,8 @@ final class UpdateServiceOrderStatusUseCase
         $wasApproved = $entity->getStatus() === ServiceOrderStatus::APPROVED;
 
         return DB::transaction(function () use ($entity, $companyId, $userId, $newStatus, $wasApproved): ServiceOrderEntity {
-            $entity->changeStatus($newStatus, $userId);
+            $liveInseminations = $entity->isInsemination() ? $this->inseminations->liveCountByOrder((int) $entity->getId()) : 0;
+            $entity->changeStatus($newStatus, $userId, $liveInseminations);
             $savedEntity = $this->repository->save($entity, $userId, 'Status updated via administrative patch');
 
             // On approval only the bulls enter the serviced batch: the females already are there.

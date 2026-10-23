@@ -79,6 +79,11 @@ final class RegisterGestationDiagnosisUseCase
             throw new DomainException("{$identification} salió de la orden (muerte o venta): no se diagnostica.");
         }
 
+        // AI without repaso (semen S-B, IA12): nobody served a female never inseminated.
+        if ($serviceOrder->isInsemination() && !$serviceOrder->hadRepasoBulls() && !$this->wasInseminated($serviceOrder, $dto->caravanId)) {
+            throw new DomainException("{$identification} no tiene inseminación registrada en la orden {$serviceOrder->getCode()}: cargala antes del tacto.");
+        }
+
         $diagnosisDate = $this->resolveDiagnosisDate($dto->diagnosisDate, $serviceOrder);
         $roundId = $this->serviceOrderRepository->findOrCreateDiagnosisRound($dto->serviceOrderId, $companyId, $diagnosisDate);
         $category = $caravan->getReproductiveDetails()?->getArrivalCategory() ?? AnimalCategory::VACA;
@@ -186,6 +191,17 @@ final class RegisterGestationDiagnosisUseCase
         return $saved;
     }
 
+    private function wasInseminated(ServiceOrderEntity $serviceOrder, int $femaleId): bool
+    {
+        foreach ($serviceOrder->getFemaleExposures() as $female) {
+            if ((int) $female['female_caravan_id'] === $femaleId) {
+                return ($female['last_insemination_on'] ?? null) !== null;
+            }
+        }
+
+        return false;
+    }
+
     private function assignSires(CaravanEntity $caravan, ServiceOrderEntity $serviceOrder, ?int $confirmedSireId): void
     {
         $activeGestation = $caravan->getActiveGestation();
@@ -195,8 +211,10 @@ final class RegisterGestationDiagnosisUseCase
 
         $maleIds = $serviceOrder->getMaleCaravanIds();
         foreach ($maleIds as $maleId) {
-            // With a single bull in the order the sire is known.
-            $isConfirmed = count($maleIds) === 1 || ($confirmedSireId !== null && $maleId === $confirmedSireId);
+            // With a single bull in the order the sire is known; not in an AI order, where the
+            // straws may have served her before the repaso bull (the semen sire comes in S-C).
+            $isConfirmed = (count($maleIds) === 1 && !$serviceOrder->isInsemination())
+                || ($confirmedSireId !== null && $maleId === $confirmedSireId);
             $activeGestation->addSire(new SireEntry($maleId, '', $isConfirmed));
         }
     }

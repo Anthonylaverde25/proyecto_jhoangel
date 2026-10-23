@@ -28,6 +28,7 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
         'batch',
         'males',
         'females',
+        'lastInseminations',
         'history',
         'serviceOrderMales',
         'bullReplacements.retiredMaleCaravan.currentWeight',
@@ -135,7 +136,9 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
             return;
         }
 
-        if (in_array($model->status, [ServiceOrderStatus::SUCCESS->value, ServiceOrderStatus::CANCELLED->value], true)) {
+        // An AI service ended from the menu closes its exposures like a closed order (repaso bulls
+        // withdrawn already closed theirs).
+        if (in_array($model->status, [ServiceOrderStatus::SUCCESS->value, ServiceOrderStatus::CANCELLED->value, ServiceOrderStatus::SERVICE_ENDED->value], true)) {
             $endDate = $model->actual_end_date?->format('Y-m-d') ?? now()->format('Y-m-d');
             $this->closeOpenExposures((int) $model->id, $endDate, ServiceExposureExitReason::SERVICE_CLOSED);
         }
@@ -262,7 +265,7 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
         $row = ServiceOrder::withoutGlobalScopes()
             ->where('batch_id', $batchId)
             ->whereIn('status', [ServiceOrderStatus::DRAFT->value, ServiceOrderStatus::APPROVED->value])
-            ->first(['id', 'status', 'is_controlled_service']);
+            ->first(['id', 'status', 'is_controlled_service', 'service_method']);
 
         if ($row === null) {
             return null;
@@ -272,6 +275,7 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
             'id' => (int) $row->id,
             'status' => (string) $row->status,
             'is_controlled_service' => (bool) $row->is_controlled_service,
+            'service_method' => (string) ($row->service_method ?? 'NATURAL'),
         ];
     }
 
@@ -471,7 +475,7 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
     public function markExitedWhereUnchecked(int $femaleId): void
     {
         $orderIds = ServiceOrder::withoutGlobalScopes()
-            ->whereIn('status', [ServiceOrderStatus::APPROVED->value, ServiceOrderStatus::BULLS_WITHDRAWN->value])
+            ->whereIn('status', ServiceOrderStatus::openValues())
             ->pluck('id');
 
         ServiceOrderFemale::withoutGlobalScopes()
@@ -484,7 +488,7 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
     public function reopenLostPregnancy(int $gestationId): void
     {
         $orderIds = ServiceOrder::withoutGlobalScopes()
-            ->whereIn('status', [ServiceOrderStatus::APPROVED->value, ServiceOrderStatus::BULLS_WITHDRAWN->value])
+            ->whereIn('status', ServiceOrderStatus::openValues())
             ->pluck('id');
 
         ServiceOrderFemale::withoutGlobalScopes()

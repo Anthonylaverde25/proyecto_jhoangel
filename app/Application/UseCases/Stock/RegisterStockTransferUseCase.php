@@ -8,6 +8,8 @@ use App\Application\DTOs\Stock\StockTransferDTO;
 use App\Application\Services\Stock\FieldErrorBag;
 use App\Application\Services\Stock\ItemLineResolver;
 use App\Application\Services\Stock\LedgerResult;
+use App\Application\Services\Stock\SemenLotLineGuard;
+use App\Application\Services\Stock\SemenStorageRule;
 use App\Application\Services\Stock\StockLedger;
 use App\Application\Services\Stock\WarehouseGuard;
 use App\Core\Entities\ItemDocumentEntity;
@@ -27,6 +29,8 @@ final class RegisterStockTransferUseCase
         private readonly WarehouseGuard $warehouses,
         private readonly ItemLineResolver $resolver,
         private readonly StockLedger $ledger,
+        private readonly SemenStorageRule $semen,
+        private readonly SemenLotLineGuard $lots,
     ) {
     }
 
@@ -52,14 +56,23 @@ final class RegisterStockTransferUseCase
 
         $lines = [];
         $items = [];
+        $seen = [];
         foreach ($dto->lines as $index => $line) {
-            // Same rule as a consumption (E7): two lines of one article are almost always a typing slip.
-            if (isset($items[$line->itemId])) {
-                $errors->add("lines.{$index}.item_id", 'El artículo está dos veces: sumá las cantidades en un renglón.');
+            // Same rule as a consumption (E7, DA4): per article, and per lot for semen.
+            $key = "{$line->itemId}|{$line->semenLotId}";
+            if (isset($seen[$key])) {
+                $errors->add("lines.{$index}.item_id", $line->semenLotId === null
+                    ? 'El artículo está dos veces: sumá las cantidades en un renglón.'
+                    : 'La partida está dos veces: sumá las cantidades en un renglón.');
                 continue;
             }
+            $seen[$key] = true;
             $resolved = $this->resolver->resolve("lines.{$index}", $companyId, $line->itemId, $line->inputQuantity, $line->inputUnitId, $line->inputPresentationId, $errors, true);
             $items[$line->itemId] = ['name' => '', 'symbol' => ''];
+            if ($resolved !== null && $to !== null) {
+                // Semen may leave a general warehouse towards a tank, never the other way (SI6).
+                $this->semen->check($resolved->item, $to, "lines.{$index}.item_id", $errors);
+            }
             if ($resolved !== null) {
                 $items[$line->itemId] = ['name' => $resolved->item->getName(), 'symbol' => (string) $resolved->item->getUnit()?->getSymbol()];
                 $lines[] = new ItemDocumentLineEntity(
@@ -69,6 +82,7 @@ final class RegisterStockTransferUseCase
                     $resolved->inputUnitId,
                     $resolved->inputPresentationId,
                     $resolved->quantity->toScale(4),
+                    semenLotId: $this->lots->check("lines.{$index}", $resolved->item, $line->semenLotId, false, $errors),
                 );
             }
         }

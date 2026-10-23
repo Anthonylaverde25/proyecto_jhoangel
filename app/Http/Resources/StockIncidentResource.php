@@ -27,6 +27,7 @@ class StockIncidentResource extends JsonResource
             'type' => $incident->getType()->value,
             'type_label' => $incident->getType()->label(),
             'resolves_itself' => $incident->getType()->resolvesItself(),
+            'resolves_by_identification' => $incident->getType()->resolvesByIdentification(),
             'item' => ['id' => $incident->getItemId(), 'name' => $incident->getItemName()],
             'warehouse' => ['id' => $incident->getWarehouseId(), 'name' => $incident->getWarehouseName()],
             'detail' => $incident->getDetail(),

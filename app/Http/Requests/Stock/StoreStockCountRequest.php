@@ -27,6 +27,7 @@ class StoreStockCountRequest extends FormRequest
             'counted_quantity' => ['required', 'decimal:0,4', 'min:0'],
             'input_unit_id' => ['nullable', 'integer'],
             'input_presentation_id' => ['nullable', 'integer'],
+            'semen_lot_id' => ['nullable', 'integer'],
             'reason' => ['nullable', 'string', 'max:255'],
             'occurred_at' => ['required', 'date'],
             'idempotency_key' => ['required', 'string', 'max:64'],

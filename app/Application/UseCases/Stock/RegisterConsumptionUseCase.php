@@ -9,6 +9,8 @@ use App\Application\Services\Stock\BatchConsumptionGuard;
 use App\Application\Services\Stock\FieldErrorBag;
 use App\Application\Services\Stock\ItemLineResolver;
 use App\Application\Services\Stock\LedgerResult;
+use App\Application\Services\Stock\SemenLotLineGuard;
+use App\Application\Services\Stock\SemenStorageRule;
 use App\Application\Services\Stock\StockLedger;
 use App\Application\Services\Stock\WarehouseGuard;
 use App\Core\Entities\ItemDocumentEntity;
@@ -30,6 +32,8 @@ final class RegisterConsumptionUseCase
         private readonly ItemLineResolver $resolver,
         private readonly BatchConsumptionGuard $batches,
         private readonly StockLedger $ledger,
+        private readonly SemenStorageRule $semen,
+        private readonly SemenLotLineGuard $lots,
     ) {
     }
 
@@ -55,13 +59,20 @@ final class RegisterConsumptionUseCase
         $lines = [];
         $seen = [];
         foreach ($dto->lines as $index => $line) {
-            // E7: two lines of the same article in one consumption are almost always a typing slip.
-            if (isset($seen[$line->itemId])) {
-                $errors->add("lines.{$index}.item_id", 'El artículo está dos veces: sumá las cantidades en un renglón.');
+            // E7: two lines of the same article in one consumption are almost always a typing slip; for
+            // semen, two lots of one item are not (DA4).
+            $key = "{$line->itemId}|{$line->semenLotId}";
+            if (isset($seen[$key])) {
+                $errors->add("lines.{$index}.item_id", $line->semenLotId === null
+                    ? 'El artículo está dos veces: sumá las cantidades en un renglón.'
+                    : 'La partida está dos veces: sumá las cantidades en un renglón.');
                 continue;
             }
-            $seen[$line->itemId] = true;
+            $seen[$key] = true;
             $resolved = $this->resolver->resolve("lines.{$index}", $companyId, $line->itemId, $line->inputQuantity, $line->inputUnitId, $line->inputPresentationId, $errors, true);
+            if ($resolved !== null && $warehouse !== null) {
+                $this->semen->check($resolved->item, $warehouse, "lines.{$index}.item_id", $errors);
+            }
             if ($resolved !== null) {
                 $lines[] = new ItemDocumentLineEntity(
                     $index + 1,
@@ -70,6 +81,8 @@ final class RegisterConsumptionUseCase
                     $resolved->inputUnitId,
                     $resolved->inputPresentationId,
                     $resolved->quantity->toScale(4),
+                    // An insemination may not know its lot (SL6): it opens "Identificar partida".
+                    semenLotId: $this->lots->check("lines.{$index}", $resolved->item, $line->semenLotId, $dto->serviceOrderId !== null, $errors),
                 );
             }
         }
@@ -82,6 +95,7 @@ final class RegisterConsumptionUseCase
             notes: $dto->notes,
             idempotencyKey: $dto->idempotencyKey,
             createdBy: $dto->createdBy,
+            serviceOrderId: $dto->serviceOrderId,
         ), $dto->createdBy);
     }
 }

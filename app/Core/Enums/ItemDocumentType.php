@@ -22,6 +22,7 @@ enum ItemDocumentType: string
     case VALUATION = 'VALUATION';
     case TRANSFER_OUT = 'TRANSFER_OUT';
     case TRANSFER_IN = 'TRANSFER_IN';
+    case SEMEN_RECEIPT = 'SEMEN_RECEIPT';
 
     public function label(): string
     {
@@ -36,6 +37,7 @@ enum ItemDocumentType: string
             self::VALUATION => 'Valorización',
             self::TRANSFER_OUT => 'Transferencia · salida',
             self::TRANSFER_IN => 'Transferencia · entrada',
+            self::SEMEN_RECEIPT => 'Ingreso de semen',
         };
     }
 
@@ -43,7 +45,7 @@ enum ItemDocumentType: string
     public function direction(): ?int
     {
         return match ($this) {
-            self::PURCHASE, self::INITIAL, self::DELIVERY_RECEIPT, self::TRANSFER_IN => 1,
+            self::PURCHASE, self::INITIAL, self::DELIVERY_RECEIPT, self::TRANSFER_IN, self::SEMEN_RECEIPT => 1,
             self::VALUATION => 0,
             self::CONSUMPTION, self::RETURN_TO_PROVIDER, self::TRANSFER_OUT => -1,
             self::COUNT_ADJUSTMENT, self::REVERSAL => null,

@@ -14,6 +14,7 @@ use App\Core\Entities\WarehouseEntity;
 use App\Core\Enums\ItemDocumentType;
 use App\Core\Enums\StockIncidentStatus;
 use App\Core\Enums\StockIncidentType;
+use App\Core\Enums\WarehouseKind;
 use App\Core\ValueObjects\TransferCounterpart;
 use App\Models\ItemDocument;
 use App\Models\ItemDocumentLine;
@@ -33,6 +34,7 @@ final class StockMapper
             $model->name,
             (bool) $model->is_default,
             (bool) $model->is_active,
+            WarehouseKind::from((string) ($model->kind ?? WarehouseKind::GENERAL->value)),
         );
     }
 
@@ -69,6 +71,10 @@ final class StockMapper
             $model->paired_document_id,
             $model->relationLoaded('warehouse') ? $model->warehouse?->code : null,
             self::counterpart($model),
+            $model->provider_id === null ? null : (int) $model->provider_id,
+            $model->relationLoaded('provider') ? $model->provider?->name : null,
+            $model->service_order_id === null ? null : (int) $model->service_order_id,
+            $model->relationLoaded('serviceOrder') ? $model->serviceOrder?->code : null,
         );
     }
 
@@ -120,6 +126,8 @@ final class StockMapper
             FiscalDocumentMapper::inputLabel($model),
             DecimalColumn::read($model->unvalued_quantity ?? '0', 4),
             DecimalColumn::readNullable($model->unabsorbed_cost, 4),
+            $model->semen_lot_id === null ? null : (int) $model->semen_lot_id,
+            $model->relationLoaded('semenLot') ? $model->semenLot?->code : null,
         );
     }
 

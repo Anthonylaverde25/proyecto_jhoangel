@@ -16,6 +16,7 @@ final readonly class StockLineDTO
         public ?int $inputUnitId,
         public ?int $inputPresentationId,
         public ?string $inputUnitPrice = null,
+        public ?int $semenLotId = null,
     ) {
     }
 
@@ -28,6 +29,7 @@ final readonly class StockLineDTO
             isset($data['input_unit_id']) ? (int) $data['input_unit_id'] : null,
             isset($data['input_presentation_id']) ? (int) $data['input_presentation_id'] : null,
             isset($data['input_unit_price']) ? (string) $data['input_unit_price'] : null,
+            isset($data['semen_lot_id']) ? (int) $data['semen_lot_id'] : null,
         );
     }
 }

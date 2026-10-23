@@ -39,6 +39,7 @@ class ServiceOrder extends Model
         'observations',
         'rejection_reason',
         'service_type',
+        'service_method',
         'is_controlled_service',
     ];
 
@@ -117,8 +118,25 @@ class ServiceOrder extends Model
                 'joined_after_start',
                 'reproductive_status',
                 'diagnosed_at',
+                'planned_semen_item_id',
+                'not_inseminated_reason',
             ])
             ->withTimestamps();
+    }
+
+    /** Straw applications of an AI order (semen S-B), voided ones included. */
+    public function inseminations(): HasMany
+    {
+        return $this->hasMany(ServiceOrderInsemination::class, 'service_order_id');
+    }
+
+    /** Latest live insemination per female, for the diagnosis rules of an AI order (IA11, IA12). */
+    public function lastInseminations(): HasMany
+    {
+        return $this->hasMany(ServiceOrderInsemination::class, 'service_order_id')
+            ->whereNull('voided_at')
+            ->selectRaw('service_order_id, female_caravan_id, MAX(inseminated_on) as last_inseminated_on')
+            ->groupBy('service_order_id', 'female_caravan_id');
     }
 
     public function diagnosisRounds(): HasMany
