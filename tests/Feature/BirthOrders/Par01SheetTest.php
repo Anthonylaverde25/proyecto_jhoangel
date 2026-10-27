@@ -8,8 +8,10 @@ use Tests\Feature\DryRun\AssertsDryRun;
 use App\Models\Batch;
 use App\Models\BirthOrderAnimal;
 use App\Models\Caravan;
+use App\Models\CaravanGestation;
 use App\Models\CaravanLineage;
 use App\Models\Color;
+use Illuminate\Support\Facades\DB;
 
 /**
  * What the PAR-01 processing checks on each row, and what it decides the system knows better than
@@ -143,24 +145,33 @@ class Par01SheetTest extends BirthOrderTestCase
     {
         $bull = $this->bull('BO-TORO-1');
         $bullB = $this->bull('BO-TORO-2');
-        $single = $this->pregnantFemale('BO-K1', sires: [$bull]);
+        $confirmed = $this->pregnantFemale('BO-K1', sires: [$bull]);
+        $single = $this->pregnantFemale('BO-K3', sires: [$bull]);
         $several = $this->pregnantFemale('BO-K2', sires: [$bull, $bullB]);
-        $orderId = (int) $this->emit([$single, $several])->json('id');
+        // Confirmed at the chute (the order had a single bull all along).
+        DB::table('gestation_sires')
+            ->where('gestation_id', CaravanGestation::where('caravan_id', $confirmed->id)->value('id'))
+            ->update(['is_confirmed' => true]);
+        $orderId = (int) $this->emit([$confirmed, $single, $several])->json('id');
 
-        // The resource suggests the single sire, and none when there are several.
+        // The resource suggests only a confirmed sire: an unconfirmed one, even alone, is not.
         $order = $this->apiAs('GET', "/birth-orders/{$orderId}")->assertOk();
         $suggested = array_column($order->json('animals'), 'suggested_sire_id', 'identification');
         $this->assertSame($bull->id, $suggested['BO-K1']);
+        $this->assertNull($suggested['BO-K3']);
         $this->assertNull($suggested['BO-K2']);
 
         $this->scan($orderId, [
-            $this->liveRow($single, 'BO-KC1'),
+            $this->liveRow($confirmed, 'BO-KC1'),
+            $this->liveRow($single, 'BO-KC3'),
             $this->liveRow($several, 'BO-KC2', 'H'),
         ])->assertStatus(201);
 
-        $this->assertSame($bull->id, (int) CaravanLineage::where('caravan_id', Caravan::where('identification', 'BO-KC1')->value('id'))->value('father_id'));
-        // Several candidates and none declared: it waits in "Sires pendientes".
-        $this->assertNull(CaravanLineage::where('caravan_id', Caravan::where('identification', 'BO-KC2')->value('id'))->value('father_id'));
+        $fatherOf = fn (string $tag) => CaravanLineage::where('caravan_id', Caravan::where('identification', $tag)->value('id'))->value('father_id');
+        $this->assertSame($bull->id, (int) $fatherOf('BO-KC1'));
+        // Without a confirmed sire it waits in "Paternidad pendiente", even with a single candidate.
+        $this->assertNull($fatherOf('BO-KC3'));
+        $this->assertNull($fatherOf('BO-KC2'));
     }
 
     public function test_the_coat_is_one_of_the_catalog_and_of_the_breed(): void

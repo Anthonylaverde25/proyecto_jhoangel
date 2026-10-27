@@ -16,7 +16,7 @@ use Symfony\Component\HttpFoundation\Response;
  * Narrows what a token minted for an AI client (MCP) can do, whatever route it reaches.
  *
  * Such a token belongs to a real user and, left alone, would read and write everything that
- * user can. Here it is pinned to reading, to the company its connection was issued for, and kept
+ * user can. Here it is pinned to reading (plus the few writes in ALLOWED_WRITES), to the company its connection was issued for, and kept
  * away from the routes that manage connections or grant new ones. Session tokens (`*`) pass
  * untouched. Registered globally on the `api` group, so it also covers routes that still lack
  * `auth:sanctum`.
@@ -24,6 +24,12 @@ use Symfony\Component\HttpFoundation\Response;
 final class RestrictMcpTokenScope
 {
     private const READ_METHODS = ['GET', 'HEAD'];
+
+    /** @var array<string, list<string>> the only writes allowed to an MCP token, by method */
+    private const ALLOWED_WRITES = [
+        'POST' => ['api/tasks'],
+        'PATCH' => ['api/tasks/*'],
+    ];
 
     public function __construct(private readonly IMcpConnectionRepository $connections)
     {
@@ -39,7 +45,7 @@ final class RestrictMcpTokenScope
             return $next($request);
         }
 
-        if (!in_array($request->method(), self::READ_METHODS, true)) {
+        if (!in_array($request->method(), self::READ_METHODS, true) && !$this->isAllowedWrite($request)) {
             return $this->deny('Una conexión de IA sólo puede consultar; no modifica datos.');
         }
 
@@ -59,6 +65,18 @@ final class RestrictMcpTokenScope
         }
 
         return $next($request);
+    }
+
+    /** Writes are closed by default; each one an AI client may perform is listed by method and path. */
+    private function isAllowedWrite(Request $request): bool
+    {
+        foreach (self::ALLOWED_WRITES[$request->method()] ?? [] as $path) {
+            if ($request->is($path)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function deny(string $message): JsonResponse

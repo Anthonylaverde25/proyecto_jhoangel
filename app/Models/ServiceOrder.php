@@ -92,7 +92,7 @@ class ServiceOrder extends Model
     public function males(): BelongsToMany
     {
         return $this->belongsToMany(Caravan::class, 'service_order_males', 'service_order_id', 'male_caravan_id')
-            ->withPivot(['status', 'retired_at', 'snapshot_scrotal_circumference', 'service_capacity'])
+            ->withPivot(['status', 'joined_at', 'retired_at', 'snapshot_scrotal_circumference', 'service_capacity'])
             ->withTimestamps();
     }
 

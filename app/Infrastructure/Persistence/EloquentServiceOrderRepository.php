@@ -605,10 +605,16 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
                 'caravan_gestations.gestation_months',
             ]);
 
+        $confirmedSireByGestation = DB::table('gestation_sires')
+            ->whereIn('gestation_id', $rows->pluck('gestation_id')->filter()->all())
+            ->where('is_confirmed', true)
+            ->pluck('sire_id', 'gestation_id');
+
         $females = [];
         foreach ($rows as $row) {
             $femaleId = (int) $row->female_caravan_id;
             $entries = $byFemale[$femaleId] ?? [];
+            $confirmedSireId = $row->gestation_id !== null ? ($confirmedSireByGestation[$row->gestation_id] ?? null) : null;
             $previous = count($entries) >= 2 ? $entries[count($entries) - 2] : null;
             // A female reopened as pending keeps her last verdict only in the history.
             $current = (string) ($row->reproductive_status ?? FemaleReproductiveVerdict::UNCHECKED->value);
@@ -632,6 +638,7 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
                 'not_diagnosed_reason' => $row->not_diagnosed_reason,
                 'not_diagnosed_notes' => $row->not_diagnosed_notes,
                 'assigned_male_caravan_id' => $row->assigned_male_caravan_id !== null ? (int) $row->assigned_male_caravan_id : null,
+                'confirmed_sire_id' => $confirmedSireId !== null ? (int) $confirmedSireId : null,
                 'previous_diagnosis' => $previous,
                 'diagnoses_count' => count($entries),
             ];

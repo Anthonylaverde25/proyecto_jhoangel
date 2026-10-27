@@ -32,6 +32,18 @@ class AuthController extends Controller
         ]);
     }
 
+    /**
+     * SEC-02: server-side revocation. Deleting the current access token invalidates the session
+     * immediately, so a captured token stops working the moment the user logs out. The client
+     * still clears its local copy, but that is no longer the only line of defence.
+     */
+    public function logout(Request $request)
+    {
+        $request->user()->currentAccessToken()->delete();
+
+        return response()->noContent();
+    }
+
     public function me(Request $request)
     {
         $userModel = $request->user();

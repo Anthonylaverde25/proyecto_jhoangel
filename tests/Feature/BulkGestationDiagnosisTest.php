@@ -162,7 +162,6 @@ class BulkGestationDiagnosisTest extends TestCase
                     'is_pregnant'      => true,
                     'gestation_stage'  => 'head',
                     'gestation_months' => 3.5,
-                    'confirmed_sire_id'=> $this->bull->id,
                     'diagnosis_date'   => now()->toDateString(),
                 ],
                 [

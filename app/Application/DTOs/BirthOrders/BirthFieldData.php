@@ -21,7 +21,7 @@ final readonly class BirthFieldData
         /** The coat (pelaje): a colour of the catalog, one the breed admits. */
         public ?int $calfColorId = null,
         public int $calfTeeth = 0,
-        /** Optional: left empty, the gestation's single or confirmed sire is used, or it waits in "Sires pendientes". */
+        /** Optional: left empty, the gestation's confirmed sire is used, or it waits in "Paternidad pendiente". */
         public ?int $fatherId = null,
         public ?string $birthDate = null,
         public ?string $observations = null,

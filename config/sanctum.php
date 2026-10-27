@@ -47,7 +47,10 @@ return [
     |
     */
 
-    'expiration' => null,
+    // SEC-02: issued tokens must expire. `null` meant a stolen token worked forever. The window
+    // is env-tunable; the mobile scanner shares this guard, so a shorter value forces field
+    // operators to re-authenticate sooner (consider a dedicated long-lived ability if needed).
+    'expiration' => (int) env('SANCTUM_TOKEN_EXPIRATION', 60 * 12),
 
     /*
     |--------------------------------------------------------------------------

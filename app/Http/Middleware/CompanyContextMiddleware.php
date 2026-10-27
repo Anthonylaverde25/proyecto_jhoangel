@@ -48,7 +48,7 @@ class CompanyContextMiddleware
             ], Response::HTTP_FORBIDDEN);
         }
 
-        // NOTE: legacy endpoints in routes/api.php are still declared outside `auth:sanctum`.
+        // NOTE: legacy endpoints in routes/api/legacy-unauthenticated.php are still declared outside `auth:sanctum`.
         // For those the context is granted as before to avoid dropping the tenant scope
         // entirely (which would widen, not narrow, the data exposed). Moving them behind
         // the guard is tracked as a separate hardening task.

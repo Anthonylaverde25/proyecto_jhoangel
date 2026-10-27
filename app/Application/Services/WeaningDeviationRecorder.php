@@ -55,7 +55,7 @@ final class WeaningDeviationRecorder
                 );
             }
 
-            if ($declaredType !== null && $declaredType !== $order->getWeaningType()) {
+            if ($order->isWeaningTypeDeviation($declaredType)) {
                 $rows[] = WeaningOrderDeviationEntity::record(
                     $order,
                     $line,

@@ -24,6 +24,9 @@ class ServiceOrderMale extends Model
         'service_capacity',
         'status',
         'retired_at',
+        'exit_reason',
+        'exit_notes',
+        'exit_destination_batch_id',
     ];
 
     protected $casts = [
@@ -33,6 +36,7 @@ class ServiceOrderMale extends Model
         'snapshot_scrotal_circumference' => 'float',
         'joined_at' => 'date:Y-m-d',
         'retired_at' => 'datetime',
+        'exit_destination_batch_id' => 'integer',
     ];
 
     public function serviceOrder(): BelongsTo

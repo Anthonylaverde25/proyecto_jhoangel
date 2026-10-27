@@ -32,23 +32,30 @@ class DatabaseSeeder extends Seeder
             $this->command->info("Landlord: El tenant {$tenantId} ya existe. Omitiendo creación.");
         }
 
-        $this->registerLanHost(Tenant::find($tenantId));
+        $this->registerDevHosts(Tenant::find($tenantId));
     }
 
     /**
-     * A physical phone reaches the API through the Mac's LAN address, which tenancy resolves as
-     * a domain. DEV_LAN_HOST (e.g. 192.168.1.50) adds it to the dev tenant; unset, nothing changes.
-     * Runs on an existing tenant too, so a new address does not need a migrate:fresh.
+     * Extra hosts tenancy must resolve to the dev tenant, from the environment (unset: nothing):
+     * - DEV_LAN_HOST (e.g. 192.168.1.50): a physical phone reaches the API through the Mac's LAN address.
+     * - DEV_MCP_HOST (e.g. the fixed ngrok domain): claude.ai / Gemini reach the MCP OAuth endpoints
+     *   through the public tunnel, and Laravel resolves the tenant from that Host.
+     * Runs on an existing tenant too, so a new host does not need a migrate:fresh.
      */
-    private function registerLanHost(?Tenant $tenant): void
+    private function registerDevHosts(?Tenant $tenant): void
     {
-        $lanHost = trim((string) env('DEV_LAN_HOST', ''));
-
-        if ($tenant === null || $lanHost === '') {
+        if ($tenant === null) {
             return;
         }
 
-        $tenant->domains()->firstOrCreate(['domain' => $lanHost]);
-        $this->command->info("Landlord: dominio de red local {$lanHost} asignado al tenant {$tenant->id}");
+        foreach (['DEV_LAN_HOST' => 'red local', 'DEV_MCP_HOST' => 'MCP público'] as $variable => $label) {
+            $host = trim((string) env($variable, ''));
+            if ($host === '') {
+                continue;
+            }
+
+            $tenant->domains()->firstOrCreate(['domain' => $host]);
+            $this->command->info("Landlord: dominio de {$label} {$host} asignado al tenant {$tenant->id}");
+        }
     }
 }

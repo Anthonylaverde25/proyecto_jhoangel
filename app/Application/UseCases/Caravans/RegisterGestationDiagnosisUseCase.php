@@ -112,12 +112,9 @@ final class RegisterGestationDiagnosisUseCase
         if ($activeGestation !== null && $activeGestation->getServiceOrderId() === $dto->serviceOrderId) {
             // A re-check of the same pregnancy: it keeps its sires and states its stage again.
             $activeGestation->restage($stage, $months);
-            if ($dto->confirmedSireId !== null) {
-                $activeGestation->confirmSire($dto->confirmedSireId);
-            }
         } else {
             $caravan->startNewGestation($diagnosisDate, $stage, $months, $dto->serviceOrderId);
-            $this->assignSires($caravan, $serviceOrder, $dto->confirmedSireId);
+            $this->assignSires($caravan, $serviceOrder);
         }
 
         $saved = $this->caravanRepository->save($caravan);
@@ -202,20 +199,20 @@ final class RegisterGestationDiagnosisUseCase
         return false;
     }
 
-    private function assignSires(CaravanEntity $caravan, ServiceOrderEntity $serviceOrder, ?int $confirmedSireId): void
+    /**
+     * The bulls that were with her become candidate sires. The sire is confirmed at the chute only
+     * when the order had a single bull all along; otherwise paternity is settled later, on the calf.
+     */
+    private function assignSires(CaravanEntity $caravan, ServiceOrderEntity $serviceOrder): void
     {
         $activeGestation = $caravan->getActiveGestation();
         if ($activeGestation === null) {
             return;
         }
 
-        $maleIds = $serviceOrder->getMaleCaravanIds();
-        foreach ($maleIds as $maleId) {
-            // With a single bull in the order the sire is known; not in an AI order, where the
-            // straws may have served her before the repaso bull (the semen sire comes in S-C).
-            $isConfirmed = (count($maleIds) === 1 && !$serviceOrder->isInsemination())
-                || ($confirmedSireId !== null && $maleId === $confirmedSireId);
-            $activeGestation->addSire(new SireEntry($maleId, '', $isConfirmed));
+        $soleBullId = $serviceOrder->getSoleBullId();
+        foreach ($serviceOrder->getSireCandidateIdsFor((int) $caravan->getId()) as $maleId) {
+            $activeGestation->addSire(new SireEntry($maleId, '', $maleId === $soleBullId));
         }
     }
 

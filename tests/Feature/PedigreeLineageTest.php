@@ -453,9 +453,9 @@ class PedigreeLineageTest extends TestCase
         $upsertUseCase($motherDto);
         $mother = Caravan::where('identification', 'MOTHER-INHERIT')->first();
 
-        // Get gestation and link father as sire (unconfirmed)
+        // Get gestation and link father as its confirmed sire (confirmed at the chute)
         $gestation = CaravanGestation::where('caravan_id', $mother->id)->first();
-        $gestation->sires()->attach($father->id, ['is_confirmed' => false]);
+        $gestation->sires()->attach($father->id, ['is_confirmed' => true]);
 
         // Call bulk-birth without father_id in request
         $response = $this->postJson('http://test.localhost/api/caravans/bulk-birth', [
@@ -485,10 +485,31 @@ class PedigreeLineageTest extends TestCase
         $this->assertNotNull($lineage);
         $this->assertEquals($father->id, $lineage->father_id);
 
-        // Verify sire is now confirmed in the closed gestation
+        // Verify sire is still confirmed in the closed gestation
         $confirmedSire = $gestation->sires()->where('sire_id', $father->id)->first();
         $this->assertNotNull($confirmedSire);
         $this->assertTrue((bool)$confirmedSire->pivot->is_confirmed);
+    }
+
+    public function test_an_unconfirmed_single_candidate_is_not_inherited_at_birth(): void
+    {
+        $batch = \App\Models\Batch::first();
+        $upsertUseCase = $this->app->make(UpsertCaravanUseCase::class);
+        $upsertUseCase(new RegisterCaravanDTO(identification: 'FATHER-PENDING', sex: AnimalSex::MALE, category: 'toro', teeth: 4, entryWeight: 450.0, batchId: $batch->id));
+        $upsertUseCase(new RegisterCaravanDTO(identification: 'MOTHER-PENDING', sex: AnimalSex::FEMALE, category: 'vaca', teeth: 4, entryWeight: 380.0, isEmpty: false, gestationStage: 'body', batchId: $batch->id));
+        $father = Caravan::where('identification', 'FATHER-PENDING')->first();
+        $mother = Caravan::where('identification', 'MOTHER-PENDING')->first();
+        $gestation = CaravanGestation::where('caravan_id', $mother->id)->first();
+        $gestation->sires()->attach($father->id, ['is_confirmed' => false]);
+
+        $this->postJson('http://test.localhost/api/caravans/bulk-birth', ['births' => [[
+            'calf_identification' => 'CALF-PENDING', 'calf_sex' => 'H', 'calf_category' => 'ternera', 'calf_teeth' => 0,
+            'birth_date' => '2026-05-23', 'batch_id' => $batch->id, 'mother_id' => $mother->id, 'father_id' => null,
+            'gestation_id' => $gestation->id,
+        ]]])->assertStatus(201);
+
+        $calf = Caravan::where('identification', 'CALF-PENDING')->first();
+        $this->assertNull(CaravanLineage::where('caravan_id', $calf->id)->value('father_id'));
     }
 
     public function test_can_register_birth_with_null_father(): void

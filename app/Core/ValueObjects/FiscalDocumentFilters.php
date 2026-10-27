@@ -22,6 +22,8 @@ final readonly class FiscalDocumentFilters
         public ?string $search = null,
         public int $page = 1,
         public int $perPage = 25,
+        /** Documents with at least one line of this item. */
+        public ?int $itemId = null,
     ) {
     }
 
@@ -39,6 +41,7 @@ final readonly class FiscalDocumentFilters
             $search === '' ? null : $search,
             max(1, (int) ($query['page'] ?? 1)),
             min(100, max(1, (int) ($query['per_page'] ?? 25))),
+            isset($query['item_id']) && (int) $query['item_id'] > 0 ? (int) $query['item_id'] : null,
         );
     }
 

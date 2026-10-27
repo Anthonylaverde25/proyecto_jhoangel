@@ -121,8 +121,11 @@ final class ServiceBullRetirement
         int $companyId
     ): void {
         $serviceMale->update([
-            'status'     => ServiceOrderMaleStatus::forRetirement($reason)->value,
-            'retired_at' => $date,
+            'status'                    => ServiceOrderMaleStatus::forRetirement($reason)->value,
+            'retired_at'                => $date,
+            'exit_reason'               => $reason->value,
+            'exit_notes'                => $notes,
+            'exit_destination_batch_id' => $reason === BullReplacementReason::DEATH ? null : $destinationBatchId,
         ]);
 
         $previousBatchId = $bull->batch_id;

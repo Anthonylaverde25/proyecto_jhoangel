@@ -39,22 +39,4 @@ interface ICaravanLineageRepository
      * Ends the time at foot of a calf as a weaning, on that day and of that kind.
      */
     public function wean(int $caravanId, string $date, ?\App\Core\Enums\WeaningType $type): void;
-
-    /**
-     * Returns all lineage records where father_id is NULL (pending sire assignment).
-     *
-     * @return LineageEntity[]
-     */
-    public function findPendingSire(): array;
-
-    /**
-     * Assigns a father to a calf's lineage record and records the identification method and notes.
-     * Sets sire_assigned_at to the current timestamp.
-     */
-    public function assignSire(
-        int $caravanId,
-        int $fatherId,
-        string $identificationMethod,
-        ?string $sireNotes
-    ): LineageEntity;
 }

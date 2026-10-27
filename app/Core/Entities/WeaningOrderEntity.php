@@ -238,6 +238,15 @@ final class WeaningOrderEntity
     }
 
     /**
+     * Whether the type declared at weaning departs from the plan. An order that left the type for
+     * the chute planned none: declaring it then completes the order, it does not deviate from it.
+     */
+    public function isWeaningTypeDeviation(?WeaningType $declaredType): bool
+    {
+        return $declaredType !== null && $this->weaningType !== null && $declaredType !== $this->weaningType;
+    }
+
+    /**
      * What weaning these calves changes from the plan, for the history: each one sent somewhere
      * other than planned, and the weaning type when the one declared differs. Empty when the
      * weaning follows the plan.
@@ -267,7 +276,7 @@ final class WeaningOrderEntity
             $deviations['destinations'] = $redirected;
         }
 
-        if ($declaredType !== null && $declaredType !== $this->weaningType) {
+        if ($this->isWeaningTypeDeviation($declaredType)) {
             $deviations['weaning_type'] = [
                 'planned' => $this->weaningType?->value,
                 'declared' => $declaredType->value,

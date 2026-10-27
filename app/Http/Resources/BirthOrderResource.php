@@ -177,8 +177,8 @@ class BirthOrderResource extends JsonResource
     }
 
     /**
-     * The sire the system uses when none is declared: the confirmed one, or the only candidate.
-     * With several unconfirmed candidates there is none, and the calf waits in "Sires pendientes".
+     * The sire the system uses when none is declared: the confirmed one. Without it the calf waits
+     * in "Paternidad pendiente", even with a single unconfirmed candidate.
      *
      * @param list<array{id: int, identification: string, is_confirmed: bool}> $sires
      */
@@ -190,6 +190,6 @@ class BirthOrderResource extends JsonResource
             }
         }
 
-        return count($sires) === 1 ? $sires[0]['id'] : null;
+        return null;
     }
 }

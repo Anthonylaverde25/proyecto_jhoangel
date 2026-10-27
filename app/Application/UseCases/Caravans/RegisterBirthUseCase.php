@@ -79,17 +79,12 @@ final class RegisterBirthUseCase
                 }
                 $fatherIdentification = $father->getIdentification()->getValue();
             } elseif ($activeGestation !== null) {
+                // Only a confirmed sire is inherited: an unconfirmed candidate, even the only one,
+                // leaves the calf waiting for its paternity to be confirmed.
                 $confirmedSire = $activeGestation->getConfirmedSire();
                 if ($confirmedSire !== null) {
                     $fatherId = $confirmedSire->getSireId();
                     $fatherIdentification = $confirmedSire->getSireIdentification();
-                } else {
-                    $sires = $activeGestation->getSires();
-                    if (count($sires) === 1) {
-                        $singleSire = $sires[0];
-                        $fatherId = $singleSire->getSireId();
-                        $fatherIdentification = $singleSire->getSireIdentification();
-                    }
                 }
             }
 

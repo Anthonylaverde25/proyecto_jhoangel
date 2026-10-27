@@ -876,8 +876,8 @@ final class ProcessPar01SubmissionUseCase
             $rowErrors[] = $this->error('COLOR_NOT_OF_BREED', "El pelaje {$breeds->colorName($colorId)} de la cría de '{$tag}' no corresponde a su raza.", 'pelaje');
         }
 
-        // The sire is optional: left empty, the gestation's single or confirmed sire is used, or
-        // the calf waits in "Sires pendientes".
+        // The sire is optional: left empty, the gestation's confirmed sire is used, or the calf
+        // waits in "Paternidad pendiente".
         $fatherId = $row['father_id'];
         if ($fatherId !== null) {
             $fathers[$fatherId] ??= $this->caravanRepository->findById($fatherId);

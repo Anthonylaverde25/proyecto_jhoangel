@@ -8,6 +8,7 @@ use App\Application\DTOs\ServiceOrders\CreateServiceOrderDTO;
 use App\Application\UseCases\ServiceOrders\CreateServiceOrderUseCase;
 use App\Application\UseCases\ServiceOrders\ApproveServiceOrderUseCase;
 use App\Application\UseCases\ServiceOrders\CloseServiceOrderDiagnosisUseCase;
+use App\Application\UseCases\ServiceOrders\GetServiceOrderBullHistoryUseCase;
 use App\Application\UseCases\ServiceOrders\GetServiceOrderDiagnosisUseCase;
 use App\Application\UseCases\ServiceOrders\MarkFemalesNotDiagnosedUseCase;
 use App\Application\UseCases\ServiceOrders\ResolveServiceOrderIncidentUseCase;
@@ -141,6 +142,19 @@ class ServiceOrderController extends Controller
     {
         try {
             return response()->json(($this->getDiagnosisUseCase)($id, (int) $request->header('X-Company-ID')));
+        } catch (ServiceOrderDomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 404);
+        }
+    }
+
+    /**
+     * Every bull of the order: how and why he joined and left, and the gestations he is the
+     * confirmed or a candidate sire of (assistant and MCP).
+     */
+    public function bullHistory(Request $request, int $id, GetServiceOrderBullHistoryUseCase $useCase): JsonResponse
+    {
+        try {
+            return response()->json($useCase($id, (int) $request->header('X-Company-ID')));
         } catch (ServiceOrderDomainException $e) {
             return response()->json(['message' => $e->getMessage()], 404);
         }

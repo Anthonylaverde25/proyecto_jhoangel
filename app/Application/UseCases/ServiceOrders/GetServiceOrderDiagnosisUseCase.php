@@ -46,8 +46,18 @@ final class GetServiceOrderDiagnosisUseCase
             $notInseminatedReason[(int) $exposure['female_caravan_id']] = $exposure['not_inseminated_reason'] ?? null;
         }
 
-        $females = array_map(static function (array $female) use ($today, $strawsOnly, $lastInsemination, $notInseminatedReason): array {
+        // Candidate sires per female; the sire is confirmed at the chute only with a sole bull.
+        $bullIdentification = [];
+        foreach ($order->getMaleDetails() as $male) {
+            $bullIdentification[(int) $male['male_caravan_id']] = $male['identification'] ?? null;
+        }
+
+        $females = array_map(static function (array $female) use ($order, $bullIdentification, $today, $strawsOnly, $lastInsemination, $notInseminatedReason): array {
             $id = (int) $female['female_caravan_id'];
+            $female['sire_candidates'] = array_map(
+                static fn (int $bullId): array => ['id' => $bullId, 'identification' => $bullIdentification[$bullId] ?? (string) $bullId],
+                $order->getSireCandidateIdsFor($id)
+            );
             $last = $lastInsemination[$id] ?? null;
             $isEmpty = $female['reproductive_status'] === 'EMPTY';
             $female['last_insemination_on'] = $last;
@@ -80,6 +90,7 @@ final class GetServiceOrderDiagnosisUseCase
             'status' => $order->getStatus()->value,
             'service_method' => $order->getServiceMethod()->value,
             'suggested_diagnosis_date' => $order->getSuggestedDiagnosisDate(),
+            'sole_bull_id' => $order->getSoleBullId(),
             'summary' => $order->getDiagnosisSummary()->toArray(),
             'pending_if_closed_today' => $order->getDiagnosisSummary($today)->pendingCount(),
             'rounds' => $detail['rounds'],

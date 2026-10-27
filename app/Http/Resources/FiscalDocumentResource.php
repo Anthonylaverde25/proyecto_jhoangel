@@ -80,6 +80,12 @@ class FiscalDocumentResource extends JsonResource
             'invoiced_by' => $document->getInvoicedByDocumentId() === null ? null
                 : ['id' => $document->getInvoicedByDocumentId(), 'label' => $document->getInvoicedByLabel()],
             'delivery_notes' => $document->getDeliveryNotes(),
+            // Distinct items of the document, so a list shows what was bought without the lines.
+            'items' => array_values(array_reduce(
+                $document->getLines(),
+                static fn (array $items, FiscalDocumentLineEntity $line): array => $items + [$line->itemId => ['id' => $line->itemId, 'name' => $line->itemName]],
+                []
+            )),
         ];
         if (!$this->detailed) {
             return $data;

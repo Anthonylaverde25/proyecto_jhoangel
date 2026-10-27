@@ -67,7 +67,8 @@ class EloquentFiscalDocumentRepository implements IFiscalDocumentRepository
 
         $total = (clone $query)->count();
         $models = $query
-            ->with(['type', 'provider', 'stockOperation', 'lines.item', 'related.type'])
+            // invoicedBy / deliveryNotes: the list shows which invoice a delivery note became, and which notes an invoice comes from.
+            ->with(['type', 'provider', 'stockOperation', 'lines.item', 'related.type', 'invoicedBy.type', 'deliveryNotes.type'])
             ->orderByDesc('issued_at')
             ->orderByDesc('id')
             ->forPage($filters->page, $filters->perPage)
@@ -122,6 +123,7 @@ class EloquentFiscalDocumentRepository implements IFiscalDocumentRepository
         return $this->query($companyId)
             ->when($withStatus, fn (Builder $q) => $q->where('status', $filters->status->value))
             ->when($filters->providerId !== null, fn (Builder $q) => $q->where('provider_id', $filters->providerId))
+            ->when($filters->itemId !== null, fn (Builder $q) => $q->whereHas('lines', fn (Builder $l) => $l->where('item_id', $filters->itemId)))
             ->when($withKind && $filters->kind !== null, fn (Builder $q) => $q->whereHas('type', fn (Builder $t) => $t->where('kind', $filters->kind->value)))
             ->when($filters->from !== null, fn (Builder $q) => $q->where('issued_at', '>=', $filters->from))
             ->when($filters->to !== null, fn (Builder $q) => $q->where('issued_at', '<=', $filters->to))

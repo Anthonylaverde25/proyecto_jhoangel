@@ -88,6 +88,59 @@ final class ServiceOrderEntity
     }
 
     /**
+     * The sire is known at the chute only when the order had a single bull all along: none
+     * replaced, rotated or added, and no straws (AI). Otherwise null.
+     */
+    public function getSoleBullId(): ?int
+    {
+        if ($this->isInsemination()) {
+            return null;
+        }
+
+        $bulls = array_values(array_unique(array_map('intval', $this->getAllMaleCaravanIds())));
+
+        return count($bulls) === 1 ? $bulls[0] : null;
+    }
+
+    /**
+     * Bulls that could have sired a pregnancy of this female: every bull whose stay in the order
+     * overlapped her exposure, retired or replaced ones included. Unconfirmed candidates: when the
+     * order had more than one bull, paternity is settled later, on the calf.
+     *
+     * @return int[]
+     */
+    public function getSireCandidateIdsFor(int $femaleId): array
+    {
+        if ($this->maleDetails === []) {
+            return $this->getAllMaleCaravanIds();
+        }
+
+        $exposedFrom = null;
+        $exposedUntil = null;
+        foreach ($this->femaleExposures as $exposure) {
+            if ((int) $exposure['female_caravan_id'] === $femaleId) {
+                $exposedFrom = $exposure['exposed_from'] ?? null;
+                $exposedUntil = $exposure['exposed_until'] ?? null;
+                break;
+            }
+        }
+
+        $candidates = [];
+        foreach ($this->maleDetails as $male) {
+            $joinedAt = isset($male['joined_at']) ? substr((string) $male['joined_at'], 0, 10) : null;
+            $retiredAt = isset($male['retired_at']) ? substr((string) $male['retired_at'], 0, 10) : null;
+
+            $joinedBeforeSheLeft = $joinedAt === null || $exposedUntil === null || $joinedAt <= $exposedUntil;
+            $leftAfterSheJoined = $retiredAt === null || $exposedFrom === null || $retiredAt >= $exposedFrom;
+            if ($joinedBeforeSheLeft && $leftAfterSheJoined) {
+                $candidates[] = (int) $male['male_caravan_id'];
+            }
+        }
+
+        return array_values(array_unique($candidates));
+    }
+
+    /**
      * Where the pregnancy diagnosis stands, from the current verdict of every female.
      *
      * @param string|null $exposureEndsOn the day the open exposures are about to end (closing day)

@@ -80,6 +80,12 @@ class ServiceOrderMapper
         }
 
         $maleDetails = [];
+        $maleIdentifications = [];
+        if ($model->relationLoaded('males') && $model->males !== null) {
+            foreach ($model->males as $male) {
+                $maleIdentifications[(int) $male->id] = (string) $male->identification;
+            }
+        }
         if ($model->relationLoaded('serviceOrderMales') && $model->serviceOrderMales !== null) {
             $activeMaleIds = [];
             $allMaleIds = [];
@@ -92,7 +98,9 @@ class ServiceOrderMapper
                 }
                 $maleDetails[] = [
                     'male_caravan_id' => $mId,
+                    'identification' => $maleIdentifications[$mId] ?? null,
                     'status' => $status,
+                    'joined_at' => self::dateOrNull($som->joined_at),
                     'retired_at' => $som->retired_at instanceof \DateTimeInterface ? $som->retired_at->format('Y-m-d H:i:s') : ($som->retired_at ? (string)$som->retired_at : null),
                     'scrotal_circumference' => $som->snapshot_scrotal_circumference !== null ? (float)$som->snapshot_scrotal_circumference : null,
                     'service_capacity' => $som->service_capacity,
@@ -103,7 +111,9 @@ class ServiceOrderMapper
             foreach ($model->males as $male) {
                 $maleDetails[] = [
                     'male_caravan_id' => (int) $male->id,
+                    'identification' => (string) $male->identification,
                     'status' => $male->pivot->status ?? 'ACTIVE',
+                    'joined_at' => self::dateOrNull($male->pivot->joined_at ?? null),
                     'retired_at' => isset($male->pivot->retired_at) && $male->pivot->retired_at instanceof \DateTimeInterface
                         ? $male->pivot->retired_at->format('Y-m-d H:i:s')
                         : (isset($male->pivot->retired_at) ? (string)$male->pivot->retired_at : null),

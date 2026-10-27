@@ -130,7 +130,6 @@ final class ImportGestationDiagnosisFromOCRUseCase
                         isPregnant: $isPregnant,
                         gestationStage: $gestationStage,
                         gestationMonths: $gestationMonths,
-                        confirmedSireId: null,
                         diagnosisDate: $diagnosisDate,
                         emptyDestinationBatchId: $dto->emptyDestinationBatchId,
                         userId: $dto->userId

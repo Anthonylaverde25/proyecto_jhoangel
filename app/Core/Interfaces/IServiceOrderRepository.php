@@ -170,7 +170,7 @@ interface IServiceOrderRepository
 
     /**
      * Rounds of the order and every female with her current verdict, previous verdict, current
-     * batch and gestation data. Read model for the diagnosis screens.
+     * batch and gestation data (with its confirmed sire, if any). Read model for the diagnosis screens.
      *
      * @return array{rounds: list<array<string, mixed>>, females: list<array<string, mixed>>}
      */

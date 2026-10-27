@@ -92,6 +92,17 @@ class WeaningDeviationsTest extends WeaningOrderTestCase
         $this->assertSame([], collect($this->apiAs('GET', '/weaning-deviations')->json())->where('weaning_order_id', $id)->values()->all());
     }
 
+    public function test_a_type_left_for_the_chute_and_declared_at_weaning_is_not_a_deviation(): void
+    {
+        $calf = $this->nursingCalf('WD-T1', 'M');
+        $id = $this->emitSingle([$calf], ['weaning_type' => null])->json('id');
+
+        $this->apiAs('POST', "/weaning-orders/{$id}/execute", ['weaning_type' => 'ANTICIPATED'])->assertStatus(201);
+
+        $this->assertSame([], collect($this->apiAs('GET', '/weaning-deviations')->json())->where('weaning_order_id', $id)->values()->all());
+        $this->assertSame('ANTICIPATED', $this->apiAs('GET', "/weaning-orders/{$id}")->json('animals.0.weaning_type_applied'));
+    }
+
     public function test_a_review_needs_a_note_leaves_history_and_changes_nothing_else(): void
     {
         $calf = $this->nursingCalf('WD-R1', 'M');
