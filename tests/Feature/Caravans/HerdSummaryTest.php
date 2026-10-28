@@ -9,7 +9,7 @@ use App\Models\Batch;
 use App\Models\Caravan;
 use App\Models\Company;
 use App\Models\Farm;
-use App\Models\Provider;
+use Tests\Support\TestPartner;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Support\Facades\Artisan;
@@ -87,7 +87,7 @@ class HerdSummaryTest extends TestCase
 
     public function test_leaves_out_animals_still_in_a_provider_farm(): void
     {
-        $provider = Provider::create(['name' => 'Proveedor', 'cuit' => '30-11111111-9', 'is_active' => true]);
+        $provider = TestPartner::create(['name' => 'Proveedor', 'cuit' => '30-11111111-9', 'is_active' => true]);
         $farm = Farm::create([
             'company_id' => $this->company->id,
             'name' => 'Campo del proveedor',

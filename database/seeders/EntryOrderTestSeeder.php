@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Core\Enums\PartnerRole;
 use App\Models\Activity;
 use App\Models\AnimalCategory;
 use App\Models\Batch;
@@ -21,7 +22,8 @@ use App\Models\EntryOrderIncident;
 use App\Models\EntryOrderPendingHead;
 use App\Models\EntryOrderReceiptSheet;
 use App\Models\Farm;
-use App\Models\Provider;
+use App\Models\Partner;
+use Database\Seeders\Concerns\SeedsPartners;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -98,6 +100,8 @@ use Illuminate\Support\Facades\DB;
  */
 class EntryOrderTestSeeder extends Seeder
 {
+    use SeedsPartners;
+
     private const PROVIDER_CUIT = '30715550004';
     private const CODES = [
         'EN-20260928-0001', 'EN-20260928-0002', 'EN-20260928-0003', 'EN-20260928-0004', 'EN-20260928-0005', 'EN-20260928-0006',
@@ -123,10 +127,11 @@ class EntryOrderTestSeeder extends Seeder
             $this->reset($companyId);
 
             // Providers are company-scoped; seeders run without model events, so the company goes in the key.
-            $provider = Provider::withoutGlobalScopes()->updateOrCreate(
+            $provider = Partner::withoutGlobalScopes()->updateOrCreate(
                 ['company_id' => $companyId, 'cuit' => self::PROVIDER_CUIT],
                 ['name' => 'Consignataria Test Ingreso', 'commercial_name' => 'Remates Test', 'is_active' => true]
             );
+            $this->grantRoles($provider, [PartnerRole::SUPPLIER_LIVESTOCK]);
             $mainFarm = $this->farm($companyId, (int) $provider->id, 'Estancia La Porteña (TEST ING)', '02.345.6.78901/00');
             $this->farm($companyId, (int) $provider->id, 'Campo El Ombú (TEST ING)', '02.345.6.78901/01');
 

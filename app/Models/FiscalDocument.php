@@ -64,7 +64,7 @@ class FiscalDocument extends Model
 
     public function provider(): BelongsTo
     {
-        return $this->belongsTo(Provider::class)->withoutGlobalScopes();
+        return $this->belongsTo(Partner::class, 'provider_id')->withoutGlobalScopes();
     }
 
     public function lines(): HasMany

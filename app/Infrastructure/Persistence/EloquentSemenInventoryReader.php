@@ -123,7 +123,7 @@ class EloquentSemenInventoryReader implements ISemenInventoryReader
             ->join('item_documents as d', 'd.id', '=', 'l.item_document_id')
             ->join('stock_movements as m', 'm.item_document_line_id', '=', 'l.id')
             ->join('warehouses as w', 'w.id', '=', 'd.warehouse_id')
-            ->leftJoin('providers as p', 'p.id', '=', 'd.provider_id')
+            ->leftJoin('partners as p', 'p.id', '=', 'd.provider_id')
             ->where('l.company_id', $companyId)->where('l.semen_lot_id', $lotId)
             ->orderBy('d.occurred_at')->orderBy('d.id')
             ->get(['d.id', 'd.number', 'd.type', 'd.occurred_at', 'w.code as warehouse_code', 'p.name as provider_name', 'm.direction', 'm.quantity', 'l.unit_cost'])
@@ -181,7 +181,7 @@ class EloquentSemenInventoryReader implements ISemenInventoryReader
         $first = [];
         $rows = DB::table('item_document_lines as l')
             ->join('item_documents as d', 'd.id', '=', 'l.item_document_id')
-            ->leftJoin('providers as p', 'p.id', '=', 'd.provider_id')
+            ->leftJoin('partners as p', 'p.id', '=', 'd.provider_id')
             ->where('l.company_id', $companyId)->whereIn('l.semen_lot_id', $lotIds)->where('d.type', ItemDocumentType::SEMEN_RECEIPT->value)
             ->orderBy('d.occurred_at')
             ->get(['l.semen_lot_id', 'd.occurred_at', 'p.name']);
@@ -192,7 +192,7 @@ class EloquentSemenInventoryReader implements ISemenInventoryReader
             ->join('semen_unidentified_entries as e', 'e.id', '=', 'i.semen_unidentified_entry_id')
             ->join('item_document_lines as l', 'l.id', '=', 'e.item_document_line_id')
             ->join('item_documents as d', 'd.id', '=', 'l.item_document_id')
-            ->leftJoin('providers as p', 'p.id', '=', 'd.provider_id')
+            ->leftJoin('partners as p', 'p.id', '=', 'd.provider_id')
             ->where('i.company_id', $companyId)->whereIn('i.semen_lot_id', $lotIds)->whereNull('i.voided_at')->where('e.direction', 1)
             ->orderBy('d.occurred_at')
             ->get(['i.semen_lot_id', 'd.occurred_at', 'p.name']);

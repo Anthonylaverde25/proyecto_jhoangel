@@ -6,7 +6,7 @@ namespace Tests\Unit;
 
 use App\Application\Services\OCRServiceOrderResolver;
 use App\Models\ServiceOrder;
-use App\Models\Provider;
+use Tests\Support\TestPartner;
 use App\Models\Farm;
 use App\Models\Batch;
 use Tests\TestCase;
@@ -42,7 +42,7 @@ final class OCRServiceOrderResolverTest extends TestCase
         ]);
 
         // No company context here: providers and farms are company-scoped, so the company goes explicitly.
-        $provider = Provider::create(['company_id' => $this->company->id, 'name' => 'Provider', 'cuit' => '30-11111111-9', 'is_active' => true]);
+        $provider = TestPartner::create(['company_id' => $this->company->id, 'name' => 'Provider', 'cuit' => '30-11111111-9', 'is_active' => true]);
         $farm = Farm::create(['company_id' => $this->company->id, 'name' => 'Farm', 'renspa' => '11.11.1.11111/11', 'provider_id' => $provider->id, 'is_active' => true]);
         $batch = Batch::create(['name' => 'Batch', 'farm_id' => $farm->id, 'company_id' => $this->company->id, 'is_active' => true]);
         $this->batchId = $batch->id;

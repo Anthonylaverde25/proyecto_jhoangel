@@ -7,7 +7,7 @@ namespace Tests\Feature\Stock;
 use App\Models\Batch;
 use App\Models\BatchType;
 use App\Models\FiscalDocumentType;
-use App\Models\Provider;
+use App\Models\Partner;
 use App\Models\Tax;
 use App\Models\TaxRate;
 use Illuminate\Testing\TestResponse;
@@ -20,7 +20,7 @@ use Tests\Feature\ItemCatalog\ItemCatalogTestCase;
  */
 abstract class StockTestCase extends ItemCatalogTestCase
 {
-    protected Provider $seller;
+    protected Partner $seller;
 
     protected function setUp(): void
     {

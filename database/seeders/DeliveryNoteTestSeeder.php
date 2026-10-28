@@ -14,7 +14,7 @@ use App\Models\FiscalDocumentLine;
 use App\Models\FiscalDocumentType;
 use App\Models\Item;
 use App\Models\ItemPresentation;
-use App\Models\Provider;
+use App\Models\Partner;
 use App\Models\Tax;
 use App\Models\TaxRate;
 use App\Models\UnitOfMeasure;
@@ -97,7 +97,7 @@ class DeliveryNoteTestSeeder extends Seeder
      * @param list<array<string, mixed>> $lines
      * @param list<int|null> $notes delivery notes an invoice is converted from
      */
-    private function document(string $key, Provider $provider, string $type, int $pointOfSale, int $number, string $date, array $lines, ?bool $valued = null, array $notes = []): ?int
+    private function document(string $key, Partner $provider, string $type, int $pointOfSale, int $number, string $date, array $lines, ?bool $valued = null, array $notes = []): ?int
     {
         $registration = app(RegisterFiscalDocumentUseCase::class)(FiscalDocumentDTO::fromArray([
             'provider_id' => $provider->id,
@@ -148,9 +148,9 @@ class DeliveryNoteTestSeeder extends Seeder
         ];
     }
 
-    private function provider(string $cuit): ?Provider
+    private function provider(string $cuit): ?Partner
     {
-        return Provider::withoutGlobalScopes()->where('company_id', $this->companyId)->where('cuit', $cuit)->first();
+        return Partner::withoutGlobalScopes()->where('company_id', $this->companyId)->where('cuit', $cuit)->first();
     }
 
     private function item(string $name): ?Item

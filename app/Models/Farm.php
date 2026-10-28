@@ -35,7 +35,7 @@ class Farm extends Model
 
     public function provider(): BelongsTo
     {
-        return $this->belongsTo(Provider::class);
+        return $this->belongsTo(Partner::class, 'provider_id');
     }
 
     public function batches(): HasMany

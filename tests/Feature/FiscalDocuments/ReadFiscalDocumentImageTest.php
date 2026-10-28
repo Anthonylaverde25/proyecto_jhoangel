@@ -12,7 +12,8 @@ use App\Core\ValueObjects\FiscalLineRead;
 use App\Core\ValueObjects\Cuit;
 use App\Core\ValueObjects\FiscalIssuerRead;
 use App\Models\Company;
-use App\Models\Provider;
+use App\Models\Partner;
+use Tests\Support\TestPartner;
 use Illuminate\Http\UploadedFile;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\Veterinary\VeterinaryTestCase;
@@ -65,7 +66,7 @@ class ReadFiscalDocumentImageTest extends VeterinaryTestCase
     public function test_a_provider_of_another_company_is_not_a_match(): void
     {
         $other = Company::where('id', '!=', $this->company->id)->firstOrFail();
-        $foreign = Provider::withoutGlobalScopes()->create([
+        $foreign = TestPartner::create([
             'company_id' => $other->id, 'name' => 'Del vecino', 'cuit' => $this->freshCuit(), 'supplies_items' => true,
         ]);
         $this->agentReads($this->read($foreign->cuit, 'qr'));
@@ -276,9 +277,9 @@ class ReadFiscalDocumentImageTest extends VeterinaryTestCase
         );
     }
 
-    private function provider(bool $suppliesItems): Provider
+    private function provider(bool $suppliesItems): Partner
     {
-        return Provider::withoutGlobalScopes()->create([
+        return TestPartner::create([
             'company_id' => $this->company->id,
             'name' => 'Proveedor leído',
             'cuit' => $this->freshCuit(),
@@ -294,7 +295,7 @@ class ReadFiscalDocumentImageTest extends VeterinaryTestCase
             $ten = '30' . str_pad((string) random_int(0, 99_999_999), 8, '0', STR_PAD_LEFT);
             $expected = Cuit::fromString($ten . '0')->expectedCheckDigit();
             $digits = $ten . $expected;
-        } while ($expected === null || Provider::withoutGlobalScopes()->where('cuit', $digits)->exists());
+        } while ($expected === null || Partner::withoutGlobalScopes()->where('cuit', $digits)->exists());
 
         return $digits;
     }

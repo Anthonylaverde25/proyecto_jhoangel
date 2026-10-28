@@ -93,7 +93,7 @@ class ItemDocument extends Model
 
     public function provider(): BelongsTo
     {
-        return $this->belongsTo(Provider::class);
+        return $this->belongsTo(Partner::class, 'provider_id');
     }
 
     /** The AI order whose inseminations generated this consumption (semen S-B). */

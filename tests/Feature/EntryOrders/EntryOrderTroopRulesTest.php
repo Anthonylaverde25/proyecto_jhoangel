@@ -81,7 +81,7 @@ class EntryOrderTroopRulesTest extends EntryOrderTestCase
     {
         $foreignFarm = \App\Models\Farm::create([
             'company_id' => $this->company->id,
-            'provider_id' => \App\Models\Provider::create(['name' => 'Otro EO', 'cuit' => '30-70000009-9', 'is_active' => true])->id,
+            'provider_id' => \Tests\Support\TestPartner::create(['name' => 'Otro EO', 'cuit' => '30-70000009-9', 'is_active' => true])->id,
             'name' => 'Campo ajeno EO',
             'renspa' => 'NO_DEFINIDO',
             'is_active' => true,

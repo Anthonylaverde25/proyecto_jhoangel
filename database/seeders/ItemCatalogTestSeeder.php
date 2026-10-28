@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Core\Enums\PartnerRole;
 use App\Models\Company;
 use App\Models\Item;
 use App\Models\ItemCategory;
 use App\Models\ItemPresentation;
 use App\Models\ItemProvider;
-use App\Models\Provider;
+use App\Models\Partner;
 use App\Models\UnitOfMeasure;
+use Database\Seeders\Concerns\SeedsPartners;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -23,6 +25,8 @@ use Illuminate\Support\Facades\DB;
  */
 class ItemCatalogTestSeeder extends Seeder
 {
+    use SeedsPartners;
+
     private const ITEMS_PROVIDER_CUIT = '30708451238';
     private const MIXED_PROVIDER_CUIT = '30987654321';
 
@@ -39,24 +43,20 @@ class ItemCatalogTestSeeder extends Seeder
         $this->companyId = (int) $company->id;
 
         DB::transaction(function (): void {
-            $elTala = Provider::withoutGlobalScopes()->firstOrCreate(
-                ['company_id' => $this->companyId, 'cuit' => self::ITEMS_PROVIDER_CUIT],
-                [
-                    'name' => 'Agroveterinaria El Tala',
-                    'commercial_name' => 'El Tala',
-                    'location' => 'Av. San Martín 1450, Tandil',
-                    'is_active' => true,
-                    'supplies_livestock' => false,
-                    'supplies_items' => true,
-                ]
-            );
+            $elTala = $this->seedPartner($this->companyId, self::ITEMS_PROVIDER_CUIT, [
+                'name' => 'Agroveterinaria El Tala',
+                'commercial_name' => 'El Tala',
+                'location' => 'Av. San Martín 1450, Tandil',
+            ], [PartnerRole::SUPPLIER_ITEMS]);
 
             // An existing livestock seller that also sells salt: the provider with both roles.
-            $mixed = Provider::withoutGlobalScopes()
+            $mixed = Partner::withoutGlobalScopes()
                 ->where('company_id', $this->companyId)
                 ->where('cuit', self::MIXED_PROVIDER_CUIT)
                 ->first();
-            $mixed?->update(['supplies_items' => true]);
+            if ($mixed !== null) {
+                $this->grantRoles($mixed, [PartnerRole::SUPPLIER_ITEMS]);
+            }
 
             $health = $this->category('HEALTH');
             $antiparasitics = $this->category('ANTIPARASITICS', 'Antiparasitarios', $health, 1);
@@ -134,7 +134,7 @@ class ItemCatalogTestSeeder extends Seeder
         );
     }
 
-    private function link(Item $item, Provider $provider, ?int $leadTimeDays, bool $preferred): void
+    private function link(Item $item, Partner $provider, ?int $leadTimeDays, bool $preferred): void
     {
         ItemProvider::withoutGlobalScopes()->firstOrCreate(
             ['company_id' => $this->companyId, 'item_id' => $item->id, 'provider_id' => $provider->id],

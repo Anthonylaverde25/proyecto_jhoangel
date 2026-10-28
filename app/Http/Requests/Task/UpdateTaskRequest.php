@@ -35,7 +35,7 @@ class UpdateTaskRequest extends FormRequest
             'provider_ids.*' => [
                 'integer',
                 'distinct',
-                Rule::exists('providers', 'id')->where('company_id', $companyId),
+                Rule::exists('partners', 'id')->where('company_id', $companyId),
             ],
         ];
     }

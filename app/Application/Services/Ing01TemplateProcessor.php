@@ -15,7 +15,7 @@ use App\Models\Caravan;
 use App\Models\CaravanMovement;
 use App\Models\Company;
 use App\Models\Farm;
-use App\Models\Provider;
+use App\Models\Partner;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -205,7 +205,7 @@ final class Ing01TemplateProcessor
      * Resolve or create the provider's origin farm for an external batch. Every farm belongs to a
      * provider of the same company (D21): without a provider, only an existing farm can be used.
      */
-    private function resolveProviderFarm(?Provider $provider, ?string $farmName, ?string $renspa, int $companyId): Farm
+    private function resolveProviderFarm(?Partner $provider, ?string $farmName, ?string $renspa, int $companyId): Farm
     {
         $cleanFarmName = $farmName !== null && trim($farmName) !== '' ? trim($farmName) : null;
         $cleanRenspa = $renspa !== null && trim($renspa) !== '' ? trim($renspa) : null;
@@ -251,12 +251,12 @@ final class Ing01TemplateProcessor
     /**
      * Resolve Provider by CUIT or Name.
      */
-    private function resolveProvider(?string $cuit, ?string $name, int $companyId): ?Provider
+    private function resolveProvider(?string $cuit, ?string $name, int $companyId): ?Partner
     {
         if ($cuit !== null && trim($cuit) !== '') {
             $cleanCuit = preg_replace('/[^0-9]/', '', $cuit);
             if ($cleanCuit !== '' && strlen($cleanCuit) >= 8) {
-                $provider = Provider::withoutGlobalScopes()
+                $provider = Partner::withoutGlobalScopes()
                     ->where('company_id', $companyId)
                     ->where('cuit', $cleanCuit)
                     ->first();
@@ -268,7 +268,7 @@ final class Ing01TemplateProcessor
 
         if ($name !== null && trim($name) !== '') {
             $cleanName = trim($name);
-            $provider = Provider::withoutGlobalScopes()
+            $provider = Partner::withoutGlobalScopes()
                 ->where('company_id', $companyId)
                 ->where('name', 'LIKE', "%{$cleanName}%")
                 ->first();

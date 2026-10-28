@@ -25,7 +25,7 @@ class StoreFiscalDocumentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'provider_id' => ['required', 'integer', Rule::exists('providers', 'id')->where('company_id', $this->companyId())],
+            'provider_id' => ['required', 'integer', Rule::exists('partners', 'id')->where('company_id', $this->companyId())],
             'fiscal_document_type_id' => ['required', 'integer', 'exists:fiscal_document_types,id'],
             'point_of_sale' => ['nullable', 'integer', 'min:1', 'max:99999'],
             'number' => ['nullable', 'integer', 'min:1', 'max:99999999'],

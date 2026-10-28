@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature\Tasks;
 
 use App\Models\Company;
-use App\Models\Provider;
+use App\Models\Partner;
+use Tests\Support\TestPartner;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\Mcp\McpTestCase;
 
@@ -14,9 +15,9 @@ use Tests\Feature\Mcp\McpTestCase;
  */
 class TaskProvidersAndUrgencyTest extends McpTestCase
 {
-    private function provider(string $name, string $cuit, ?int $companyId = null): Provider
+    private function provider(string $name, string $cuit, ?int $companyId = null): Partner
     {
-        return Provider::withoutGlobalScopes()->create([
+        return TestPartner::create([
             'company_id' => $companyId ?? $this->company->id,
             'name' => $name,
             'cuit' => $cuit,
@@ -131,5 +132,6 @@ class TaskProvidersAndUrgencyTest extends McpTestCase
 
         $this->callWith($token, 'GET', '/tasks')->assertOk()->assertJsonPath('meta.total', 1);
         $this->callWith($token, 'GET', '/providers')->assertOk();
+        $this->callWith($token, 'GET', '/partners?group=supplier')->assertOk();
     }
 }

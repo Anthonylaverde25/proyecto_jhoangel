@@ -7,9 +7,10 @@ namespace App\Application\UseCases\FiscalDocuments;
 use App\Application\DTOs\ProviderRecognition;
 use App\Core\Interfaces\ICompanyRepository;
 use App\Core\Interfaces\IFiscalDocumentReader;
-use App\Core\Interfaces\IProviderRepository;
+use App\Core\Interfaces\IPartnerRepository;
 use App\Core\ValueObjects\Cuit;
 use App\Core\ValueObjects\FiscalIssuerRead;
+use App\Core\Enums\PartnerRole;
 
 /**
  * Recognizes the provider of a document image (Delivery F, part 01 §2.2). The agent has already
@@ -23,7 +24,7 @@ final class ReadFiscalDocumentImageUseCase
 {
     public function __construct(
         private readonly IFiscalDocumentReader $reader,
-        private readonly IProviderRepository $providers,
+        private readonly IPartnerRepository $providers,
         private readonly ICompanyRepository $companies,
         private readonly ResolveFiscalLinesUseCase $resolveLines,
     ) {
@@ -84,7 +85,7 @@ final class ReadFiscalDocumentImageUseCase
         $provider = $this->providers->findByCuit($issuer, $companyId);
         $status = match (true) {
             $provider === null => ProviderRecognition::NEW,
-            !$provider->suppliesItems() => ProviderRecognition::ROLE_MISSING,
+            !$provider->hasRole(PartnerRole::SUPPLIER_ITEMS) => ProviderRecognition::ROLE_MISSING,
             default => ProviderRecognition::MATCHED,
         };
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Core\Enums\PartnerRole;
 use App\Core\Enums\WeighingTypeCode;
 use App\Models\WeighingType;
 use Illuminate\Database\Seeder;
@@ -32,7 +33,9 @@ class LivestockHierarchySeeder extends Seeder
         DB::table('caravans')->delete();
         DB::table('batches')->delete();
         DB::table('farms')->delete();
-        DB::table('providers')->delete();
+        DB::table('partner_contacts')->delete();
+        DB::table('partner_roles')->delete();
+        DB::table('partners')->delete();
 
         if (DB::getDriverName() === 'mysql') {
             DB::statement('SET FOREIGN_KEY_CHECKS=1;');
@@ -80,31 +83,19 @@ class LivestockHierarchySeeder extends Seeder
 
         // 1. Crear Proveedores
         // Seeders run without model events: company_id goes explicitly (providers are company-scoped).
-        $provider1Id = DB::table('providers')->insertGetId([
-            'company_id' => $companyId,
+        $provider1Id = $this->insertLivestockSupplier($companyId, [
             'name' => 'Estancia El Trébol S.A.',
             'commercial_name' => 'El Trébol',
             'cuit' => '30123456781',
             'location' => 'Ruta 5, Km 150, Chivilcoy',
-            'email' => 'administracion@eltrebol.com',
-            'phone' => '+54 2346 123456',
-            'is_active' => true,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        ], 'administracion@eltrebol.com', '+54 2346 123456');
 
-        $provider2Id = DB::table('providers')->insertGetId([
-            'company_id' => $companyId,
+        $provider2Id = $this->insertLivestockSupplier($companyId, [
             'name' => 'Ganadera del Sur SRL',
             'commercial_name' => 'Ganadera Sur',
             'cuit' => '30987654321',
             'location' => 'Ruta 226, Km 40, Balcarce',
-            'email' => 'ventas@ganaderasur.com',
-            'phone' => '+54 2266 987654',
-            'is_active' => true,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        ], 'ventas@ganaderasur.com', '+54 2266 987654');
 
         $providerIds = [$provider1Id, $provider2Id];
         $names = ['El Trébol', 'Ganadera Sur'];
@@ -772,5 +763,31 @@ class LivestockHierarchySeeder extends Seeder
                 'updated_at' => now(),
             ]);
         }
+    }
+
+    /**
+     * A partner that sells livestock, with its contact as the default one (egreso plan v5, A1–A2).
+     *
+     * @param array<string, string> $attributes
+     */
+    private function insertLivestockSupplier(int $companyId, array $attributes, string $email, string $phone): int
+    {
+        $id = DB::table('partners')->insertGetId($attributes + [
+            'company_id' => $companyId,
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('partner_roles')->insert([
+            'company_id' => $companyId, 'partner_id' => $id, 'role' => PartnerRole::SUPPLIER_LIVESTOCK->value,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('partner_contacts')->insert([
+            'company_id' => $companyId, 'partner_id' => $id, 'name' => 'Principal', 'phone' => $phone, 'email' => $email,
+            'is_default' => true, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        return $id;
     }
 }

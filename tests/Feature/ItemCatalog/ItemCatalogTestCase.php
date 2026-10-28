@@ -6,7 +6,8 @@ namespace Tests\Feature\ItemCatalog;
 
 use App\Models\Company;
 use App\Models\ItemCategory;
-use App\Models\Provider;
+use App\Models\Partner;
+use Tests\Support\TestPartner;
 use App\Models\UnitOfMeasure;
 use Tests\Feature\Veterinary\VeterinaryTestCase;
 
@@ -52,9 +53,9 @@ abstract class ItemCatalogTestCase extends VeterinaryTestCase
         ])->assertStatus(201)->json('id');
     }
 
-    protected function provider(string $cuit, bool $suppliesItems = true, ?Company $company = null): Provider
+    protected function provider(string $cuit, bool $suppliesItems = true, ?Company $company = null): Partner
     {
-        return Provider::withoutGlobalScopes()->create([
+        return TestPartner::create([
             'company_id' => ($company ?? $this->company)->id,
             'name' => 'Proveedor ' . $cuit,
             'cuit' => $cuit,

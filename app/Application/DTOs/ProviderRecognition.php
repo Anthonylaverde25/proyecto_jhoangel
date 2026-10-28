@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\DTOs;
 
-use App\Core\Entities\ProviderEntity;
+use App\Core\Entities\PartnerEntity;
 use App\Core\ValueObjects\FiscalIssuerRead;
 
 /**
@@ -28,7 +28,7 @@ final readonly class ProviderRecognition
     public function __construct(
         public string $status,
         public ?string $reason,
-        public ?ProviderEntity $provider,
+        public ?PartnerEntity $provider,
         public FiscalIssuerRead $read,
         public ?string $companyCuit,
         /** ISSUER_IS_OWN_COMPANY: the other CUIT read, probably the real issuer. */

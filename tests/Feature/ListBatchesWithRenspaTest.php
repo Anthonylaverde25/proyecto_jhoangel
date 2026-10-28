@@ -7,7 +7,7 @@ namespace Tests\Feature;
 use App\Models\Batch;
 use App\Models\Company;
 use App\Models\Farm;
-use App\Models\Provider;
+use Tests\Support\TestPartner;
 use App\Models\Tenant;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
@@ -62,7 +62,7 @@ class ListBatchesWithRenspaTest extends TestCase
         ]);
 
         // 2. Create Provider and External Farm with specific RENSPA
-        $provider = Provider::create([
+        $provider = TestPartner::create([
             'name' => 'Proveedor Externo 2',
             'cuit' => '30-11112222-4',
             'is_active' => true

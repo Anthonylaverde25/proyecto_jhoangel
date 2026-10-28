@@ -18,15 +18,16 @@ use App\Application\UseCases\Stock\RegisterStockCountUseCase;
 use App\Application\UseCases\Stock\RegisterStockTransferUseCase;
 use App\Application\UseCases\Warehouses\CreateWarehouseUseCase;
 use App\Core\Enums\AnimalSex;
+use App\Core\Enums\PartnerRole;
 use App\Core\Enums\WarehouseKind;
 use App\Core\Exceptions\FieldValidationException;
 use App\Models\Breed;
 use App\Models\Caravan;
 use App\Models\Company;
-use App\Models\Provider;
 use App\Models\SemenSire;
 use App\Models\UnitOfMeasure;
 use App\Models\Warehouse;
+use Database\Seeders\Concerns\SeedsPartners;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -38,6 +39,8 @@ use Illuminate\Support\Facades\DB;
  */
 class SemenStockTestSeeder extends Seeder
 {
+    use SeedsPartners;
+
     private const PROVIDER_CUIT = '30718000013';
 
     private int $companyId;
@@ -55,10 +58,7 @@ class SemenStockTestSeeder extends Seeder
 
         $field = $this->warehouseId($this->companyId, 'TER-02')
             ?? app(CreateWarehouseUseCase::class)('TER-02', 'Termo de campo', WarehouseKind::CRYO_TANK, $this->companyId)->id;
-        $provider = Provider::withoutGlobalScopes()->firstOrCreate(
-            ['company_id' => $this->companyId, 'cuit' => self::PROVIDER_CUIT],
-            ['name' => 'Centro de IA (prueba)', 'supplies_livestock' => false, 'supplies_items' => true, 'is_active' => true],
-        );
+        $provider = $this->seedPartner($this->companyId, self::PROVIDER_CUIT, ['name' => 'Centro de IA (prueba)'], [PartnerRole::SUPPLIER_ITEMS]);
 
         $rambo = $this->sire('HBA-1001', 'Rambo', 'Angus');
         $cirilo = $this->sire('HBA-2002', 'Don Cirilo', 'Hereford');

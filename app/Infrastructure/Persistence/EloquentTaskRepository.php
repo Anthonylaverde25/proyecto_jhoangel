@@ -74,7 +74,7 @@ class EloquentTaskRepository implements ITaskRepository
             ->when($filter->urgency !== null, fn (Builder $q) => $q->where('urgency', $filter->urgency?->value))
             ->when($filter->providerId !== null, fn (Builder $q) => $q->whereHas(
                 'providers',
-                fn (Builder $p) => $p->where('providers.id', $filter->providerId)
+                fn (Builder $p) => $p->where('partners.id', $filter->providerId)
             ))
             ->when($filter->search !== null && $filter->search !== '', fn (Builder $q) => $q->where(
                 'description',

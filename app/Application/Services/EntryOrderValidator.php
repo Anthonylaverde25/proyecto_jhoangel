@@ -11,7 +11,7 @@ use App\Core\ValueObjects\EntryTroop;
 use App\Models\AnimalCategory;
 use App\Models\Breed;
 use App\Models\Farm;
-use App\Models\Provider;
+use App\Models\Partner;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -38,7 +38,7 @@ final class EntryOrderValidator
 
     private function assertOrigin(EntryTroop $troop, int $companyId): void
     {
-        $provider = Provider::find($troop->providerId);
+        $provider = Partner::find($troop->providerId);
 
         if ($provider === null || !$provider->is_active) {
             throw EntryOrderDomainException::invalid('El proveedor no existe o está inactivo.', 'PROVIDER_INVALID', 'provider_id');

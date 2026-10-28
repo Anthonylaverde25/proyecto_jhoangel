@@ -6,7 +6,8 @@ namespace Tests\Feature;
 
 use App\Models\Company;
 use App\Models\Farm;
-use App\Models\Provider;
+use App\Models\Partner;
+use Tests\Support\TestPartner;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\Veterinary\VeterinaryTestCase;
@@ -44,13 +45,13 @@ class ProviderCompanyScopeTest extends VeterinaryTestCase
 
         $this->assertEqualsCanonicalizing(
             [(int) $first->id, (int) $this->other->id],
-            Provider::withoutGlobalScopes()->where('cuit', self::CUIT)->pluck('company_id')->all()
+            Partner::withoutGlobalScopes()->where('cuit', self::CUIT)->pluck('company_id')->all()
         );
     }
 
     public function test_each_company_lists_only_its_own_providers(): void
     {
-        Provider::withoutGlobalScopes()->create([
+        TestPartner::create([
             'company_id' => $this->other->id, 'name' => 'Solo del vecino', 'cuit' => '30666666662',
         ]);
 
@@ -79,12 +80,12 @@ class ProviderCompanyScopeTest extends VeterinaryTestCase
         ]);
 
         $response->assertStatus(422);
-        $this->assertFalse(Provider::withoutGlobalScopes()->where('cuit', '30888888884')->exists());
+        $this->assertFalse(Partner::withoutGlobalScopes()->where('cuit', '30888888884')->exists());
     }
 
     public function test_a_farm_cannot_hang_from_a_provider_of_another_company(): void
     {
-        $foreign = Provider::withoutGlobalScopes()->create([
+        $foreign = TestPartner::create([
             'company_id' => $this->other->id, 'name' => 'Proveedor del vecino', 'cuit' => '30999999995',
         ]);
 
@@ -101,7 +102,7 @@ class ProviderCompanyScopeTest extends VeterinaryTestCase
 
     public function test_several_farms_of_a_company_may_lack_a_renspa(): void
     {
-        $provider = Provider::withoutGlobalScopes()->create([
+        $provider = TestPartner::create([
             'company_id' => $this->company->id, 'name' => 'Consignataria Test', 'cuit' => '30-12121212-1',
         ]);
 

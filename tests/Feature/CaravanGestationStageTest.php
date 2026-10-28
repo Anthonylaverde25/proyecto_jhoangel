@@ -261,7 +261,7 @@ class CaravanGestationStageTest extends TestCase
     public function test_can_import_caravans_with_gestations_and_service_order(): void
     {
         // 1. Create a provider, farm and a batch (safely using firstOrCreate)
-        $provider = \App\Models\Provider::firstOrCreate(
+        $provider = \Tests\Support\TestPartner::firstOrCreate(
             ['cuit' => '30123456781'],
             ['name' => 'Test Provider', 'is_active' => true]
         );

@@ -24,7 +24,7 @@ use App\Core\Interfaces\IFarmRepository;
 use App\Core\Interfaces\IFieldMappingResolver;
 use App\Core\Interfaces\IPaternityRepository;
 use App\Core\Interfaces\IServiceOrderBullHistoryRepository;
-use App\Core\Interfaces\IProviderRepository;
+use App\Core\Interfaces\IPartnerRepository;
 use App\Core\Interfaces\IServiceOrderIncidentRepository;
 use App\Core\Interfaces\IServiceOrderRepository;
 use App\Core\Interfaces\ITransferOrderRepository;
@@ -56,7 +56,7 @@ use App\Infrastructure\Persistence\EloquentFarmRepository;
 use App\Infrastructure\Persistence\EloquentFieldMappingResolver;
 use App\Infrastructure\Persistence\EloquentPaternityRepository;
 use App\Infrastructure\Persistence\EloquentServiceOrderBullHistoryRepository;
-use App\Infrastructure\Persistence\EloquentProviderRepository;
+use App\Infrastructure\Persistence\EloquentPartnerRepository;
 use App\Infrastructure\Persistence\EloquentServiceOrderIncidentRepository;
 use App\Infrastructure\Persistence\EloquentServiceOrderRepository;
 use App\Infrastructure\Persistence\EloquentTransferOrderRepository;
@@ -97,7 +97,7 @@ final class LivestockServiceProvider extends ServiceProvider
         IFarmRepository::class => EloquentFarmRepository::class,
         IFieldMappingResolver::class => EloquentFieldMappingResolver::class,
         IPaternityRepository::class => EloquentPaternityRepository::class,
-        IProviderRepository::class => EloquentProviderRepository::class,
+        IPartnerRepository::class => EloquentPartnerRepository::class,
         IServiceOrderBullHistoryRepository::class => EloquentServiceOrderBullHistoryRepository::class,
         IServiceOrderIncidentRepository::class => EloquentServiceOrderIncidentRepository::class,
         IServiceOrderRepository::class => EloquentServiceOrderRepository::class,

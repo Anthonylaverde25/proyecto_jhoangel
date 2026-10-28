@@ -25,7 +25,7 @@ class ProviderRecognitionResource extends JsonResource
         return [
             'status' => $recognition->status,
             'reason' => $recognition->reason,
-            'provider' => $recognition->provider !== null ? (new ProviderResource($recognition->provider))->resolve($request) : null,
+            'provider' => $recognition->provider !== null ? (new PartnerResource($recognition->provider))->resolve($request) : null,
             'issuer' => [
                 'cuit' => $read->issuerCuit,
                 'source' => $read->issuerCuitSource,

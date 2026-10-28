@@ -8,7 +8,7 @@ use App\Models\Batch;
 use App\Models\Caravan;
 use App\Models\Company;
 use App\Models\Farm;
-use App\Models\Provider;
+use Tests\Support\TestPartner;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Core\Enums\AnimalSex;
@@ -63,7 +63,7 @@ class ExternalBatchRestrictedInBusinessFlowTest extends TestCase
 
     public function test_cannot_create_service_order_with_animals_in_external_batches(): void
     {
-        $provider = Provider::create([
+        $provider = TestPartner::create([
             'name' => 'Cabaña Externa Vendedora',
             'cuit' => '30-11223344-5',
             'is_active' => true

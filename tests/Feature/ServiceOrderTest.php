@@ -550,7 +550,7 @@ class ServiceOrderTest extends TestCase
     {
         $criaActivity = \App\Models\Activity::where('code', 'CRIA')->first();
 
-        $provider = \App\Models\Provider::create([
+        $provider = \Tests\Support\TestPartner::create([
             'company_id' => $this->company->id,
             'name'       => 'External Provider Test',
             'cuit'       => '20-12345678-9',

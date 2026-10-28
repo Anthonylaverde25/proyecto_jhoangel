@@ -40,10 +40,19 @@ class UpdateProviderRequest extends FormRequest
         return [
             'name'            => 'required|string|max:255',
             'commercial_name' => 'nullable|string|max:255',
-            'cuit'            => ['bail', 'required', 'string', new ValidCuit(), Rule::unique('providers', 'cuit')->where('company_id', $companyId)->ignore($providerId)],
+            'cuit'            => ['bail', 'required', 'string', new ValidCuit(), Rule::unique('partners', 'cuit')->where('company_id', $companyId)->ignore($providerId)],
             'location'        => 'nullable|string|max:500',
-            'email'           => ['nullable', 'email', 'max:255', Rule::unique('providers', 'email')->where('company_id', $companyId)->ignore($providerId)],
-            'phone'           => 'nullable|string|max:50',
+            'email'           => ['nullable', 'email', 'max:255'],
+            // A contact needs a phone (C6): an email alone has nowhere to go.
+            'phone'           => 'nullable|required_with:email|string|max:50',
+        ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return [
+            'cuit.unique' => 'Ya hay un cliente o proveedor con ese CUIT en esta empresa.',
         ];
     }
 }

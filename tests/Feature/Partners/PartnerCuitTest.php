@@ -2,24 +2,24 @@
 
 declare(strict_types=1);
 
-namespace Tests\Feature\Providers;
+namespace Tests\Feature\Partners;
 
 use App\Core\ValueObjects\Cuit;
-use App\Models\Provider;
+use App\Models\Partner;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\Veterinary\VeterinaryTestCase;
 
 /**
- * A provider's CUIT is the key that identifies the issuer of every fiscal document: it is stored
+ * A partner's CUIT is the key that identifies the issuer of every fiscal document: it is stored
  * as digits, it must close its check digit, and it stops changing once a document carries it.
  */
-class ProviderCuitTest extends VeterinaryTestCase
+class PartnerCuitTest extends VeterinaryTestCase
 {
     public function test_the_cuit_is_stored_as_digits(): void
     {
         $digits = $this->freshCuit();
 
-        $this->apiAs('POST', '/providers', ['name' => 'Con guiones', 'cuit' => $this->dashed($digits)])
+        $this->apiAs('POST', '/partners', ['name' => 'Con guiones', 'cuit' => $this->dashed($digits)])
             ->assertStatus(201)->assertJsonPath('cuit', $digits)->assertJsonPath('cuit_locked', false);
     }
 
@@ -28,24 +28,25 @@ class ProviderCuitTest extends VeterinaryTestCase
         $digits = $this->freshCuit();
         $wrong = substr($digits, 0, 10) . (((int) $digits[10] + 1) % 10);
 
-        $this->apiAs('POST', '/providers', ['name' => 'Mal tipeado', 'cuit' => $wrong])
+        $this->apiAs('POST', '/partners', ['name' => 'Mal tipeado', 'cuit' => $wrong])
             ->assertStatus(422)
             ->assertJsonPath('errors.cuit.0', "El dígito verificador no cierra: con esos 10 primeros dígitos el CUIT termina en {$digits[10]}.");
     }
 
     public function test_a_cuit_without_eleven_digits_is_refused(): void
     {
-        $this->apiAs('POST', '/providers', ['name' => 'Corto', 'cuit' => '30-1234567-1'])
+        $this->apiAs('POST', '/partners', ['name' => 'Corto', 'cuit' => '30-1234567-1'])
             ->assertStatus(422)->assertJsonPath('errors.cuit.0', 'El CUIT tiene 11 dígitos; se cargaron 10.');
     }
 
     public function test_the_same_number_with_other_formatting_is_a_duplicate(): void
     {
         $digits = $this->freshCuit();
-        $this->apiAs('POST', '/providers', ['name' => 'Original', 'cuit' => $digits])->assertStatus(201);
+        $this->apiAs('POST', '/partners', ['name' => 'Original', 'cuit' => $digits])->assertStatus(201);
 
-        $this->apiAs('POST', '/providers', ['name' => 'Repetido', 'cuit' => $this->dashed($digits)])
-            ->assertStatus(422)->assertJsonValidationErrors('cuit');
+        $this->apiAs('POST', '/partners', ['name' => 'Repetido', 'cuit' => $this->dashed($digits)])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.cuit.0', 'Ya hay un cliente o proveedor con ese CUIT en esta empresa.');
     }
 
     public function test_the_cuit_changes_while_no_document_carries_it(): void
@@ -53,7 +54,7 @@ class ProviderCuitTest extends VeterinaryTestCase
         $id = $this->provider();
         $corrected = $this->freshCuit();
 
-        $this->apiAs('PUT', "/providers/{$id}", ['name' => 'Corregido', 'cuit' => $this->dashed($corrected)])
+        $this->apiAs('PUT', "/partners/{$id}", ['name' => 'Corregido', 'cuit' => $this->dashed($corrected)])
             ->assertOk()->assertJsonPath('cuit', $corrected)->assertJsonPath('name', 'Corregido');
     }
 
@@ -62,21 +63,21 @@ class ProviderCuitTest extends VeterinaryTestCase
         $id = $this->provider();
         $this->document($id, 'VOIDED');
 
-        $this->apiAs('GET', "/providers/{$id}")->assertJsonPath('cuit_locked', true);
+        $this->apiAs('GET', "/partners/{$id}")->assertJsonPath('cuit_locked', true);
 
-        $this->apiAs('PUT', "/providers/{$id}", ['name' => 'Otro', 'cuit' => $this->freshCuit()])
+        $this->apiAs('PUT', "/partners/{$id}", ['name' => 'Otro', 'cuit' => $this->freshCuit()])
             ->assertStatus(422)
             ->assertJsonPath('errors.cuit.0', 'El CUIT no se puede cambiar: el proveedor ya tiene comprobantes registrados.');
     }
 
-    public function test_other_fields_change_on_a_provider_with_documents(): void
+    public function test_other_fields_change_on_a_partner_with_documents(): void
     {
         $id = $this->provider();
-        $cuit = (string) Provider::withoutGlobalScopes()->findOrFail($id)->cuit;
+        $cuit = (string) Partner::withoutGlobalScopes()->findOrFail($id)->cuit;
         $this->document($id, 'REGISTERED');
 
-        $this->apiAs('PUT', "/providers/{$id}", ['name' => 'Nuevo nombre', 'cuit' => $this->dashed($cuit), 'phone' => '341 555 0000'])
-            ->assertOk()->assertJsonPath('name', 'Nuevo nombre')->assertJsonPath('phone', '341 555 0000');
+        $this->apiAs('PUT', "/partners/{$id}", ['name' => 'Nuevo nombre', 'cuit' => $this->dashed($cuit), 'location' => 'Tandil'])
+            ->assertOk()->assertJsonPath('name', 'Nuevo nombre')->assertJsonPath('location', 'Tandil');
     }
 
     public function test_ten_digits_that_need_a_ten_have_no_suggested_digit(): void
@@ -91,7 +92,7 @@ class ProviderCuitTest extends VeterinaryTestCase
 
     private function provider(): int
     {
-        return (int) $this->apiAs('POST', '/providers', ['name' => 'Proveedor CUIT', 'cuit' => $this->freshCuit()])
+        return (int) $this->apiAs('POST', '/partners', ['name' => 'Proveedor CUIT', 'cuit' => $this->freshCuit()])
             ->assertStatus(201)->json('id');
     }
 
@@ -117,7 +118,7 @@ class ProviderCuitTest extends VeterinaryTestCase
             $ten = '30' . str_pad((string) random_int(0, 99_999_999), 8, '0', STR_PAD_LEFT);
             $expected = Cuit::fromString($ten . '0')->expectedCheckDigit();
             $digits = $ten . $expected;
-        } while ($expected === null || Provider::withoutGlobalScopes()->where('company_id', $this->company->id)->where('cuit', $digits)->exists());
+        } while ($expected === null || Partner::withoutGlobalScopes()->where('company_id', $this->company->id)->where('cuit', $digits)->exists());
 
         return $digits;
     }

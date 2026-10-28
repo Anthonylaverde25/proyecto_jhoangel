@@ -11,7 +11,7 @@ use App\Models\CaravanGestation;
 use App\Models\ServiceOrder;
 use App\Models\Batch;
 use App\Models\Farm;
-use App\Models\Provider;
+use Tests\Support\TestPartner;
 use App\Models\User;
 use App\Core\Enums\AnimalSex;
 use App\Core\Enums\GestationStage;
@@ -75,7 +75,7 @@ final class ImportOCRGestationTest extends TestCase
         ]);
 
         // 6. Create Provider, Farm, Batch, Service Order
-        $provider = Provider::firstOrCreate(
+        $provider = TestPartner::firstOrCreate(
             ['cuit' => '30987654321'],
             ['name' => 'Gestation Provider', 'is_active' => true]
         );

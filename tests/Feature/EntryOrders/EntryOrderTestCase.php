@@ -9,7 +9,8 @@ use App\Models\Batch;
 use App\Models\Breed;
 use App\Models\Color;
 use App\Models\Farm;
-use App\Models\Provider;
+use App\Models\Partner;
+use Tests\Support\TestPartner;
 use Tests\Feature\Veterinary\VeterinaryTestCase;
 
 /**
@@ -18,7 +19,7 @@ use Tests\Feature\Veterinary\VeterinaryTestCase;
  */
 abstract class EntryOrderTestCase extends VeterinaryTestCase
 {
-    protected Provider $provider;
+    protected Partner $provider;
     protected Farm $farm;
     protected Farm $otherFarm;
 
@@ -26,7 +27,7 @@ abstract class EntryOrderTestCase extends VeterinaryTestCase
     {
         parent::setUp();
 
-        $this->provider = Provider::create([
+        $this->provider = TestPartner::create([
             'name' => 'Consignataria Prueba EO',
             'cuit' => '30-70000001-' . random_int(0, 9),
             'is_active' => true,

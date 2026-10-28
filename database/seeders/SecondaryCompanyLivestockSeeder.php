@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Core\Enums\AnimalCategory as AnimalCategoryEnum;
+use App\Core\Enums\PartnerRole;
 use App\Core\Enums\WeighingTypeCode;
 use App\Models\Activity;
 use App\Models\AnimalCategory;
@@ -19,8 +20,9 @@ use App\Models\Color;
 use App\Models\Company;
 use App\Models\Farm;
 use App\Models\FemaleCaravanDetail;
-use App\Models\Provider;
+use App\Models\Partner;
 use App\Models\WeighingType;
+use Database\Seeders\Concerns\SeedsPartners;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 
@@ -39,6 +41,8 @@ use Illuminate\Support\Carbon;
  */
 class SecondaryCompanyLivestockSeeder extends Seeder
 {
+    use SeedsPartners;
+
     private const COMPANY_NAME = 'Hacienda Secundaria';
     private const RENSPA = '09.08.07.0002';
 
@@ -192,16 +196,17 @@ class SecondaryCompanyLivestockSeeder extends Seeder
     private function seedProvider(int $companyId): void
     {
         // Providers are company-scoped; seeders run without model events, so the company goes in the key.
-        $provider = Provider::withoutGlobalScopes()->updateOrCreate(
+        $provider = Partner::withoutGlobalScopes()->updateOrCreate(
             ['company_id' => $companyId, 'cuit' => self::PROVIDER['cuit']],
             [
                 'name' => self::PROVIDER['name'],
                 'commercial_name' => self::PROVIDER['commercial_name'],
                 'location' => self::PROVIDER['location'],
-                'phone' => self::PROVIDER['phone'],
                 'is_active' => true,
             ]
         );
+        $this->grantRoles($provider, [PartnerRole::SUPPLIER_LIVESTOCK]);
+        $this->ensureDefaultContact($provider, ['name' => 'Principal', 'phone' => self::PROVIDER['phone']]);
 
         foreach (self::PROVIDER_FARMS as $name => [$renspa, $location]) {
             Farm::withoutGlobalScopes()->updateOrCreate(

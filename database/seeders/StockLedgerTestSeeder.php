@@ -13,6 +13,7 @@ use App\Application\UseCases\Stock\RegisterInitialStockUseCase;
 use App\Application\UseCases\Stock\RegisterStockCountUseCase;
 use App\Application\UseCases\Stock\ReverseItemDocumentUseCase;
 use App\Application\UseCases\Stock\SetCriticalStockUseCase;
+use App\Core\Enums\PartnerRole;
 use App\Core\Interfaces\IItemDocumentRepository;
 use App\Models\Batch;
 use App\Models\BatchType;
@@ -22,11 +23,12 @@ use App\Models\FiscalDocumentType;
 use App\Models\Item;
 use App\Models\ItemCategory;
 use App\Models\ItemPresentation;
-use App\Models\Provider;
+use App\Models\Partner;
 use App\Models\Tax;
 use App\Models\TaxRate;
 use App\Models\UnitOfMeasure;
 use App\Models\Warehouse;
+use Database\Seeders\Concerns\SeedsPartners;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -40,6 +42,8 @@ use Illuminate\Support\Facades\DB;
  */
 class StockLedgerTestSeeder extends Seeder
 {
+    use SeedsPartners;
+
     private const EL_TALA_CUIT = '30708451238';
     private const MIXED_PROVIDER_CUIT = '30987654321';
     private const FUEL_PROVIDER_CUIT = '30715554441';
@@ -149,7 +153,7 @@ class StockLedgerTestSeeder extends Seeder
      * @param list<array<string, mixed>> $lines
      * @param list<array<string, mixed>> $documentTaxes
      */
-    private function fiscal(string $key, Provider $provider, string $type, int $pointOfSale, int $number, string $date, array $lines, ?string $declared = null, array $documentTaxes = [], ?int $related = null): ?int
+    private function fiscal(string $key, Partner $provider, string $type, int $pointOfSale, int $number, string $date, array $lines, ?string $declared = null, array $documentTaxes = [], ?int $related = null): ?int
     {
         $registration = app(RegisterFiscalDocumentUseCase::class)(FiscalDocumentDTO::fromArray([
             'provider_id' => $provider->id,
@@ -203,9 +207,9 @@ class StockLedgerTestSeeder extends Seeder
         ];
     }
 
-    private function provider(string $cuit): ?Provider
+    private function provider(string $cuit): ?Partner
     {
-        return Provider::withoutGlobalScopes()->where('company_id', $this->companyId)->where('cuit', $cuit)->first();
+        return Partner::withoutGlobalScopes()->where('company_id', $this->companyId)->where('cuit', $cuit)->first();
     }
 
     private function item(string $name): ?Item
@@ -223,13 +227,11 @@ class StockLedgerTestSeeder extends Seeder
         return (int) Tax::query()->where('code', $code)->value('id');
     }
 
-    private function fuelProvider(): Provider
+    private function fuelProvider(): Partner
     {
-        return Provider::withoutGlobalScopes()->firstOrCreate(
-            ['company_id' => $this->companyId, 'cuit' => self::FUEL_PROVIDER_CUIT],
-            ['name' => 'Estación de Servicio La Ruta', 'commercial_name' => 'La Ruta', 'location' => 'Ruta 226 km 160, Tandil',
-                'is_active' => true, 'supplies_livestock' => false, 'supplies_items' => true]
-        );
+        return $this->seedPartner($this->companyId, self::FUEL_PROVIDER_CUIT, [
+            'name' => 'Estación de Servicio La Ruta', 'commercial_name' => 'La Ruta', 'location' => 'Ruta 226 km 160, Tandil',
+        ], [PartnerRole::SUPPLIER_ITEMS]);
     }
 
     private function gasoil(): Item

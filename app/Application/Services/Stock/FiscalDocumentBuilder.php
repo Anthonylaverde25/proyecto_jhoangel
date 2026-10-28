@@ -17,9 +17,10 @@ use App\Core\Enums\TaxScope;
 use App\Core\Exceptions\FiscalDocumentException;
 use App\Core\Interfaces\IFiscalCatalogRepository;
 use App\Core\Interfaces\IFiscalDocumentRepository;
-use App\Core\Interfaces\IProviderRepository;
+use App\Core\Interfaces\IPartnerRepository;
 use App\Core\Services\FiscalDocumentCalculator;
 use App\Core\ValueObjects\Decimal;
+use App\Core\Enums\PartnerRole;
 
 /**
  * Checks a provider document as typed from the paper and computes its amounts, taxes and costs
@@ -33,7 +34,7 @@ final class FiscalDocumentBuilder
     public function __construct(
         private readonly IFiscalCatalogRepository $catalog,
         private readonly IFiscalDocumentRepository $documents,
-        private readonly IProviderRepository $providers,
+        private readonly IPartnerRepository $providers,
         private readonly ItemLineResolver $lines,
         private readonly BatchConsumptionGuard $batches,
         private readonly FiscalDocumentCalculator $calculator,
@@ -135,7 +136,7 @@ final class FiscalDocumentBuilder
 
             return null;
         }
-        if (!$provider->suppliesItems()) {
+        if (!$provider->hasRole(PartnerRole::SUPPLIER_ITEMS)) {
             $errors->add('provider_id', "{$provider->getName()} no está marcado como proveedor de artículos o servicios.");
         }
 

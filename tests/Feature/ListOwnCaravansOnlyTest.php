@@ -10,7 +10,7 @@ use App\Models\Batch;
 use App\Models\Caravan;
 use App\Models\Company;
 use App\Models\Farm;
-use App\Models\Provider;
+use Tests\Support\TestPartner;
 use App\Models\Tenant;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
@@ -71,7 +71,7 @@ class ListOwnCaravansOnlyTest extends TestCase
         ]);
 
         // 3. Create a Provider and External Farm
-        $provider = Provider::create([
+        $provider = TestPartner::create([
             'name' => 'Proveedor Externo',
             'cuit' => '30-11112222-3',
             'is_active' => true

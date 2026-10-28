@@ -13,7 +13,7 @@ use App\Models\BatchType;
 use App\Models\Caravan;
 use App\Models\Company;
 use App\Models\Farm;
-use App\Models\Provider;
+use Tests\Support\TestPartner;
 use App\Models\Tenant;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
@@ -110,7 +110,7 @@ class CreateBatchWithExtraFieldsTest extends TestCase
         ]);
 
         // 2. Create provider and external farm
-        $provider = Provider::create([
+        $provider = TestPartner::create([
             'name' => 'Proveedor Test 3',
             'cuit' => '30-11112222-5',
             'is_active' => true

@@ -11,7 +11,7 @@ use App\Models\Caravan;
 use App\Models\CaravanMovement;
 use App\Models\Company;
 use App\Models\Farm;
-use App\Models\Provider;
+use Tests\Support\TestPartner;
 use App\Models\Tenant;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
@@ -54,7 +54,7 @@ class AssignExternalCaravansToOwnBatchTest extends TestCase
     public function test_can_assign_caravans_from_external_batch_to_own_batch_and_preserve_provenance(): void
     {
         // 1. Crear Proveedor y Granja Externa
-        $provider = Provider::create([
+        $provider = TestPartner::create([
             'name' => 'Cabaña San Pedro',
             'cuit' => '30-99887766-5',
             'is_active' => true

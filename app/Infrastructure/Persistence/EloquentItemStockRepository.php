@@ -217,7 +217,7 @@ class EloquentItemStockRepository implements IItemStockRepository
             ->leftJoin('warehouses as wrin', 'wrin.id', '=', 'rin.warehouse_id')
             ->leftJoin('fiscal_documents as f', 'f.id', '=', 'd.fiscal_document_id')
             ->leftJoin('fiscal_document_types as ft', 'ft.id', '=', 'f.fiscal_document_type_id')
-            ->leftJoin('providers as p', 'p.id', '=', 'f.provider_id')
+            ->leftJoin('partners as p', 'p.id', '=', 'f.provider_id')
             // Semen S-A E9: the lot of the straws that moved.
             ->leftJoin('semen_lots as sl', 'sl.id', '=', 'l.semen_lot_id')
             ->where('m.company_id', $companyId)

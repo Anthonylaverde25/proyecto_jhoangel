@@ -31,7 +31,7 @@ class Task extends Model
     /** The pivot carries company_id: write it on attach (composite foreign keys). */
     public function providers(): BelongsToMany
     {
-        return $this->belongsToMany(Provider::class, 'task_provider')
+        return $this->belongsToMany(Partner::class, 'task_provider', 'task_id', 'provider_id')
             ->withPivot('company_id')
             ->withTimestamps();
     }

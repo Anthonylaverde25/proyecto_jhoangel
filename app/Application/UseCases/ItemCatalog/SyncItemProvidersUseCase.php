@@ -8,8 +8,9 @@ use App\Core\Entities\ItemEntity;
 use App\Core\Entities\ItemProviderLinkEntity;
 use App\Core\Exceptions\ItemCatalogException;
 use App\Core\Interfaces\IItemRepository;
-use App\Core\Interfaces\IProviderRepository;
+use App\Core\Interfaces\IPartnerRepository;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Core\Enums\PartnerRole;
 
 /**
  * Replaces the providers of an item with the full list the screen sends (DB4).
@@ -18,7 +19,7 @@ final class SyncItemProvidersUseCase
 {
     public function __construct(
         private readonly IItemRepository $items,
-        private readonly IProviderRepository $providers,
+        private readonly IPartnerRepository $providers,
     ) {
     }
 
@@ -44,7 +45,7 @@ final class SyncItemProvidersUseCase
             if ($provider === null || $provider->getCompanyId() !== $companyId) {
                 throw new ModelNotFoundException("Provider {$link->getProviderId()} not found.");
             }
-            if (!$provider->suppliesItems()) {
+            if (!$provider->hasRole(PartnerRole::SUPPLIER_ITEMS)) {
                 throw ItemCatalogException::providerDoesNotSupplyItems($provider->getName());
             }
         }

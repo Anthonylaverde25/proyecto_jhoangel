@@ -19,7 +19,6 @@ use App\Models\CaravanWeight;
 use App\Models\Color;
 use App\Models\Company;
 use App\Models\Farm;
-use App\Models\Provider;
 use App\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\ActivitySeeder;

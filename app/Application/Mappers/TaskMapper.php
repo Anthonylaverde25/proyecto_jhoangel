@@ -7,7 +7,7 @@ namespace App\Application\Mappers;
 use App\Core\Entities\TaskEntity;
 use App\Core\Enums\TaskUrgency;
 use App\Core\ValueObjects\TaskProviderRef;
-use App\Models\Provider;
+use App\Models\Partner;
 use App\Models\Task;
 use DateTimeImmutable;
 
@@ -17,7 +17,7 @@ final class TaskMapper
     {
         $providers = $model->relationLoaded('providers')
             ? $model->providers
-                ->map(fn (Provider $provider): TaskProviderRef => new TaskProviderRef((int) $provider->id, (string) $provider->name))
+                ->map(fn (Partner $provider): TaskProviderRef => new TaskProviderRef((int) $provider->id, (string) $provider->name))
                 ->values()
                 ->all()
             : [];

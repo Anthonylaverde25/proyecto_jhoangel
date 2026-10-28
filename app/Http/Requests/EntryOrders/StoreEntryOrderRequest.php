@@ -36,7 +36,7 @@ final class StoreEntryOrderRequest extends FormRequest
         return [
             'confirm' => 'sometimes|boolean',
             // Provider and origin farm of the order's own company (the database enforces it too).
-            'provider_id' => ['required', 'integer', Rule::exists('providers', 'id')->where('company_id', $this->companyId())],
+            'provider_id' => ['required', 'integer', Rule::exists('partners', 'id')->where('company_id', $this->companyId())],
             'farm_id' => ['required', 'integer', Rule::exists('farms', 'id')->where('company_id', $this->companyId())],
             'auction_number' => ['nullable', 'string', 'max:20', 'regex:/^[A-Za-z0-9]+$/'],
             'batch_name_mode' => ['required', Rule::enum(BatchNameMode::class)],

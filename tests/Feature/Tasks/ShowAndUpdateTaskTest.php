@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature\Tasks;
 
 use App\Models\Company;
-use App\Models\Provider;
+use App\Models\Partner;
+use Tests\Support\TestPartner;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Mcp\McpTestCase;
@@ -15,9 +16,9 @@ use Tests\Feature\Mcp\McpTestCase;
  */
 class ShowAndUpdateTaskTest extends McpTestCase
 {
-    private function provider(string $name, string $cuit, ?int $companyId = null): Provider
+    private function provider(string $name, string $cuit, ?int $companyId = null): Partner
     {
-        return Provider::withoutGlobalScopes()->create([
+        return TestPartner::create([
             'company_id' => $companyId ?? $this->company->id,
             'name' => $name,
             'cuit' => $cuit,
@@ -122,5 +123,10 @@ class ShowAndUpdateTaskTest extends McpTestCase
 
         $this->callWith($token, 'PATCH', '/providers/' . $agro->id . '/roles', ['supplies_items' => true])->assertForbidden();
         $this->callWith($token, 'PUT', '/providers/' . $agro->id, ['name' => 'Otro'])->assertForbidden();
+
+        $this->callWith($token, 'GET', '/partners/' . $agro->id)->assertOk();
+        $this->callWith($token, 'PATCH', '/partners/' . $agro->id . '/roles', ['roles' => ['SUPPLIER_ITEMS']])->assertForbidden();
+        $this->callWith($token, 'PUT', '/partners/' . $agro->id, ['name' => 'Otro'])->assertForbidden();
+        $this->callWith($token, 'POST', '/partners/' . $agro->id . '/contacts', ['name' => 'X', 'phone' => '1'])->assertForbidden();
     }
 }

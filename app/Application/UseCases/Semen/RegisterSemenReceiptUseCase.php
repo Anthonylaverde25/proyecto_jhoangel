@@ -17,7 +17,7 @@ use App\Core\Enums\ItemDocumentType;
 use App\Core\Enums\SemenType;
 use App\Core\Exceptions\SemenException;
 use App\Core\Interfaces\IItemDocumentRepository;
-use App\Core\Interfaces\IProviderRepository;
+use App\Core\Interfaces\IPartnerRepository;
 use App\Core\Interfaces\ISemenLotRepository;
 use App\Core\Interfaces\ISemenSireRepository;
 use App\Core\Interfaces\IUnitOfMeasureRepository;
@@ -36,7 +36,7 @@ final class RegisterSemenReceiptUseCase
     public function __construct(
         private readonly IItemDocumentRepository $documents,
         private readonly IWarehouseRepository $warehouses,
-        private readonly IProviderRepository $providers,
+        private readonly IPartnerRepository $providers,
         private readonly ISemenSireRepository $sires,
         private readonly ISemenLotRepository $lots,
         private readonly SemenItemProvisioner $provisioner,

@@ -4,18 +4,18 @@ declare(strict_types=1);
 
 namespace App\Application\DTOs;
 
-final readonly class UpdateProviderDTO
+/** Identity of a partner. Contact details live in its contacts; roles have their own endpoint. */
+final readonly class UpdatePartnerDTO
 {
     public function __construct(
         public string $name,
         public ?string $commercialName,
         public string $cuit,
         public ?string $location,
-        public ?string $email,
-        public ?string $phone,
     ) {
     }
 
+    /** @param array<string, mixed> $data */
     public static function fromArray(array $data): self
     {
         return new self(
@@ -23,8 +23,6 @@ final readonly class UpdateProviderDTO
             isset($data['commercial_name']) ? (string) $data['commercial_name'] : null,
             (string) ($data['cuit'] ?? ''),
             isset($data['location']) ? (string) $data['location'] : null,
-            isset($data['email']) ? (string) $data['email'] : null,
-            isset($data['phone']) ? (string) $data['phone'] : null,
         );
     }
 }

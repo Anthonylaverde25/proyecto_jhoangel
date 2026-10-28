@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\ItemCategoryController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\ItemPresentationController;
+use App\Http\Controllers\Api\PartnerContactController;
+use App\Http\Controllers\Api\PartnerController;
 use App\Http\Controllers\Api\ProviderController;
 use App\Http\Controllers\Api\UnitOfMeasureController;
 use Illuminate\Support\Facades\Route;
@@ -39,5 +41,22 @@ Route::controller(ItemPresentationController::class)->prefix('items/{id}/present
     Route::patch('/{presentationId}/active', 'setActive')->whereNumber(['id', 'presentationId']);
 });
 
-// A provider's roles decide what it may be linked to (D1, DB5).
+// Suppliers and customers ("Clientes y proveedores"); its roles decide what it may be linked to (C2).
+Route::controller(PartnerController::class)->prefix('partners')->group(function (): void {
+    Route::get('/', 'index');
+    Route::post('/', 'store');
+    Route::get('/{id}', 'show')->whereNumber('id');
+    Route::put('/{id}', 'update')->whereNumber('id');
+    Route::patch('/{id}/roles', 'updateRoles')->whereNumber('id');
+});
+
+Route::controller(PartnerContactController::class)->prefix('partners/{id}/contacts')->group(function (): void {
+    Route::post('/', 'store')->whereNumber('id');
+    Route::put('/{contactId}', 'update')->whereNumber(['id', 'contactId']);
+    Route::patch('/{contactId}/default', 'setDefault')->whereNumber(['id', 'contactId']);
+    Route::delete('/{contactId}', 'destroy')->whereNumber(['id', 'contactId']);
+});
+
+// Transitional alias of /partners (egreso plan v5, 03 §2); the rest of /providers is still in
+// legacy-unauthenticated.php.
 Route::patch('/providers/{id}/roles', [ProviderController::class, 'updateRoles'])->whereNumber('id');
