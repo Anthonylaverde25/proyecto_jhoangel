@@ -205,6 +205,18 @@ class GestationEntity
     }
 
 
+    /**
+     * The female was sold pregnant: the gestation is no longer followed here, and it is neither a
+     * success nor a loss.
+     */
+    public function closeBySale(string $date): void
+    {
+        $this->isCurrent = false;
+        $this->success = null;
+        $this->endDate = $date;
+        $this->notes = 'Vendida preñada';
+    }
+
     public function closeGestation(
         bool $success,
         string $endDate,

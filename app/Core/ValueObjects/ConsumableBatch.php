@@ -10,8 +10,8 @@ namespace App\Core\ValueObjects;
  */
 final readonly class ConsumableBatch
 {
-    /** Batch types that never receive a consumption: the animals are dead or slaughtered. */
-    public const EXCLUDED_TYPES = ['INTERNAL_DEATH', 'INTERNAL_CONSUMPTION'];
+    /** Batch types that never receive a consumption: the animals are dead, sold or slaughtered. */
+    public const EXCLUDED_TYPES = [...TerminalBatchTypes::ALL, 'INTERNAL_CONSUMPTION'];
 
     public function __construct(
         public int $id,

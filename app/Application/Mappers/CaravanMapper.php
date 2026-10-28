@@ -8,6 +8,7 @@ use App\Models\Caravan;
 use App\Core\Entities\CaravanEntity;
 use App\Core\ValueObjects\CaravanNumber;
 use App\Core\ValueObjects\DeathRecord;
+use App\Core\ValueObjects\ExitRecord;
 use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
 use App\Core\ValueObjects\FemaleReproductiveDetails;
@@ -117,7 +118,24 @@ class CaravanMapper
             $model->relationLoaded('batch') && $model->batch && $model->batch->relationLoaded('farm') && $model->batch->farm ? $model->batch->farm->name : null,
             $model->tagged_at instanceof \DateTimeInterface ? $model->tagged_at->format('Y-m-d') : ($model->tagged_at !== null ? substr((string) $model->tagged_at, 0, 10) : null),
             self::death($model),
-            self::nursingCalvesCount($model)
+            self::nursingCalvesCount($model),
+            self::exit($model)
+        );
+    }
+
+    /** The exit it left by, when the query loaded it (exitLine.exitOrder). */
+    private static function exit(Caravan $model): ?ExitRecord
+    {
+        if (!$model->relationLoaded('exitLine') || $model->exitLine === null) {
+            return null;
+        }
+
+        $line = $model->exitLine;
+
+        return new ExitRecord(
+            $line->exited_at?->format('Y-m-d') ?? '',
+            (string) ($line->exitOrder?->code ?? ''),
+            $line->exit_order_id
         );
     }
 

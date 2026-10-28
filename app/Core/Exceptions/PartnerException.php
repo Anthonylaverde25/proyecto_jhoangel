@@ -21,6 +21,12 @@ final class PartnerException extends FieldValidationException
         return self::on('roles', 'Marcá al menos un rol: qué nos vende o qué nos compra.');
     }
 
+    /** C2 for CUSTOMER_LIVESTOCK. */
+    public static function customerHasExitOrders(int $count): self
+    {
+        return self::on('roles', "Tiene {$count} orden(es) de egreso como comprador: no se le puede quitar \"Compra hacienda\".");
+    }
+
     /** C9. */
     public static function defaultContactInUse(): self
     {

@@ -108,6 +108,7 @@ final class LineageEntity
 
     public const ENDED_WEANED = 'WEANED';
     public const ENDED_DIED = 'DIED';
+    public const ENDED_EXITED = 'EXITED';
 
     /**
      * Weaned on that day, of the kind chosen: wherever the calf goes, or if it stays.
@@ -128,6 +129,16 @@ final class LineageEntity
         $this->isNursing = false;
         $this->nursingEndedAt = $date;
         $this->nursingEndReason = self::ENDED_DIED;
+    }
+
+    /**
+     * The calf left the company (sold alone or with its mother): no longer nursing, not weaned.
+     */
+    public function endNursingByExit(string $date): void
+    {
+        $this->isNursing = false;
+        $this->nursingEndedAt = $date;
+        $this->nursingEndReason = self::ENDED_EXITED;
     }
 
     public function getNursingEndedAt(): ?string

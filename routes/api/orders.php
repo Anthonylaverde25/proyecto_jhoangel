@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Api\BirthOrderController;
 use App\Http\Controllers\Api\EntryOrderController;
+use App\Http\Controllers\Api\ExitOrderController;
 use App\Http\Controllers\Api\TransferOrderController;
 use App\Http\Controllers\Api\WeaningDeviationController;
 use App\Http\Controllers\Api\WeaningOrderController;
@@ -89,4 +90,25 @@ Route::controller(BirthOrderController::class)->prefix('birth-orders')->group(fu
     Route::post('/{id}/execute', 'execute')->whereNumber('id');
     Route::post('/{id}/close-incomplete', 'closeIncomplete')->whereNumber('id');
     Route::post('/{id}/cancel', 'cancel')->whereNumber('id');
+});
+
+// Exit orders of livestock: issue and execute, or register an exit that already happened
+// (egreso plan v5, 05 §3).
+Route::controller(ExitOrderController::class)->group(function (): void {
+    Route::get('/exit-batches', 'exitBatches');
+
+    Route::prefix('exit-orders')->group(function (): void {
+        Route::get('/', 'index');
+        Route::post('/', 'store');
+        Route::post('/register', 'register');
+        Route::get('/code/{code}', 'byCode');
+        Route::get('/{id}', 'show')->whereNumber('id');
+        Route::put('/{id}', 'update')->whereNumber('id');
+        Route::post('/{id}/execute', 'execute')->whereNumber('id');
+        Route::post('/{id}/close', 'close')->whereNumber('id');
+        Route::post('/{id}/cancel', 'cancel')->whereNumber('id');
+        Route::post('/{id}/dtes', 'addDte')->whereNumber('id');
+        Route::delete('/{id}/dtes/{dteId}', 'removeDte')->whereNumber(['id', 'dteId']);
+        Route::post('/{id}/animals/{caravanId}/death', 'deathOnLine')->whereNumber(['id', 'caravanId']);
+    });
 });

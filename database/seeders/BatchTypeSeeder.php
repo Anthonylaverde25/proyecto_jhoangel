@@ -11,7 +11,7 @@ use App\Models\CompanyBatchType;
 use Illuminate\Database\Seeder;
 
 /**
- * Canonical batch type catalogue (twelve types in four families).
+ * Canonical batch type catalogue (thirteen types in four families).
  *
  * `activity_id` is a CATALOGUE constraint, not an instance one: a type with an
  * activity is only offered inside that activity, and a type with NULL is
@@ -136,6 +136,15 @@ class BatchTypeSeeder extends Seeder
                 'description' => 'Lote asociado a bajas o mortalidad interna',
                 'icon' => 'heroicons-outline:x-circle',
                 'color' => '#ef4444',
+                'activity_id' => $internalId,
+                'is_active' => true,
+            ],
+            [
+                'code' => 'INTERNAL_EXIT',
+                'name' => 'Internal Exit',
+                'description' => 'Lote de los animales que salieron de la empresa (egresos)',
+                'icon' => 'heroicons-outline:arrow-right-on-rectangle',
+                'color' => '#64748b',
                 'activity_id' => $internalId,
                 'is_active' => true,
             ],

@@ -4,21 +4,24 @@ declare(strict_types=1);
 
 namespace App\Application\Services;
 
+use App\Core\Interfaces\IExitOrderRepository;
 use App\Core\Interfaces\ITransferOrderRepository;
 use App\Core\Interfaces\IWeaningOrderRepository;
 
 /**
  * Which animals an open order already commits, whatever kind of order it is.
  *
- * Transfer orders and weaning orders live in different tables, but an animal is one animal: a
- * calf pending in an issued weaning order cannot be taken by a transfer order, nor by a second
- * weaning order, and the other way round. Every issue and every registration asks here.
+ * Transfer, weaning and exit orders live in different tables, but an animal is one animal: a calf
+ * pending in an issued weaning order cannot be taken by a transfer order, nor by a second weaning
+ * order, nor sold by an exit order, and the other way round (E3). Every issue and every
+ * registration asks here.
  */
 final class OpenOrderCommitmentChecker
 {
     public function __construct(
         private readonly ITransferOrderRepository $transferOrders,
-        private readonly IWeaningOrderRepository $weaningOrders
+        private readonly IWeaningOrderRepository $weaningOrders,
+        private readonly IExitOrderRepository $exitOrders
     ) {
     }
 
@@ -33,7 +36,8 @@ final class OpenOrderCommitmentChecker
         }
 
         return $this->transferOrders->findCommittedCaravans($caravanIds, $companyId)
-            + $this->weaningOrders->findCommittedCaravans($caravanIds, $companyId);
+            + $this->weaningOrders->findCommittedCaravans($caravanIds, $companyId)
+            + $this->exitOrders->findCommittedCaravans($caravanIds, $companyId);
     }
 
     /**

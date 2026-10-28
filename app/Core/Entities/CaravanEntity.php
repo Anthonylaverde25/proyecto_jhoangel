@@ -9,11 +9,13 @@ use App\Core\Enums\AnimalSex;
 use App\Core\Enums\GestationStage;
 use App\Core\Enums\PhysiologicalState;
 use App\Core\Exceptions\AnimalDeathException;
+use App\Core\Exceptions\CaravanExitException;
 use App\Core\Exceptions\DomainException;
 use App\Core\Exceptions\UntaggedAnimalException;
 use App\Core\ValueObjects\AnimalLabel;
 use App\Core\ValueObjects\CaravanNumber;
 use App\Core\ValueObjects\DeathRecord;
+use App\Core\ValueObjects\ExitRecord;
 use App\Core\ValueObjects\CaravanProvenance;
 use App\Core\ValueObjects\FemaleReproductiveDetails;
 
@@ -55,7 +57,8 @@ final class CaravanEntity
         private ?string $farmName = null,
         private ?string $taggedAt = null,
         private ?DeathRecord $death = null,
-        private ?int $nursingCalvesCount = null
+        private ?int $nursingCalvesCount = null,
+        private ?ExitRecord $exit = null
     ) {
         $this->validateTeeth($teeth);
     }
@@ -178,6 +181,12 @@ final class CaravanEntity
         return $this->death;
     }
 
+    /** Left the company by an exit order: the "Vendida" mark. */
+    public function getExit(): ?ExitRecord
+    {
+        return $this->exit;
+    }
+
     public function isDead(): bool
     {
         return $this->death !== null;
@@ -218,6 +227,44 @@ final class CaravanEntity
         );
 
         $this->death = new DeathRecord($date, $causeId, null, $observations);
+    }
+
+    /**
+     * The animal leaves the company on that date (E1, E5): a calf at foot stops nursing, a pregnant
+     * female's gestation is closed as sold, and the chute weight, when there is one, becomes its
+     * exit weight. Where it goes is the caller's business (the exit batch).
+     *
+     * @throws CaravanExitException dead, or a date before its birth or entry, or in the future
+     */
+    public function registerExit(string $date, ?float $weightKg = null): void
+    {
+        if ($this->death !== null) {
+            throw CaravanExitException::dead($this->label(), $this->death->date);
+        }
+
+        $birthDate = $this->lineage?->getBirthDate();
+        if ($birthDate !== null && $date < $birthDate) {
+            throw CaravanExitException::beforeBirth($this->label(), $birthDate);
+        }
+
+        $entryDate = $this->entryDate?->format('Y-m-d');
+        if ($entryDate !== null && $date < $entryDate) {
+            throw CaravanExitException::beforeEntry($this->label(), $entryDate);
+        }
+
+        if ($date > date('Y-m-d')) {
+            throw CaravanExitException::future($this->label());
+        }
+
+        if ($this->lineage?->isNursing()) {
+            $this->lineage->endNursingByExit($date);
+        }
+
+        $this->getActiveGestation()?->closeBySale($date);
+
+        if ($weightKg !== null) {
+            $this->exitWeight = $weightKg;
+        }
     }
 
     /**

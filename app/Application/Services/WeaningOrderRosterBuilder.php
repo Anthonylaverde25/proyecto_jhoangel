@@ -14,6 +14,7 @@ use App\Core\Interfaces\IActivityRepository;
 use App\Core\Interfaces\IBatchRepository;
 use App\Core\Interfaces\IBatchTypeRepository;
 use App\Core\Interfaces\IWeaningOrderRepository;
+use App\Core\ValueObjects\TerminalBatchTypes;
 
 /**
  * Turns what the weaning screen decided into the destinations and the roll of an order, and
@@ -32,7 +33,7 @@ final class WeaningOrderRosterBuilder
     public const WEANING_BATCH_TYPE = 'WEANING';
 
     /** Batches that never receive weaned calves. */
-    public const NOT_WEANING_DESTINATIONS = ['INTERNAL_DEATH', 'INTERNAL_CONSUMPTION'];
+    public const NOT_WEANING_DESTINATIONS = [...TerminalBatchTypes::ALL, 'INTERNAL_CONSUMPTION'];
     private const FALLBACK_ACTIVITY = 'CRIA';
 
     public function __construct(

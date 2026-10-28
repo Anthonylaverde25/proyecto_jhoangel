@@ -44,6 +44,9 @@ final readonly class CaravanSummaryRow
         /** The day it died and the cause, for an animal registered dead. */
         public ?string $deathDate = null,
         public ?string $deathCause = null,
+        /** The day it left by an exit order and that order's code (the "Vendida" mark). */
+        public ?string $exitDate = null,
+        public ?string $exitOrderCode = null,
     ) {
     }
 }

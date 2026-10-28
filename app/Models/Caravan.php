@@ -171,6 +171,12 @@ class Caravan extends Model
         return $this->hasOne(CaravanDeath::class, 'caravan_id');
     }
 
+    /** The exit order line it left by, when it left (E1: at most one). */
+    public function exitLine(): HasOne
+    {
+        return $this->hasOne(ExitOrderAnimal::class, 'caravan_id')->where('status', 'EXITED')->withoutGlobalScopes();
+    }
+
     /**
      * Get the offspring of this caravan as a mother.
      */

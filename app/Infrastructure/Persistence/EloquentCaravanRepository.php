@@ -67,12 +67,12 @@ class EloquentCaravanRepository implements ICaravanRepository
             $gestationModel->sires()->sync($sireSyncData);
         }
 
-        return CaravanMapper::toEntity($model->load(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause']));
+        return CaravanMapper::toEntity($model->load(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause', 'exitLine.exitOrder']));
     }
 
     public function findByIdentification(CaravanNumber $identification): ?CaravanEntity
     {
-        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause'])
+        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause', 'exitLine.exitOrder'])
             ->where('identification', $identification->getValue())
             ->first();
         
@@ -90,7 +90,7 @@ class EloquentCaravanRepository implements ICaravanRepository
             return [];
         }
 
-        $models = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause'])
+        $models = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause', 'exitLine.exitOrder'])
             ->whereIn('identification', $values)
             ->withCount(['offspringAsMother as nursing_calves_count' => fn ($q) => $q->where('is_nursing', true)])
             ->get();
@@ -145,7 +145,7 @@ class EloquentCaravanRepository implements ICaravanRepository
     public function findByIdentificationGlobal(CaravanNumber $identification): ?CaravanEntity
     {
         $model = Caravan::withoutGlobalScopes()
-            ->with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause'])
+            ->with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause', 'exitLine.exitOrder'])
             ->where('identification', $identification->getValue())
             ->first();
         
@@ -167,7 +167,7 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function findById(int $id): ?CaravanEntity
     {
-        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'batch.farm.provider', 'provider', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause'])
+        $model = Caravan::with(['categoryRelation', 'subcategoryRelation', 'breedRelation', 'colorRelation', 'batch.farm.provider', 'provider', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause', 'exitLine.exitOrder'])
             ->withExists('openServiceExposures as is_in_service')
             ->withCount(['offspringAsMother as nursing_calves_count' => fn ($q) => $q->where('is_nursing', true)])
             ->find($id);
@@ -289,6 +289,9 @@ class EloquentCaravanRepository implements ICaravanRepository
                 'lineage.mother:id,identification',
                 'death:id,caravan_id,death_date,death_cause_id',
                 'death.cause:id,name',
+                // The "Vendida" mark of an animal that left by an exit order.
+                'exitLine:id,caravan_id,exit_order_id,exited_at,status',
+                'exitLine.exitOrder:id,code',
             ])
             ->withExists(['gestations as has_current_gestation' => fn ($q) => $q->where('is_current', true)]);
 
@@ -377,6 +380,8 @@ class EloquentCaravanRepository implements ICaravanRepository
             label: AnimalLabel::of($model->identification, $model->lineage?->mother?->identification, $sex),
             deathDate: $model->death?->death_date?->format('Y-m-d'),
             deathCause: $model->death?->cause?->name,
+            exitDate: $model->exitLine?->exited_at?->format('Y-m-d'),
+            exitOrderCode: $model->exitLine?->exitOrder?->code,
         );
     }
 
@@ -715,7 +720,7 @@ class EloquentCaravanRepository implements ICaravanRepository
 
     public function findGestatingByBatch(int $batchId): array
     {
-        $models = Caravan::with(['breedRelation', 'batch', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause'])
+        $models = Caravan::with(['breedRelation', 'batch', 'currentWeight', 'femaleDetail', 'gestations.sires', 'gestations.lossReason', 'lineage.mother', 'lineage.father', 'death.cause', 'exitLine.exitOrder'])
             ->where('batch_id', $batchId)
             ->whereHas('gestations', function ($query) {
                 $query->where('is_current', true);

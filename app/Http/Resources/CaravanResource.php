@@ -33,6 +33,11 @@ class CaravanResource extends JsonResource
                 'cause' => $this->resource->getDeath()->causeName,
                 'observations' => $this->resource->getDeath()->observations,
             ] : null,
+            'exit'           => $this->resource->getExit() !== null ? [
+                'date' => $this->resource->getExit()->date,
+                'order_code' => $this->resource->getExit()->orderCode,
+                'order_id' => $this->resource->getExit()->orderId,
+            ] : null,
             'category'       => $this->resource->getCategoryName() ?? ($this->resource->getCategoryCode() ? strtolower($this->resource->getCategoryCode()) : null),
             'category_id'    => $this->resource->getCategoryId(),
             'category_code'  => $this->resource->getCategoryCode(),

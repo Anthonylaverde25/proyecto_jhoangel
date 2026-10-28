@@ -14,4 +14,5 @@ enum WeighingSource: string
     case ENTRY = 'ENTRY';
     case BIRTH = 'BIRTH';
     case IMPORT = 'IMPORT';
+    case EXIT_ORDER = 'EXIT_ORDER';
 }

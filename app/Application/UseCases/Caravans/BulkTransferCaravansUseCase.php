@@ -13,6 +13,7 @@ use App\Application\UseCases\Batches\GetOrCreateReserveBatchUseCase;
 use App\Core\Exceptions\DomainException;
 use App\Core\Interfaces\IBatchRepository;
 use App\Core\Interfaces\ICaravanRepository;
+use App\Core\ValueObjects\TerminalBatchTypes;
 use Illuminate\Support\Facades\DB;
 
 final class BulkTransferCaravansUseCase
@@ -52,8 +53,12 @@ final class BulkTransferCaravansUseCase
 
             // A death is a declared fact with its date and cause, not a move: it goes through
             // "Registrar muerte". A calf without its tag, or a dead animal, does not move from here.
-            if ($targetBatch->getBatchTypeCode() === 'INTERNAL_DEATH') {
+            if ($targetBatch->getBatchTypeCode() === TerminalBatchTypes::DEATH) {
                 throw new DomainException('Para dar de baja por muerte usá «Registrar muerte»: guarda la fecha y la causa.');
+            }
+            // A sale is a declared fact too (buyer, date, DTE): it goes through an exit order.
+            if ($targetBatch->getBatchTypeCode() === TerminalBatchTypes::EXIT) {
+                throw new DomainException('Para registrar una venta usá «Vender» o una orden de egreso: guarda el comprador y el DTE.');
             }
 
             $movementDate = new \DateTime($dto->movementDate ?? (new \DateTimeImmutable())->format('Y-m-d H:i:s'));
@@ -70,7 +75,7 @@ final class BulkTransferCaravansUseCase
                 if (!$caravan->isTagged()) {
                     $untagged[] = $caravan->label();
                 }
-                if ($caravan->isDead()) {
+                if ($caravan->isDead() || $this->inTerminalBatch($caravan->getBatchId())) {
                     $dead[] = $caravan->label();
                 }
 
@@ -82,7 +87,7 @@ final class BulkTransferCaravansUseCase
             }
 
             if ($dead !== []) {
-                throw new DomainException('Registrados como muertos: ' . implode(', ', $dead) . '. No se trasladan.');
+                throw new DomainException('Ya no están en la hacienda (muertos o egresados): ' . implode(', ', $dead) . '. No se trasladan.');
             }
 
             // Parting a mother from her calf at foot weans the calf, of the kind the user chose.
@@ -107,5 +112,11 @@ final class BulkTransferCaravansUseCase
                 'target_batch_name' => $targetBatchName,
             ];
         });
+    }
+
+    /** An animal in the death or the exit batch never comes back by a transfer. */
+    private function inTerminalBatch(?int $batchId): bool
+    {
+        return $batchId !== null && TerminalBatchTypes::contains($this->batchRepository->findById($batchId)?->getBatchTypeCode());
     }
 }

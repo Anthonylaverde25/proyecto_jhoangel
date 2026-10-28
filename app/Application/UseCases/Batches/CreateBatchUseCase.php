@@ -7,6 +7,7 @@ namespace App\Application\UseCases\Batches;
 use App\Application\DTOs\CreateBatchDTO;
 use App\Core\Entities\BatchEntity;
 use App\Core\Interfaces\IBatchRepository;
+use App\Core\ValueObjects\TerminalBatchTypes;
 
 final class CreateBatchUseCase
 {
@@ -24,7 +25,7 @@ final class CreateBatchUseCase
         // Auto-assign internal activity if it's an internal batch type
         if ($dto->batchTypeId !== null) {
             $batchType = $this->batchTypeRepository->findById($dto->batchTypeId);
-            if ($batchType !== null && in_array($batchType->getCode(), ['INTERNAL_CONSUMPTION', 'INTERNAL_DEATH', 'QUARANTINE'])) {
+            if ($batchType !== null && in_array($batchType->getCode(), ['INTERNAL_CONSUMPTION', 'QUARANTINE', ...TerminalBatchTypes::ALL])) {
                 $internalActivity = $this->activityRepository->findByCode('INTERNAL');
                 if ($internalActivity !== null) {
                     $activityId = $internalActivity->getId();

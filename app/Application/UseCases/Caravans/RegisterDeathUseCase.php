@@ -7,6 +7,7 @@ namespace App\Application\UseCases\Caravans;
 use App\Application\DTOs\Caravans\RegisterDeathDTO;
 use App\Application\Services\CaravanBatchMover;
 use App\Application\Services\DeathBatchResolver;
+use App\Application\Services\ExitOrderCodeGenerator;
 use App\Application\Services\OpenOrderCommitmentChecker;
 use App\Core\Entities\CaravanEntity;
 use App\Core\Exceptions\AnimalDeathException;
@@ -117,7 +118,9 @@ final class RegisterDeathUseCase
             $order = $committed[$caravanId] ?? $openMothers[$caravanId] ?? null;
 
             if ($order !== null) {
-                $errors[$field][] = "{$label} está en la orden {$order}: resolvelo primero en esa orden.";
+                $errors[$field][] = str_starts_with($order, ExitOrderCodeGenerator::PREFIX . '-')
+                    ? "{$label} está en la orden {$order}: registrá su muerte desde esa orden."
+                    : "{$label} está en la orden {$order}: resolvelo primero en esa orden.";
                 continue;
             }
 

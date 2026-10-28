@@ -34,6 +34,7 @@ use App\Core\Services\CaravanValueParser;
 use App\Core\Services\CaravanWeighingRecorder;
 use App\Core\Enums\WeighingSource;
 use App\Core\Enums\WeighingTypeCode;
+use App\Core\ValueObjects\TerminalBatchTypes;
 use App\Core\ValueObjects\WeighingReading;
 use Illuminate\Support\Facades\DB;
 
@@ -649,6 +650,12 @@ final class ProcessCact01SubmissionUseCase
 
                 if ($sourceBatch !== null && $batch->getId() === $sourceBatch->getId()) {
                     $headerErrors[] = $this->headerError('destinations', 'SAME_BATCH', "El destino '{$key}' es el mismo lote de origen.");
+                    continue;
+                }
+
+                // A death or a sale is a declared fact with its own flow, never a sheet movement.
+                if (TerminalBatchTypes::contains($batch->getBatchTypeCode())) {
+                    $headerErrors[] = $this->headerError('destinations', 'TERMINAL_DESTINATION', "El destino '{$key}' es el lote {$batch->getName()}: las muertes y los egresos se registran aparte.");
                     continue;
                 }
 
