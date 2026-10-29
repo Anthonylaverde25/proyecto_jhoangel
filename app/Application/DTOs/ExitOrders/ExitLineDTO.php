@@ -15,6 +15,8 @@ final readonly class ExitLineDTO
         public ?float $pricePerKg = null,
         public ?float $amount = null,
         public ?CalfAtFootDecision $calfDecision = null,
+        /** The share of the truck's total kg, not a weighing of the animal. */
+        public bool $weightEstimated = false,
     ) {
     }
 
@@ -29,6 +31,7 @@ final readonly class ExitLineDTO
             $number('price_per_kg'),
             $number('amount'),
             isset($row['calf_decision']) ? CalfAtFootDecision::tryFrom((string) $row['calf_decision']) : null,
+            filter_var($row['weight_estimated'] ?? false, FILTER_VALIDATE_BOOLEAN),
         );
     }
 

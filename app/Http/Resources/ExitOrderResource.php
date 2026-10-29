@@ -69,28 +69,7 @@ class ExitOrderResource extends JsonResource
             'responsable' => $order->getResponsable(),
             'observations' => $order->getObservations(),
             'first_executed_at' => $order->getFirstExecutedAt()?->format(DATE_ATOM),
-            'animals' => array_map(fn (ExitOrderAnimalEntity $line) => [
-                'id' => $line->getId(),
-                'caravan_id' => $line->getCaravanId(),
-                'label' => $line->getLabel(),
-                'status' => $line->getStatus()->value,
-                'status_label' => $line->getStatus()->label(),
-                'from_batch' => $line->getSnapshot()?->fromBatchId !== null
-                    ? ['id' => $line->getSnapshot()->fromBatchId, 'name' => $line->getSnapshot()->fromBatchName]
-                    : null,
-                'activity' => $line->getSnapshot()?->activityId !== null
-                    ? ['id' => $line->getSnapshot()->activityId, 'name' => $line->getSnapshot()->activityName]
-                    : null,
-                'category' => $line->getSnapshot()?->categoryId !== null
-                    ? ['id' => $line->getSnapshot()->categoryId, 'name' => $line->getSnapshot()->categoryName]
-                    : null,
-                'was_pregnant' => $line->getSnapshot()?->wasPregnant,
-                'weight_kg' => $line->getWeightKg(),
-                'price_per_kg' => $line->getPricePerKg(),
-                'amount' => $line->getAmount(),
-                'exited_at' => $line->getExitedAt(),
-                'skipped_reason' => $line->getSkippedReason(),
-            ], $order->getAnimals()),
+            'animals' => array_map(fn (ExitOrderAnimalEntity $line) => $this->line($line), $order->getAnimals()),
             'dtes' => array_map(fn (ExitOrderDteEntity $dte) => [
                 'id' => $dte->id,
                 'dte_number' => $dte->dteNumber,
@@ -107,6 +86,36 @@ class ExitOrderResource extends JsonResource
                 'metadata' => $row->metadata,
                 'created_at' => $row->createdAt?->format(DATE_ATOM),
             ], $order->getHistory()),
+        ];
+    }
+
+    /**
+     * A line of the roll. Batch, activity and category are those of the day it left; a line still
+     * pending (or skipped) shows where the animal stands now.
+     *
+     * @return array<string, mixed>
+     */
+    private function line(ExitOrderAnimalEntity $line): array
+    {
+        $place = $line->getSnapshot() ?? $line->getCurrentPlace();
+
+        return [
+            'id' => $line->getId(),
+            'caravan_id' => $line->getCaravanId(),
+            'label' => $line->getLabel(),
+            'status' => $line->getStatus()->value,
+            'status_label' => $line->getStatus()->label(),
+            'from_batch' => $place?->fromBatchId !== null ? ['id' => $place->fromBatchId, 'name' => $place->fromBatchName] : null,
+            'activity' => $place?->activityId !== null ? ['id' => $place->activityId, 'name' => $place->activityName] : null,
+            'category' => $place?->categoryId !== null ? ['id' => $place->categoryId, 'name' => $place->categoryName] : null,
+            'was_pregnant' => $line->getSnapshot()?->wasPregnant,
+            'weight_kg' => $line->getWeightKg(),
+            'weight_estimated' => $line->isWeightEstimated(),
+            'last_weight_kg' => $line->getLastWeightKg(),
+            'price_per_kg' => $line->getPricePerKg(),
+            'amount' => $line->getAmount(),
+            'exited_at' => $line->getExitedAt(),
+            'skipped_reason' => $line->getSkippedReason(),
         ];
     }
 }

@@ -52,6 +52,20 @@ class RegisterExitTest extends ExitOrderTestCase
             ->assertJsonPath('total_amount', 950000);
     }
 
+    public function test_a_share_of_the_truck_kg_is_kept_as_estimated_without_weighing_the_animal(): void
+    {
+        $steer = $this->steer('EX-R5');
+
+        $this->registerExit([$this->line($steer, ['weight_kg' => 410.5, 'weight_estimated' => true, 'price_per_kg' => 2000])])
+            ->assertStatus(201)
+            ->assertJsonPath('animals.0.weight_kg', 410.5)
+            ->assertJsonPath('animals.0.weight_estimated', true)
+            ->assertJsonPath('animals.0.amount', 821000)
+            ->assertJsonPath('total_weight_kg', 410.5);
+
+        $this->assertFalse(CaravanWeight::where('caravan_id', $steer->id)->where('source', 'EXIT_ORDER')->exists());
+    }
+
     public function test_the_dte_comes_along_and_a_number_covers_one_exit_only(): void
     {
         $first = $this->steer('EX-R3');

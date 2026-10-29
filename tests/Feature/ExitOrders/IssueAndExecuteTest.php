@@ -28,6 +28,19 @@ class IssueAndExecuteTest extends ExitOrderTestCase
             ->assertOk()->assertJsonPath('status', 'EXECUTED')->assertJsonPath('exited_count', 3);
     }
 
+    public function test_the_price_agreed_at_issue_stays_on_each_pending_line(): void
+    {
+        $a = $this->steer('EX-I8');
+        $b = $this->steer('EX-I9');
+
+        $this->issue([$a, $b], ['agreed_prices' => [['caravan_id' => $a->id, 'price_per_kg' => 2450]]])
+            ->assertStatus(201)
+            ->assertJsonPath('animals.0.price_per_kg', 2450)
+            ->assertJsonPath('animals.0.status', 'PENDING')
+            ->assertJsonPath('animals.1.price_per_kg', null)
+            ->assertJsonStructure(['animals' => [['last_weight_kg']]]);
+    }
+
     public function test_an_animal_outside_the_roll_does_not_leave_by_the_order(): void
     {
         $inRoll = $this->steer('EX-I4');

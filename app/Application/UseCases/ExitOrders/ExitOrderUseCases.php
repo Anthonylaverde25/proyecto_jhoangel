@@ -19,6 +19,8 @@ final class ExitOrderUseCases
         public readonly AddExitOrderDteUseCase $addDte,
         public readonly RemoveExitOrderDteUseCase $removeDte,
         public readonly RegisterDeathOnExitLineUseCase $deathOnLine,
+        public readonly ListCalvesAtFootUseCase $calvesAtFoot,
+        public readonly ListExitedAnimalsUseCase $exitedAnimals,
     ) {
     }
 }

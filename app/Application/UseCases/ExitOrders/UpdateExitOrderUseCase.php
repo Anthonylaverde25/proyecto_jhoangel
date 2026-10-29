@@ -30,6 +30,7 @@ final class UpdateExitOrderUseCase
             $labels = $this->exits->checkRoll($dto->caravanIds, $dto->companyId, $order->getCode());
 
             $order->replaceRoll($dto->buyerPartnerId, $dto->exitDate, $dto->caravanIds, $dto->responsable, $dto->observations, $labels);
+            $order->agreePrices($dto->agreedPrices);
 
             return $this->orders->save($order, $dto->userId, 'Orden editada', ['head_count' => count($dto->caravanIds)]);
         });

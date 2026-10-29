@@ -22,6 +22,9 @@ class EloquentExitOrderRepository implements IExitOrderRepository
     private const DETAIL_RELATIONS = [
         'buyer',
         'animals.caravan.lineage.mother',
+        'animals.caravan.batch.activity',
+        'animals.caravan.categoryRelation',
+        'animals.caravan.currentWeight',
         'animals.fromBatch',
         'animals.activity',
         'animals.category',
@@ -127,6 +130,7 @@ class EloquentExitOrderRepository implements IExitOrderRepository
             'category_id' => $snapshot?->categoryId,
             'was_pregnant' => $snapshot?->wasPregnant,
             'weight_kg' => $animal->getWeightKg(),
+            'weight_estimated' => $animal->isWeightEstimated(),
             'price_per_kg' => $animal->getPricePerKg(),
             'amount' => $animal->getAmount(),
             'exited_at' => $animal->getExitedAt(),

@@ -19,6 +19,7 @@ final class ExitLinesRules
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.caravan_id' => ['required', 'integer', 'distinct'],
             'lines.*.weight_kg' => ['nullable', 'numeric', 'gt:0', 'max:3000'],
+            'lines.*.weight_estimated' => ['nullable', 'boolean'],
             'lines.*.price_per_kg' => ['nullable', 'numeric', 'gt:0'],
             'lines.*.amount' => ['nullable', 'numeric', 'min:0'],
             'lines.*.calf_decision' => ['nullable', Rule::enum(CalfAtFootDecision::class)],

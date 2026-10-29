@@ -27,6 +27,9 @@ final class ExitOrderAnimalEntity
         private ?int $caravanWeightId = null,
         private ?string $skippedReason = null,
         private readonly ?string $label = null,
+        private readonly ?ExitSnapshot $currentPlace = null,
+        private bool $weightEstimated = false,
+        private readonly ?float $lastWeightKg = null,
     ) {
     }
 
@@ -58,6 +61,18 @@ final class ExitOrderAnimalEntity
     public function getWeightKg(): ?float
     {
         return $this->weightKg;
+    }
+
+    /** The animal's last weighing while it has not left: the kg the order plans with. */
+    public function getLastWeightKg(): ?float
+    {
+        return $this->lastWeightKg;
+    }
+
+    /** The weight is this animal's share of the truck's total kg, not a weighing. */
+    public function isWeightEstimated(): bool
+    {
+        return $this->weightEstimated;
     }
 
     public function getPricePerKg(): ?float
@@ -97,6 +112,15 @@ final class ExitOrderAnimalEntity
     }
 
     /**
+     * Where an animal that has not left stands now, read for display only: the snapshot is taken
+     * the day it leaves and is the one persisted.
+     */
+    public function getCurrentPlace(): ?ExitSnapshot
+    {
+        return $this->currentPlace;
+    }
+
+    /**
      * The animal left. E7: with weight and price per kg the amount is their product, rounded to
      * cents; without one of them an amount typed directly (a per-head sale) is kept, or none.
      */
@@ -108,6 +132,7 @@ final class ExitOrderAnimalEntity
         ?float $amount,
         int $caravanMovementId,
         ?int $caravanWeightId,
+        bool $weightEstimated = false,
     ): void {
         if (!$this->isPending()) {
             throw ExitOrderDomainException::on('caravan_id', 'Ese animal ya no está pendiente en la orden.');
@@ -117,12 +142,26 @@ final class ExitOrderAnimalEntity
         $this->exitedAt = $exitedAt;
         $this->snapshot = $snapshot;
         $this->weightKg = $weightKg;
+        $this->weightEstimated = $weightKg !== null && $weightEstimated;
         $this->pricePerKg = $pricePerKg;
         $this->amount = $weightKg !== null && $pricePerKg !== null
             ? round($weightKg * $pricePerKg, 2)
             : $amount;
         $this->caravanMovementId = $caravanMovementId;
         $this->caravanWeightId = $caravanWeightId;
+    }
+
+    /** The $/kg agreed at issue for an animal that has not left yet. */
+    public function agreePrice(float $pricePerKg): void
+    {
+        if (!$this->isPending()) {
+            throw ExitOrderDomainException::on('caravan_id', 'Ese animal ya no está pendiente en la orden.');
+        }
+        if ($pricePerKg <= 0) {
+            throw ExitOrderDomainException::on('price_per_kg', 'El precio por kg tiene que ser mayor a 0.');
+        }
+
+        $this->pricePerKg = $pricePerKg;
     }
 
     /** Taken off the roll without leaving: the order closed with it pending, or it died. */

@@ -45,6 +45,7 @@ final class IssueExitOrderUseCase
                 $dto->observations,
                 $labels,
             );
+            $order->agreePrices($dto->agreedPrices);
 
             return $this->orders->save($order, $dto->userId, null, ['head_count' => count($dto->caravanIds)]);
         });

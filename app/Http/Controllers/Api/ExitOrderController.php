@@ -14,6 +14,7 @@ use App\Core\Entities\BatchEntity;
 use App\Core\Entities\ExitOrderEntity;
 use App\Core\Enums\ExitOrderKind;
 use App\Core\Enums\ExitOrderStatus;
+use App\Core\ValueObjects\ExitedAnimalCriteria;
 use App\Core\ValueObjects\ExitOrderCriteria;
 use App\Http\Controllers\Api\Concerns\ResolvesActiveCompany;
 use App\Http\Controllers\Controller;
@@ -141,6 +142,35 @@ final class ExitOrderController extends Controller
             $this->activeCompanyId(),
             $request->user()?->id
         ));
+    }
+
+    /** The calves at foot of the cows of a load, to ask whether they leave with them (P1). */
+    public function calvesAtFoot(Request $request): JsonResponse
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', explode(',', (string) $request->query('caravan_ids', ''))),
+            fn (int $id) => $id > 0
+        )));
+
+        return response()->json(($this->useCases->calvesAtFoot)($ids));
+    }
+
+    /** The animals that already left, one row each, across orders: the base of sales analysis. */
+    public function exitedAnimals(Request $request): JsonResponse
+    {
+        $number = fn (string $key) => is_numeric($request->query($key)) ? (int) $request->query($key) : null;
+        $date = fn (string $key) => is_string($request->query($key)) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $request->query($key)) === 1 ? $request->query($key) : null;
+
+        return response()->json(($this->useCases->exitedAnimals)(new ExitedAnimalCriteria(
+            companyId: $this->activeCompanyId(),
+            from: $date('from'),
+            to: $date('to'),
+            exitOrderId: $number('exit_order_id'),
+            buyerPartnerId: $number('buyer_partner_id'),
+            categoryId: $number('category_id'),
+            activityId: $number('activity_id'),
+            fromBatchId: $number('from_batch_id'),
+        )));
     }
 
     /** The active exit batches, to choose one when the company has several. */

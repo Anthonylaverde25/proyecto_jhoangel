@@ -133,6 +133,21 @@ final class ExitOrderEntity
         $this->rosterReplaced = true;
     }
 
+    /**
+     * The $/kg agreed with the buyer for animals still pending, by caravan id. A reference the load
+     * starts from; the price that counts is the one the exit declares.
+     *
+     * @param array<int, float> $prices
+     */
+    public function agreePrices(array $prices): void
+    {
+        foreach ($this->animals as $line) {
+            if (isset($prices[$line->getCaravanId()])) {
+                $line->agreePrice($prices[$line->getCaravanId()]);
+            }
+        }
+    }
+
     /** The line of a pending animal, for a load to execute. */
     public function pendingLine(int $caravanId): ?ExitOrderAnimalEntity
     {
@@ -171,7 +186,7 @@ final class ExitOrderEntity
     /**
      * One load of the order left on that date.
      *
-     * @param array<int, array{snapshot: ExitSnapshot, weight_kg: ?float, price_per_kg: ?float, amount: ?float, movement_id: int, weight_id: ?int}> $exits by caravan id
+     * @param array<int, array{snapshot: ExitSnapshot, weight_kg: ?float, weight_estimated: bool, price_per_kg: ?float, amount: ?float, movement_id: int, weight_id: ?int}> $exits by caravan id
      */
     public function recordExits(string $exitDate, array $exits): void
     {
@@ -191,6 +206,7 @@ final class ExitOrderEntity
                 $exit['amount'],
                 $exit['movement_id'],
                 $exit['weight_id'],
+                $exit['weight_estimated'] ?? false,
             );
         }
 

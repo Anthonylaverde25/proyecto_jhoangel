@@ -87,7 +87,7 @@ final class CaravanExitRecorder
      * Takes one load out of the order on that date. Rows are keyed "lines.{i}" in the errors.
      *
      * @param list<ExitLineDTO> $lines
-     * @return array<int, array{snapshot: ExitSnapshot, weight_kg: ?float, price_per_kg: ?float, amount: ?float, movement_id: int, weight_id: ?int}>
+     * @return array<int, array{snapshot: ExitSnapshot, weight_kg: ?float, weight_estimated: bool, price_per_kg: ?float, amount: ?float, movement_id: int, weight_id: ?int}>
      *
      * @throws ExitOrderDomainException
      */
@@ -150,7 +150,9 @@ final class CaravanExitRecorder
             $snapshots[$caravanId] = $this->snapshotOf($caravan);
 
             try {
-                $caravan->registerExit($exitDate, $values[$caravanId]->weightKg ?? null);
+                // An estimated share of the truck's kg is not the animal's exit weight.
+                $line = $values[$caravanId] ?? null;
+                $caravan->registerExit($exitDate, $line !== null && !$line->weightEstimated ? $line->weightKg : null);
             } catch (CaravanExitException $e) {
                 $index = $this->indexOf($lines, $caravanId) ?? ($calvesWithMother[$caravanId] ?? 0);
                 $errors["lines.{$index}.caravan_id"][] = $e->getMessage();
@@ -188,6 +190,7 @@ final class CaravanExitRecorder
             $exits[$caravanId] = [
                 'snapshot' => $snapshots[$caravanId],
                 'weight_kg' => $line?->weightKg,
+                'weight_estimated' => $line?->weightEstimated ?? false,
                 'price_per_kg' => $line?->pricePerKg,
                 'amount' => $line?->amount,
                 'movement_id' => $movementIds[$caravanId],
@@ -322,7 +325,7 @@ final class CaravanExitRecorder
     {
         $ids = [];
         foreach ($values as $caravanId => $line) {
-            if ($line->weightKg === null) {
+            if ($line->weightKg === null || $line->weightEstimated) {
                 continue;
             }
 

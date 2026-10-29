@@ -26,6 +26,18 @@ class ExitSideEffectsTest extends ExitOrderTestCase
         $this->assertSame('Vendida preñada', $gestation->notes);
     }
 
+    public function test_the_screen_learns_which_cows_carry_a_calf_at_foot(): void
+    {
+        [$cow, $calf] = $this->cowWithCalf('EX-S4');
+        $steer = $this->steer('EX-S5');
+
+        $this->getJson("/api/exit-orders/calves-at-foot?caravan_ids={$cow->id},{$steer->id}")
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.mother_id', $cow->id)
+            ->assertJsonPath('0.calf_id', $calf->id);
+    }
+
     public function test_a_cow_with_a_calf_at_foot_says_what_happens_to_it(): void
     {
         [$cow, $calf] = $this->cowWithCalf('EX-S2');

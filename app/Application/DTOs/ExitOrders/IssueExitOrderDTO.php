@@ -7,7 +7,10 @@ namespace App\Application\DTOs\ExitOrders;
 /** "Emitir egreso": who buys, when, and which animals (egreso plan v5, 05 §3). */
 final readonly class IssueExitOrderDTO
 {
-    /** @param list<int> $caravanIds */
+    /**
+     * @param list<int> $caravanIds
+     * @param array<int, float> $agreedPrices caravan id => $/kg agreed with the buyer (optional)
+     */
     public function __construct(
         public int $companyId,
         public ?int $userId,
@@ -16,6 +19,7 @@ final readonly class IssueExitOrderDTO
         public array $caravanIds,
         public ?string $responsable = null,
         public ?string $observations = null,
+        public array $agreedPrices = [],
     ) {
     }
 
@@ -30,6 +34,9 @@ final readonly class IssueExitOrderDTO
             array_map('intval', array_values($data['caravan_ids'] ?? [])),
             $data['responsable'] ?? null,
             $data['observations'] ?? null,
+            collect($data['agreed_prices'] ?? [])
+                ->mapWithKeys(fn (array $row) => [(int) $row['caravan_id'] => (float) $row['price_per_kg']])
+                ->all(),
         );
     }
 }

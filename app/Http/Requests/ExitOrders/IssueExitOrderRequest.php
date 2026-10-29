@@ -24,6 +24,9 @@ class IssueExitOrderRequest extends FormRequest
             'caravan_ids.*' => ['integer', 'distinct'],
             'responsable' => ['nullable', 'string', 'max:255'],
             'observations' => ['nullable', 'string', 'max:2000'],
+            'agreed_prices' => ['nullable', 'array'],
+            'agreed_prices.*.caravan_id' => ['required', 'integer'],
+            'agreed_prices.*.price_per_kg' => ['required', 'numeric', 'gt:0'],
         ];
     }
 

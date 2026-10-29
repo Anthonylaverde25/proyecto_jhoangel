@@ -90,6 +90,11 @@ class ExitOrderMapper
                 )
                 : null,
             weightKg: $line->weight_kg,
+            weightEstimated: (bool) $line->weight_estimated,
+            // The weight the herd shows for the animal: its current weighing, or the entry weight.
+            lastWeightKg: $status === ExitOrderAnimalStatus::PENDING && $caravan !== null
+                ? self::lastWeightOf($caravan)
+                : null,
             pricePerKg: $line->price_per_kg,
             amount: $line->amount,
             exitedAt: $line->exited_at?->format('Y-m-d'),
@@ -99,6 +104,24 @@ class ExitOrderMapper
             label: $caravan !== null
                 ? AnimalLabel::of($caravan->identification, $caravan->lineage?->mother?->identification, $caravan->sex instanceof \BackedEnum ? $caravan->sex->value : $caravan->sex)
                 : null,
+            currentPlace: $status !== ExitOrderAnimalStatus::EXITED && $caravan !== null && $caravan->relationLoaded('batch')
+                ? new ExitSnapshot(
+                    $caravan->batch_id,
+                    $caravan->batch?->activity_id,
+                    $caravan->category_id,
+                    false,
+                    $caravan->batch?->name,
+                    $caravan->batch?->relationLoaded('activity') ? $caravan->batch->activity?->name : null,
+                    $caravan->relationLoaded('categoryRelation') ? $caravan->categoryRelation?->name : null,
+                )
+                : null,
         );
+    }
+
+    private static function lastWeightOf(\App\Models\Caravan $caravan): ?float
+    {
+        $weight = ($caravan->relationLoaded('currentWeight') ? $caravan->currentWeight?->weight : null) ?? $caravan->entry_weight;
+
+        return $weight !== null ? (float) $weight : null;
     }
 }

@@ -101,6 +101,8 @@ Route::controller(ExitOrderController::class)->group(function (): void {
         Route::get('/', 'index');
         Route::post('/', 'store');
         Route::post('/register', 'register');
+        Route::get('/calves-at-foot', 'calvesAtFoot');
+        Route::get('/animals', 'exitedAnimals');
         Route::get('/code/{code}', 'byCode');
         Route::get('/{id}', 'show')->whereNumber('id');
         Route::put('/{id}', 'update')->whereNumber('id');
