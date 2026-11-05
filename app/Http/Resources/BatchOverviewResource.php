@@ -22,11 +22,13 @@ class BatchOverviewResource extends JsonResource
         $overview = $this->resource;
 
         return [
-            'batch_id'             => $overview->batchId,
-            'sex_composition'      => $overview->sexComposition,
-            'category_composition' => $overview->categoryComposition,
-            'last_weighing_date'   => $overview->lastWeighingDate?->format('Y-m-d'),
-            'reproductive'         => $overview->reproductive,
+            'batch_id'                   => $overview->batchId,
+            'sex_composition'            => $overview->sexComposition,
+            'category_composition'       => $overview->categoryComposition,
+            'last_weighing_date'         => $overview->lastWeighingDate?->format('Y-m-d'),
+            'reproductive'               => $overview->reproductive,
+            'castration_candidate_count' => $overview->castrationCandidateCount,
+            'bulls_on_service'           => $overview->bullsOnService,
             'alerts'               => array_map(fn (BatchAlert $alert) => [
                 'type'     => $alert->type,
                 'severity' => $alert->severity,

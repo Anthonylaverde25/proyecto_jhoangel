@@ -168,6 +168,19 @@ class CaravanWeighingTest extends TestCase
         $this->assertSame(1, CaravanWeight::where('caravan_id', $caravan->id)->count());
     }
 
+    public function test_a_weighing_dated_in_the_future_is_rejected(): void
+    {
+        // It would stay current over every real weighing loaded until that day arrives.
+        [, $caravan] = $this->batchWithAnimal('PES-FUT-01', 400.0, '2026-08-01');
+
+        $this->postJson("http://test.localhost/api/caravans/{$caravan->id}/weights", [
+            'weight' => 410,
+            'weighing_date' => now()->addDay()->toDateString(),
+        ], $this->headers())->assertStatus(422)->assertJsonValidationErrors(['weighing_date']);
+
+        $this->assertSame(1, CaravanWeight::where('caravan_id', $caravan->id)->count());
+    }
+
     public function test_a_bulk_weighing_dates_the_batch_point_on_the_weighing_day(): void
     {
         [$batch, $caravan] = $this->batchWithAnimal('PES-BULK-01', 250.0, '2026-07-01');

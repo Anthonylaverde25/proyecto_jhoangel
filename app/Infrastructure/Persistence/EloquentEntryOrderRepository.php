@@ -376,7 +376,7 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
             ->leftJoinSub($receivedByDte, 'r', 'r.entry_order_dte_id', '=', 'd.id')
             ->select(
                 'd.entry_order_id',
-                DB::raw('SUM(d.head_count) as with_dte'),
+                DB::raw('SUM(CASE WHEN d.dte_number IS NOT NULL THEN d.head_count ELSE 0 END) as with_dte'),
                 DB::raw('SUM(COALESCE(r.received, 0) + d.uncaravaned_head_count + d.written_off_head_count) as received'),
                 DB::raw('SUM(d.uncaravaned_head_count) as uncaravaned'),
                 DB::raw("SUM(CASE WHEN {$pending} > 0 THEN {$pending} ELSE 0 END) as in_transit")
@@ -386,7 +386,7 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
     }
 
     /**
-     * A DTE is written once; later only its declared and missing head change (saveDteChanges).
+     * A DTE is written once; later only its paper and its head change (saveDteChanges).
      */
     private function insertNewDtes(EntryOrder $model, EntryOrderEntity $order): void
     {
@@ -412,13 +412,16 @@ class EloquentEntryOrderRepository implements IEntryOrderRepository
     }
 
     /**
-     * Stored DTEs: a correction of their head, head declared missing or counted without caravan, and the caravans received
-     * on them in this operation.
+     * Stored DTEs: the paper attached late, a correction of their head, head declared missing or
+     * counted without caravan, and the caravans received on them in this operation.
      */
     private function saveDteChanges(EntryOrder $model, EntryOrderEntity $order): void
     {
         foreach ($order->changedDtes() as $dte) {
             EntryOrderDte::withoutGlobalScopes()->whereKey($dte->getId())->update([
+                'dte_number' => $dte->getDteNumber(),
+                'dte_date' => $dte->getDteDate(),
+                'observations' => $dte->getObservations(),
                 'head_count' => $dte->getHeadCount(),
                 'missing_head_count' => $dte->getMissingHeadCount(),
                 'uncaravaned_head_count' => $dte->getUncaravanedHeadCount(),

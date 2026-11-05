@@ -10,6 +10,7 @@ use App\Core\Enums\WeighingTypeCode;
 use App\Core\Exceptions\WeighingOrderDomainException;
 use App\Core\ValueObjects\BatchWeighingMeasure;
 use App\Core\ValueObjects\CageGroupWeighing;
+use App\Core\ValueObjects\CategoryAverageWeighing;
 
 final readonly class RegisterBatchWeighingDTO
 {
@@ -57,8 +58,15 @@ final readonly class RegisterBatchWeighingDTO
     /** @param array<string, mixed> $data */
     private static function measure(array $data): BatchWeighingMeasure
     {
-        if (BatchWeighingEntry::from((string) $data['entry']) === BatchWeighingEntry::AVERAGE) {
-            return BatchWeighingMeasure::fromAverage((int) $data['head_count'], (float) $data['average_weight']);
+        if (BatchWeighingEntry::from((string) $data['entry']) === BatchWeighingEntry::BY_CATEGORY) {
+            return BatchWeighingMeasure::fromCategoryAverages(array_map(
+                static fn (array $average): CategoryAverageWeighing => new CategoryAverageWeighing(
+                    isset($average['category_id']) ? (int) $average['category_id'] : null,
+                    (int) $average['head_count'],
+                    (float) $average['average_weight'],
+                ),
+                array_values($data['averages'])
+            ));
         }
 
         $loads = [];
@@ -68,6 +76,7 @@ final readonly class RegisterBatchWeighingDTO
                 (int) $group['head_count'],
                 (float) $group['gross_weight'],
                 (float) ($group['tare_weight'] ?? 0),
+                isset($group['category_id']) ? (int) $group['category_id'] : null,
             );
         }
 

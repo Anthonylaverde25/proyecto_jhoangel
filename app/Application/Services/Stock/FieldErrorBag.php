@@ -25,6 +25,12 @@ final class FieldErrorBag
         return isset($this->errors[$field]);
     }
 
+    /** @return list<string> every message, for a channel that has no fields to mark */
+    public function messages(): array
+    {
+        return array_merge(...array_values($this->errors));
+    }
+
     public function isEmpty(): bool
     {
         return $this->errors === [];

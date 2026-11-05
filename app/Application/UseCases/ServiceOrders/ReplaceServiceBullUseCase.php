@@ -153,7 +153,7 @@ final class ReplaceServiceBullUseCase
 
             // F. Recalcular masas en BatchWeightService
             // 1. Lote de servicio (sale un toro, entra un toro)
-            $this->batchWeightService->recalculateBatchWeight($targetServiceBatchId, BatchWeightCause::MOVEMENT_IN);
+            $this->batchWeightService->recalculateServicedBatch($targetServiceBatchId, BatchWeightCause::MOVEMENT_IN);
 
             // 2. Lote destino del toro retirado (si aplica)
             if ($destinationBatchId !== null && $destinationBatchId !== $targetServiceBatchId) {

@@ -30,6 +30,13 @@ final class ApproveServiceOrderUseCase
         }
 
         if ($approve) {
+            $unclosed = $this->repository->findUnclosedOrderOnBatch($entity->getBatchId(), $id);
+            if ($unclosed !== null) {
+                throw ServiceOrderDomainException::domainError(
+                    "El lote tiene la orden {$unclosed['code']} sin cerrar: cerrala antes de aprobar {$entity->getCode()}."
+                );
+            }
+
             return DB::transaction(function () use ($entity, $companyId, $userId, $reason): ServiceOrderEntity {
                 $entity->approve($userId);
                 $savedEntity = $this->repository->save($entity, $userId, $reason);
@@ -45,9 +52,8 @@ final class ApproveServiceOrderUseCase
                 foreach ($donorBatchIds as $donorBatchId) {
                     $this->batchWeightService->recalculateBatchWeight($donorBatchId, BatchWeightCause::MOVEMENT_OUT);
                 }
-                if ($donorBatchIds !== []) {
-                    $this->batchWeightService->recalculateBatchWeight($entity->getBatchId(), BatchWeightCause::MOVEMENT_IN);
-                }
+                // Only a bull that already lived here changes the herd: he stops being part of it.
+                $this->batchWeightService->recalculateServicedBatch($entity->getBatchId(), BatchWeightCause::MOVEMENT_OUT);
 
                 return $savedEntity;
             });

@@ -23,6 +23,9 @@ use DateTimeInterface;
  * (DTE) declares how many head are on their way, and the caravans only exist once each animal is
  * received — written down on an ING-03 sheet at the chute or by hand.
  *
+ * The DTE is recommended, never required: head can move with the paper still to come (a DTE
+ * without number nor date). The order follows its course marked "Sin DTE" until it is loaded.
+ *
  * Once confirmed the status is never set by hand: it tells what the order is waiting for —
  * documents (AWAITING_DTE) or animals (IN_TRANSIT) — and follows the DTEs and receptions.
  * Whatever does not match the purchase is raised as an incident and never blocks the order.
@@ -38,7 +41,7 @@ final class EntryOrderEntity
 
     private bool $destinationsReplaced = false;
 
-    /** @var list<array{batch_id: int, from: int, dte_number: string}> */
+    /** @var list<array{batch_id: int, from: int, dte_label: string}> */
     private array $pendingCorrections = [];
 
     /**
@@ -290,7 +293,7 @@ final class EntryOrderEntity
     /**
      * Records a DTE: how many head are on their way. A DTE with more head than bought is recorded
      * anyway: the difference is raised as an incident, and the head the order declared are left
-     * as they were.
+     * as they were. Without number it is a group of head moving with the paper still to come.
      *
      * @return EntryOrderIncidentEntity[] the incidents this DTE raised
      *
@@ -309,27 +312,94 @@ final class EntryOrderEntity
             throw EntryOrderDomainException::invalid('El DTE tiene que declarar al menos una cabeza.', 'HEAD_COUNT_INVALID', 'head_count');
         }
 
-        foreach ($this->dtes as $loaded) {
-            if (strcasecmp($loaded->getDteNumber(), $dte->getDteNumber()) === 0) {
-                throw EntryOrderDomainException::invalid(
-                    "El DTE {$dte->getDteNumber()} ya está cargado en esta orden.",
-                    'DTE_DUPLICATED',
-                    'dte_number'
-                );
-            }
+        if ($dte->getDteNumber() !== null) {
+            $this->assertDteNumberIsNew($dte->getDteNumber());
         }
 
-        $before = $this->withDteCount();
+        $before = $this->declaredCount();
         $this->dtes[] = $dte;
-        $raised = $this->raiseHeadExcess($before, $dte->getDteNumber(), "con el DTE {$dte->getDteNumber()}", $userId);
+        $raised = $this->raiseHeadExcess($before, $dte->getDteNumber(), "con el {$dte->label()}", $userId);
 
-        if ($this->firstDteAt === null) {
-            $this->firstDteAt = new DateTimeImmutable();
+        if ($dte->isDocumented()) {
+            $this->firstDteAt ??= new DateTimeImmutable();
         }
 
         $this->refreshStatus();
 
         return $raised;
+    }
+
+    /**
+     * The paper of head that moved without it. Allowed in any status but cancelled, also days after
+     * the order closed: nothing is lost by having it late. The DTE declares what it declares, and
+     * what differs from what happened is raised, never blocked: fewer head than received are an
+     * arrival excess; more are in transit while the order receives, and otherwise did not arrive.
+     *
+     * @return array{raised: EntryOrderIncidentEntity[], no_longer_differ: EntryOrderIncidentEntity[]}
+     *
+     * @throws EntryOrderDomainException
+     */
+    public function attachDteDocument(int $dteId, string $dteNumber, string $dteDate, int $headCount, ?string $observations, ?int $userId = null): array
+    {
+        if ($this->status === EntryOrderStatus::CANCELLED) {
+            throw EntryOrderDomainException::invalid("La orden {$this->code} está {$this->status->label()} y no admite DTE.", 'ENTRY_ORDER_NOT_ACCEPTING_DTE');
+        }
+
+        $dte = $this->findDte($dteId);
+
+        if ($dte->isDocumented()) {
+            throw EntryOrderDomainException::invalid("Este ingreso ya tiene el {$dte->label()}.", 'DTE_ALREADY_ATTACHED', 'dte_number');
+        }
+
+        if ($headCount < 1) {
+            throw EntryOrderDomainException::invalid('El DTE tiene que declarar al menos una cabeza.', 'HEAD_COUNT_INVALID', 'head_count');
+        }
+
+        $this->assertDteNumberIsNew($dteNumber);
+
+        $before = $this->declaredCount();
+        $excessBefore = $dte->excessCount();
+        $dte->attachDocument($dteNumber, $dteDate, $headCount, $observations);
+        $this->firstDteAt ??= new DateTimeImmutable();
+
+        $raised = $this->raiseHeadExcess($before, $dteNumber, "con el {$dte->label()}", $userId);
+        $excess = $dte->excessCount() - $excessBefore;
+
+        if ($excess > 0) {
+            $raised[] = $this->raiseIncident(
+                EntryOrderIncidentType::ARRIVAL_EXCESS,
+                "El {$dte->label()} declara {$headCount} cabezas; llegaron {$dte->receivedCount()} (+{$excess}).",
+                ['declared' => $headCount, 'received' => $dte->receivedCount(), 'excess' => $excess, 'caravans' => [], 'receipt_sheet' => null],
+                $dteNumber,
+                $userId
+            );
+        }
+
+        // Nothing more arrives on an order that stopped receiving: what the paper adds did not come.
+        if (!$this->status->acceptsReception() && $dte->pendingCount() > 0) {
+            $raised[] = $this->declareMissing($dte, $dte->pendingCount(), "El {$dte->label()} declara más cabezas que las recibidas", $userId);
+
+            if (!$this->status->awaitsIdentification()) {
+                $this->finish();
+            }
+        }
+
+        $noLongerDiffer = array_values(array_filter($this->incidents, fn (EntryOrderIncidentEntity $i) => $i->getId() !== null && $i->isOpen()
+            && $i->getType() === EntryOrderIncidentType::EXCESS_HEAD && $this->declaredCount() <= (int) $this->troop->headCount));
+
+        $this->refreshStatus();
+
+        return ['raised' => $raised, 'no_longer_differ' => $noLongerDiffer];
+    }
+
+    /**
+     * @throws EntryOrderDomainException
+     */
+    private function assertDteNumberIsNew(string $dteNumber): void
+    {
+        if ($this->findDteByNumber($dteNumber) !== null) {
+            throw EntryOrderDomainException::invalid("El DTE {$dteNumber} ya está cargado en esta orden.", 'DTE_DUPLICATED', 'dte_number');
+        }
     }
 
     /**
@@ -346,7 +416,7 @@ final class EntryOrderEntity
     {
         if (!$this->status->acceptsReception()) {
             throw EntryOrderDomainException::invalid(
-                "La orden {$this->code} está {$this->status->label()}: sus DTE ya no se corrigen.",
+                "La orden {$this->code} está {$this->status->label()}: sus cabezas ya no se corrigen.",
                 'ORDER_NOT_RECEIVING'
             );
         }
@@ -359,7 +429,7 @@ final class EntryOrderEntity
 
         if ($headCount < $dte->accountedCount()) {
             throw EntryOrderDomainException::invalid(
-                "El DTE {$dte->getDteNumber()} ya tiene {$dte->receivedCount()} recibidas y {$dte->getMissingHeadCount()} que no llegarán: "
+                "El {$dte->label()} ya tiene {$dte->receivedCount()} recibidas y {$dte->getMissingHeadCount()} que no llegarán: "
                 . "no puede declarar menos de {$dte->accountedCount()} cabezas.",
                 'HEAD_COUNT_BELOW_ACCOUNTED',
                 'head_count'
@@ -367,7 +437,7 @@ final class EntryOrderEntity
         }
 
         if ($headCount === $dte->getHeadCount()) {
-            throw EntryOrderDomainException::invalid("El DTE {$dte->getDteNumber()} ya declara {$headCount} cabezas.", 'HEAD_COUNT_UNCHANGED', 'head_count');
+            throw EntryOrderDomainException::invalid("El {$dte->label()} ya declara {$headCount} cabezas.", 'HEAD_COUNT_UNCHANGED', 'head_count');
         }
 
         if (trim($reason) === '') {
@@ -375,13 +445,13 @@ final class EntryOrderEntity
         }
 
         $from = $dte->getHeadCount();
-        $before = $this->withDteCount();
+        $before = $this->declaredCount();
         $dte->correctHeadCount($headCount);
-        $raised = $this->raiseHeadExcess($before, $dte->getDteNumber(), "con la corrección del DTE {$dte->getDteNumber()}", $userId);
+        $raised = $this->raiseHeadExcess($before, $dte->getDteNumber(), "con la corrección del {$dte->label()}", $userId);
 
         $noLongerDiffer = array_values(array_filter($this->incidents, fn (EntryOrderIncidentEntity $i) => $i->getId() !== null && $i->isOpen() && (
             ($i->getType() === EntryOrderIncidentType::ARRIVAL_EXCESS && self::sameDte($i, $dte) && $dte->excessCount() === 0)
-            || ($i->getType() === EntryOrderIncidentType::EXCESS_HEAD && $this->withDteCount() <= (int) $this->troop->headCount)
+            || ($i->getType() === EntryOrderIncidentType::EXCESS_HEAD && $this->declaredCount() <= (int) $this->troop->headCount)
         )));
 
         $this->refreshStatus();
@@ -458,7 +528,7 @@ final class EntryOrderEntity
         // A caravan first identifies a head already received; only the rest is a new head.
         $batchIds = $caravanBatchIds !== [] ? $caravanBatchIds : array_fill(0, count($animals), (int) $this->batchId);
         $this->pendingCorrections = array_map(
-            fn (array $c) => [...$c, 'dte_number' => $dte->getDteNumber()],
+            fn (array $c) => [...$c, 'dte_label' => $dte->label()],
             $dte->identify(array_values($batchIds))
         );
 
@@ -474,7 +544,7 @@ final class EntryOrderEntity
 
         if ($missingHead > $dte->pendingCount()) {
             throw EntryOrderDomainException::invalid(
-                "Al DTE {$dte->getDteNumber()} le quedan {$dte->pendingCount()} cabezas en tránsito: no pueden faltar {$missingHead}.",
+                "Al {$dte->label()} le quedan {$dte->pendingCount()} cabezas en tránsito: no pueden faltar {$missingHead}.",
                 'MISSING_EXCEEDS_PENDING',
                 'missing_head_count'
             );
@@ -497,7 +567,7 @@ final class EntryOrderEntity
 
             $raised[] = $this->raiseIncident(
                 EntryOrderIncidentType::ARRIVAL_EXCESS,
-                "El DTE {$dte->getDteNumber()} declara {$dte->getHeadCount()} cabezas; llegaron {$dte->receivedCount()} (+{$excess}){$where}"
+                "El {$dte->label()} declara {$dte->getHeadCount()} cabezas; llegaron {$dte->receivedCount()} (+{$excess}){$where}"
                     . ($tags !== [] ? ': ' . implode(', ', $tags) : '') . '.',
                 ['declared' => $dte->getHeadCount(), 'received' => $dte->receivedCount(), 'excess' => $excess, 'caravans' => $tags, 'receipt_sheet' => $sheetLabel],
                 $dte->getDteNumber(),
@@ -517,7 +587,7 @@ final class EntryOrderEntity
                 foreach (self::excessOf($declared, $bySexBefore[$sex], $after) as $over) {
                     $raised[] = $this->raiseIncident(
                         $type,
-                        "Se declararon {$declared} {$word}; con esta recepción del DTE {$dte->getDteNumber()} llegaron {$after} (+{$over}).",
+                        "Se declararon {$declared} {$word}; con esta recepción del {$dte->label()} llegaron {$after} (+{$over}).",
                         ['declared' => $declared, 'received' => $after, 'excess' => $over],
                         $dte->getDteNumber(),
                         $userId
@@ -587,7 +657,7 @@ final class EntryOrderEntity
      * Caravans of the last reception that took a head pending in another batch than their own:
      * the split declared at the chute was off. Told to the user, never blocking.
      *
-     * @return list<array{batch_id: int, from: int, dte_number: string}>
+     * @return list<array{batch_id: int, from: int, dte_label: string}>
      */
     public function pendingCorrections(): array
     {
@@ -616,7 +686,7 @@ final class EntryOrderEntity
 
         $incident = $this->raiseIncident(
             EntryOrderIncidentType::HEAD_WRITTEN_OFF,
-            "{$head} {$words} de baja{$where} (DTE {$dte->getDteNumber()}). Motivo: {$reason}",
+            "{$head} {$words} de baja{$where} ({$dte->label()}). Motivo: {$reason}",
             ['count' => $head, 'batch_id' => $batchId, 'reason' => $reason],
             $dte->getDteNumber(),
             $userId
@@ -641,7 +711,7 @@ final class EntryOrderEntity
 
         return $this->raiseIncident(
             EntryOrderIncidentType::BREED_MISMATCH,
-            "En el DTE {$dte->getDteNumber()}{$where} " . ($count === 1 ? 'llegó 1 caravana' : "llegaron {$count} caravanas")
+            "En el {$dte->label()}{$where} " . ($count === 1 ? 'llegó 1 caravana' : "llegaron {$count} caravanas")
                 . " de una raza que la compra no declara: {$listed}.",
             ['caravans' => array_keys($caravans), 'breeds' => $caravans, 'receipt_sheet' => $sheetLabel],
             $dte->getDteNumber(),
@@ -680,7 +750,7 @@ final class EntryOrderEntity
 
         if ($nothing) {
             throw EntryOrderDomainException::invalid(
-                "El DTE {$dte->getDteNumber()} no tiene cabezas en tránsito.",
+                "El {$dte->label()} no tiene cabezas en tránsito.",
                 'DTE_NOTHING_PENDING',
                 'dte_id'
             );
@@ -715,7 +785,7 @@ final class EntryOrderEntity
 
         if (!$open && $dte->getUncaravanedHeadCount() === 0) {
             throw EntryOrderDomainException::invalid(
-                "El DTE {$dte->getDteNumber()} no tiene cabezas en tránsito ni sin caravana: no hay nada que recibir en planilla.",
+                "El {$dte->label()} no tiene cabezas en tránsito ni sin caravana: no hay nada que recibir en planilla.",
                 'DTE_NOTHING_PENDING',
                 'dte_id'
             );
@@ -789,7 +859,7 @@ final class EntryOrderEntity
     public function findDteByNumber(string $dteNumber): ?EntryOrderDteEntity
     {
         foreach ($this->dtes as $dte) {
-            if (strcasecmp($dte->getDteNumber(), $dteNumber) === 0) {
+            if ($dte->getDteNumber() !== null && strcasecmp($dte->getDteNumber(), $dteNumber) === 0) {
                 return $dte;
             }
         }
@@ -823,8 +893,8 @@ final class EntryOrderEntity
             }
         }
 
-        // Head bought that never got a document are also something to settle with the seller.
-        $withoutDte = $this->pendingDteCount();
+        // Head bought that never came on any DTE are also something to settle with the seller.
+        $withoutDte = $this->undeclaredCount();
 
         if ($withoutDte > 0) {
             $words = $withoutDte === 1 ? 'cabeza nunca tuvo' : 'cabezas nunca tuvieron';
@@ -907,19 +977,60 @@ final class EntryOrderEntity
     }
 
     /**
-     * Head declared by the DTEs. May exceed the head bought: a DTE with head in excess is loaded anyway.
+     * Head declared by the DTEs with their paper. May exceed the head bought: a DTE with head in
+     * excess is loaded anyway.
      */
     public function withDteCount(): int
+    {
+        return $this->declaredCount() - $this->withoutDteHeadCount();
+    }
+
+    /**
+     * Head bought still waiting for their document, moving already or not.
+     */
+    public function pendingDteCount(): int
+    {
+        return max(0, (int) $this->troop->headCount - $this->withDteCount());
+    }
+
+    /**
+     * Head declared on the order, with their paper or without it.
+     */
+    public function declaredCount(): int
     {
         return array_sum(array_map(fn (EntryOrderDteEntity $d) => $d->getHeadCount(), $this->dtes));
     }
 
     /**
-     * Head bought still waiting for their document.
+     * Head bought that nothing declares yet: neither a DTE nor head moving without it.
      */
-    public function pendingDteCount(): int
+    public function undeclaredCount(): int
     {
-        return max(0, (int) $this->troop->headCount - $this->withDteCount());
+        return max(0, (int) $this->troop->headCount - $this->declaredCount());
+    }
+
+    /**
+     * Head moving with their paper still to come.
+     */
+    public function withoutDteHeadCount(): int
+    {
+        return array_sum(array_map(fn (EntryOrderDteEntity $d) => $d->isDocumented() ? 0 : $d->getHeadCount(), $this->dtes));
+    }
+
+    /**
+     * Some head moved without their paper: a reminder, never a block ("Sin DTE").
+     */
+    public function isWithoutDte(): bool
+    {
+        return $this->withoutDteHeadCount() > 0;
+    }
+
+    /**
+     * How many papers were loaded.
+     */
+    public function documentedDteCount(): int
+    {
+        return count(array_filter($this->dtes, fn (EntryOrderDteEntity $d) => $d->isDocumented()));
     }
 
     /**
@@ -1073,7 +1184,7 @@ final class EntryOrderEntity
             return;
         }
 
-        if ($this->pendingDteCount() > 0) {
+        if ($this->undeclaredCount() > 0) {
             $this->status = EntryOrderStatus::AWAITING_DTE;   // waiting for documents
 
             return;
@@ -1108,7 +1219,7 @@ final class EntryOrderEntity
             $this->status = EntryOrderStatus::COMPLETED;
         }
 
-        $this->closedAt = new DateTimeImmutable();
+        $this->closedAt ??= new DateTimeImmutable();
     }
 
     /**
@@ -1148,7 +1259,7 @@ final class EntryOrderEntity
 
         return $this->raiseIncident(
             EntryOrderIncidentType::MISSING_HEAD,
-            "{$head} {$words} del DTE {$dte->getDteNumber()} {$verb}. Motivo: {$reason}",
+            "{$head} {$words} del {$dte->label()} {$verb}. Motivo: {$reason}",
             ['count' => $head, 'reason' => $reason],
             $dte->getDteNumber(),
             $userId
@@ -1160,15 +1271,15 @@ final class EntryOrderEntity
      *
      * @return EntryOrderIncidentEntity[]
      */
-    private function raiseHeadExcess(int $before, string $dteNumber, string $how, ?int $userId): array
+    private function raiseHeadExcess(int $before, ?string $dteNumber, string $how, ?int $userId): array
     {
         $raised = [];
 
-        foreach (self::excessOf((int) $this->troop->headCount, $before, $this->withDteCount()) as $excess) {
+        foreach (self::excessOf((int) $this->troop->headCount, $before, $this->declaredCount()) as $excess) {
             $raised[] = $this->raiseIncident(
                 EntryOrderIncidentType::EXCESS_HEAD,
-                "Orden por {$this->troop->headCount} cabezas; {$how} suman {$this->withDteCount()} (+{$excess}).",
-                ['declared' => $this->troop->headCount, 'with_dte' => $this->withDteCount(), 'excess' => $excess],
+                "Orden por {$this->troop->headCount} cabezas; {$how} suman {$this->declaredCount()} (+{$excess}).",
+                ['declared' => $this->troop->headCount, 'with_dte' => $this->declaredCount(), 'excess' => $excess],
                 $dteNumber,
                 $userId
             );
@@ -1191,7 +1302,7 @@ final class EntryOrderEntity
     private static function sameDte(EntryOrderIncidentEntity $incident, EntryOrderDteEntity $dte): bool
     {
         return ($incident->getDteId() !== null && $incident->getDteId() === $dte->getId())
-            || ($incident->getDteNumber() !== null && strcasecmp($incident->getDteNumber(), $dte->getDteNumber()) === 0);
+            || ($incident->getDteNumber() !== null && $dte->getDteNumber() !== null && strcasecmp($incident->getDteNumber(), $dte->getDteNumber()) === 0);
     }
 
     /**

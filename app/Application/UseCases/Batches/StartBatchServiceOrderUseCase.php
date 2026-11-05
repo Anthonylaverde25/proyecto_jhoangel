@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\UseCases\Batches;
 
 use App\Application\DTOs\ServiceOrders\StartBatchServiceOrderDTO;
+use App\Application\Services\PendingTactoFemales;
 use App\Application\Services\Insemination\PlannedSemenGuard;
 use App\Core\Entities\ServiceOrderEntity;
 use App\Core\Enums\AnimalSex;
@@ -46,7 +47,8 @@ final class StartBatchServiceOrderUseCase
         private readonly ServiceOrderCodeGenerator $codeGenerator,
         private readonly BullServiceFitnessPolicy $fitnessPolicy,
         private readonly BatchWeightService $batchWeightService,
-        private readonly PlannedSemenGuard $plannedSemenGuard
+        private readonly PlannedSemenGuard $plannedSemenGuard,
+        private readonly PendingTactoFemales $pendingTacto
     ) {
     }
 
@@ -63,7 +65,7 @@ final class StartBatchServiceOrderUseCase
 
         $this->startPolicy->assertBatchCanStartService(
             $batch,
-            $this->serviceOrderRepository->findActiveServiceOnBatch($dto->batchId) !== null
+            $this->serviceOrderRepository->findUnclosedOrderOnBatch($dto->batchId)
         );
 
         // 2. Exposed females: the whole batch in natural service (the owner's breeding exclusion
@@ -76,6 +78,17 @@ final class StartBatchServiceOrderUseCase
             $dto->selectedFemaleCaravanIds,
             $this->caravanRepository->findBreedingExcludedFemaleIdsInBatch($dto->batchId)
         );
+        // Picked one by one, she can wait for her verdict. In a natural service she shares the paddock
+        // anyway: the sheet warns and the exposure is recorded. A continuation only follows its parent.
+        if ($individually && $dto->parentServiceOrderId === null) {
+            $pending = $this->pendingTacto->of($femaleIds, $dto->companyId);
+            if ($pending !== []) {
+                throw ServiceOrderDomainException::domainError(
+                    "Tienen el tacto pendiente en otra orden: {$this->pendingTacto->describe($pending)}. Cargá su tacto antes de elegirlas."
+                );
+            }
+        }
+
         $plannedSemen = $this->plannedSemenGuard->check($dto->plannedSemen, $femaleIds, $dto->companyId);
         $isInsemination = !$dto->serviceMethod->needsBulls();
 
@@ -123,27 +136,31 @@ final class StartBatchServiceOrderUseCase
 
         try {
             $orderId = DB::transaction(function () use ($dto, $batch, $femaleCaravans, $maleCaravans, $sanitaryStatusByBull, $plannedSemen, $isInsemination, $maleCaravanIdsToStart): int {
-                $orderCode = $this->codeGenerator->next($dto->companyId, $dto->plannedStartDate);
-
-                $order = ServiceOrder::create([
-                    'company_id'            => $dto->companyId,
+                $attributes = [
                     'batch_id'              => $batch->getId(),
-                    'parent_service_order_id' => $dto->parentServiceOrderId,
-                    'code'                  => $orderCode,
                     'status'                => ServiceOrderStatus::APPROVED->value,
                     'service_type'          => $dto->serviceType,
                     'service_method'        => $dto->serviceMethod->value,
                     'is_controlled_service' => $dto->isControlledService,
                     'target_bull_ratio'     => $dto->targetBullRatio,
-                    'planned_start_date'    => $dto->plannedStartDate,
                     'actual_start_date'     => $dto->plannedStartDate,
                     'planned_end_date'      => $dto->plannedEndDate,
-                    'requested_by_user_id'  => $dto->userId,
                     'approved_by_user_id'   => $dto->userId,
                     'approved_at'           => now(),
                     'executed_at'           => now(),
                     'observations'          => $dto->observations,
-                ]);
+                ];
+
+                $order = $dto->plannedOrderId !== null
+                    ? $this->startPlannedOrder($dto, $attributes)
+                    : ServiceOrder::create($attributes + [
+                        'company_id'              => $dto->companyId,
+                        'parent_service_order_id' => $dto->parentServiceOrderId,
+                        'code'                    => $this->codeGenerator->next($dto->companyId, $dto->plannedStartDate),
+                        'planned_start_date'      => $dto->plannedStartDate,
+                        'requested_by_user_id'    => $dto->userId,
+                    ]);
+                $orderCode = (string) $order->code;
 
                 $sireByFemale = [];
                 if ($dto->isControlledService) {
@@ -191,14 +208,15 @@ final class StartBatchServiceOrderUseCase
                     foreach ($donorBatchIds as $donorBatchId) {
                         $this->batchWeightService->recalculateBatchWeight($donorBatchId, BatchWeightCause::MOVEMENT_OUT);
                     }
-                    $this->batchWeightService->recalculateBatchWeight((int) $batch->getId(), BatchWeightCause::MOVEMENT_IN);
+                    // Only a bull that already lived here changes the herd: he stops being part of it.
+                    $this->batchWeightService->recalculateServicedBatch((int) $batch->getId(), BatchWeightCause::MOVEMENT_OUT);
                 }
 
                 ServiceOrderHistory::create([
                     'company_id'       => $dto->companyId,
                     'service_order_id' => $order->id,
                     'action_user_id'   => $dto->userId,
-                    'from_status'      => ServiceOrderStatus::DRAFT->value,
+                    'from_status'      => $dto->plannedOrderId !== null ? ServiceOrderStatus::PLANNED->value : ServiceOrderStatus::DRAFT->value,
                     'to_status'        => ServiceOrderStatus::APPROVED->value,
                     'action_reason'    => $isInsemination
                         ? "Servicio de IA iniciado sobre el lote '{$batch->getName()}'"
@@ -223,6 +241,30 @@ final class StartBatchServiceOrderUseCase
         if ($order === null) {
             throw ServiceOrderDomainException::domainError('Error al recuperar la orden de servicio creada.');
         }
+
+        return $order;
+    }
+
+    /**
+     * The planned order keeps its code and planned date; its animals are written again, as they
+     * stand on the day it starts.
+     *
+     * @param array<string, mixed> $attributes
+     */
+    private function startPlannedOrder(StartBatchServiceOrderDTO $dto, array $attributes): ServiceOrder
+    {
+        $order = ServiceOrder::withoutGlobalScopes()
+            ->where('company_id', $dto->companyId)
+            ->where('status', ServiceOrderStatus::PLANNED->value)
+            ->lockForUpdate()
+            ->find($dto->plannedOrderId);
+        if ($order === null) {
+            throw ServiceOrderDomainException::domainError('La orden planificada ya no está disponible para iniciar.');
+        }
+
+        ServiceOrderFemale::withoutGlobalScopes()->where('service_order_id', $order->id)->delete();
+        ServiceOrderMale::withoutGlobalScopes()->where('service_order_id', $order->id)->delete();
+        $order->update($attributes);
 
         return $order;
     }

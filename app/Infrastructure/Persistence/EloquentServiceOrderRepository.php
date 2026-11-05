@@ -10,6 +10,8 @@ use App\Core\Enums\FemaleReproductiveVerdict;
 use App\Core\Enums\NotDiagnosedReason;
 use App\Core\Enums\ReproductiveAptitudeStatus;
 use App\Core\Enums\ServiceExposureExitReason;
+use App\Core\Enums\ServiceOrderKind;
+use App\Core\Enums\ServiceOrderMaleStatus;
 use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Interfaces\IServiceOrderRepository;
 use App\Models\Batch;
@@ -248,6 +250,236 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
         return array_map('intval', array_keys($donorBatchIds));
     }
 
+    public function createPlanned(array $attributes, array $femaleIds, array $maleIds, array $plannedSemen, string $reason): int
+    {
+        $order = ServiceOrder::create($attributes + ['status' => ServiceOrderStatus::PLANNED->value]);
+        $companyId = (int) $order->company_id;
+
+        foreach ($femaleIds as $femaleId) {
+            ServiceOrderFemale::create([
+                'company_id'            => $companyId,
+                'service_order_id'      => $order->id,
+                'female_caravan_id'     => $femaleId,
+                'planned_semen_item_id' => $plannedSemen[$femaleId] ?? null,
+                'reproductive_status'   => 'UNCHECKED',
+            ]);
+        }
+        $this->writePlannedBulls((int) $order->id, $companyId, $maleIds);
+
+        $order->history()->create([
+            'company_id'     => $companyId,
+            'from_status'    => null,
+            'to_status'      => ServiceOrderStatus::PLANNED->value,
+            'action_user_id' => $order->requested_by_user_id,
+            'action_reason'  => $reason,
+        ]);
+
+        return (int) $order->id;
+    }
+
+    public function updatePlanned(int $orderId, int $companyId, array $attributes, array $maleIds, int $userId): void
+    {
+        $order = ServiceOrder::withoutGlobalScopes()->where('company_id', $companyId)->findOrFail($orderId);
+        $order->update($attributes);
+
+        ServiceOrderMale::withoutGlobalScopes()->where('service_order_id', $orderId)->delete();
+        $this->writePlannedBulls($orderId, $companyId, $maleIds);
+    }
+
+    /** @param int[] $maleIds */
+    private function writePlannedBulls(int $orderId, int $companyId, array $maleIds): void
+    {
+        foreach ($maleIds as $maleId) {
+            ServiceOrderMale::create([
+                'company_id'       => $companyId,
+                'service_order_id' => $orderId,
+                'male_caravan_id'  => $maleId,
+                'status'           => ServiceOrderMaleStatus::ACTIVE->value,
+            ]);
+        }
+    }
+
+    public function createRegistered(array $attributes, array $femaleIds, array $bulls, ServiceExposureExitReason $exitReason, int $userId, string $reason): int
+    {
+        $order = ServiceOrder::create($attributes + ['kind' => ServiceOrderKind::REGISTERED->value]);
+        $companyId = (int) $order->company_id;
+
+        foreach ($femaleIds as $femaleId) {
+            ServiceOrderFemale::create([
+                'company_id'          => $companyId,
+                'service_order_id'    => $order->id,
+                'female_caravan_id'   => $femaleId,
+                'reproductive_status' => 'UNCHECKED',
+                'exposed_from'        => $attributes['actual_start_date'],
+                'exposed_until'       => $attributes['actual_end_date'],
+                'exit_reason'         => $exitReason->value,
+            ]);
+        }
+
+        foreach ($bulls as $bull) {
+            ServiceOrderMale::create([
+                'company_id'       => $companyId,
+                'service_order_id' => $order->id,
+                'male_caravan_id'  => $bull['male_caravan_id'],
+                'joined_at'        => $bull['joined_at'],
+                'retired_at'       => $bull['retired_at'],
+                'status'           => ServiceOrderMaleStatus::COMPLETED->value,
+            ]);
+        }
+
+        $order->history()->create([
+            'company_id'     => $companyId,
+            'from_status'    => null,
+            'to_status'      => $order->status,
+            'action_user_id' => $userId,
+            'action_reason'  => $reason,
+        ]);
+
+        return (int) $order->id;
+    }
+
+    /** Statuses whose days are facts: the order ran, or is running. */
+    private const HAPPENED_STATUSES = [
+        ServiceOrderStatus::APPROVED->value,
+        ServiceOrderStatus::BULLS_WITHDRAWN->value,
+        ServiceOrderStatus::SERVICE_ENDED->value,
+        ServiceOrderStatus::SUCCESS->value,
+    ];
+
+    public function findOverlappingOrderOnBatch(int $batchId, int $companyId, string $from, string $until): ?string
+    {
+        $code = DB::table('service_orders')
+            ->where('company_id', $companyId)
+            ->where('batch_id', $batchId)
+            ->whereIn('status', self::HAPPENED_STATUSES)
+            ->whereDate('actual_start_date', '<', $until)
+            ->where(fn ($query) => $query->whereNull('actual_end_date')->orWhereDate('actual_end_date', '>', $from))
+            ->value('code');
+
+        return $code !== null ? (string) $code : null;
+    }
+
+    public function findOverlappingFemales(array $femaleIds, int $companyId, string $from, string $until): array
+    {
+        if ($femaleIds === []) {
+            return [];
+        }
+
+        return DB::table('service_order_females')
+            ->join('service_orders', 'service_order_females.service_order_id', '=', 'service_orders.id')
+            ->join('caravans', 'service_order_females.female_caravan_id', '=', 'caravans.id')
+            ->where('service_orders.company_id', $companyId)
+            ->whereIn('service_orders.status', self::HAPPENED_STATUSES)
+            ->whereIn('service_order_females.female_caravan_id', $femaleIds)
+            ->whereDate('service_order_females.exposed_from', '<', $until)
+            ->where(fn ($query) => $query->whereNull('service_order_females.exposed_until')->orWhereDate('service_order_females.exposed_until', '>', $from))
+            ->get(['caravans.identification', 'service_orders.code'])
+            ->map(fn ($row) => ['identification' => (string) $row->identification, 'code' => (string) $row->code])
+            ->all();
+    }
+
+    public function findOverlappingBullOrder(int $bullId, int $companyId, string $from, string $until): ?string
+    {
+        $code = DB::table('service_order_males')
+            ->join('service_orders', 'service_order_males.service_order_id', '=', 'service_orders.id')
+            ->where('service_orders.company_id', $companyId)
+            ->whereIn('service_orders.status', self::HAPPENED_STATUSES)
+            ->where('service_order_males.male_caravan_id', $bullId)
+            ->whereNotNull('service_order_males.joined_at')
+            ->whereDate('service_order_males.joined_at', '<', $until)
+            ->where(fn ($query) => $query->whereNull('service_order_males.retired_at')->orWhereDate('service_order_males.retired_at', '>', $from))
+            ->value('service_orders.code');
+
+        return $code !== null ? (string) $code : null;
+    }
+
+    public function findFemalesWithCurrentGestation(array $femaleIds, int $companyId): array
+    {
+        if ($femaleIds === []) {
+            return [];
+        }
+
+        return DB::table('caravan_gestations')
+            ->join('caravans', 'caravan_gestations.caravan_id', '=', 'caravans.id')
+            ->where('caravans.company_id', $companyId)
+            ->whereIn('caravans.id', $femaleIds)
+            ->where('caravan_gestations.is_current', true)
+            ->pluck('caravans.identification')
+            ->map(fn ($identification) => (string) $identification)
+            ->all();
+    }
+
+    public function findCompanyBatchIds(array $batchIds, int $companyId): array
+    {
+        if ($batchIds === []) {
+            return [];
+        }
+
+        return Batch::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->whereIn('id', $batchIds)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    public function findBullLocations(array $bullIds, int $companyId, string $onDay, string $movedAfterDay): array
+    {
+        $bulls = Caravan::withoutGlobalScopes()->where('company_id', $companyId)->whereIn('id', $bullIds)->get(['id', 'batch_id']);
+        $locations = [];
+
+        foreach ($bulls as $bull) {
+            $movements = CaravanMovement::withoutGlobalScopes()->where('caravan_id', $bull->id);
+            $last = (clone $movements)->whereDate('movement_date', '<=', $onDay)->orderByDesc('movement_date')->orderByDesc('id')->first();
+            $next = (clone $movements)->whereDate('movement_date', '>', $onDay)->orderBy('movement_date')->orderBy('id')->first();
+            $batchId = $last?->to_batch_id ?? $next?->from_batch_id ?? $bull->batch_id;
+
+            $locations[] = [
+                'caravan_id'       => (int) $bull->id,
+                'batch_id'         => $batchId !== null ? (int) $batchId : null,
+                'current_batch_id' => $bull->batch_id !== null ? (int) $bull->batch_id : null,
+                'moved_after'      => (clone $movements)->whereDate('movement_date', '>', $movedAfterDay)->exists(),
+            ];
+        }
+
+        return $locations;
+    }
+
+    public function recordBullMovement(int $bullId, int $companyId, int $fromBatchId, int $toBatchId, string $date, string $observations): void
+    {
+        $batch = Batch::withoutGlobalScopes()->with('farm')->find($toBatchId);
+        $renspa = $batch?->farm?->renspa;
+        if ($renspa === null || $renspa === '') {
+            $renspa = DB::table('companies')->where('id', $companyId)->value('renspa');
+        }
+
+        // Eloquent create, so the movement observers (service exposure) see it.
+        CaravanMovement::create([
+            'company_id'    => $companyId,
+            'caravan_id'    => $bullId,
+            'renspa'        => $renspa !== null && $renspa !== '' ? (string) $renspa : 'NO_DEFINIDO',
+            'type'          => 'TRANSFER',
+            'movement_date' => $date,
+            'from_batch_id' => $fromBatchId,
+            'to_batch_id'   => $toBatchId,
+            'observations'  => $observations,
+        ]);
+    }
+
+    public function relocateBull(int $bullId, int $companyId, int $batchId): ?int
+    {
+        $bull = Caravan::withoutGlobalScopes()->where('company_id', $companyId)->find($bullId);
+        if ($bull === null || (int) $bull->batch_id === $batchId) {
+            return null;
+        }
+
+        $previous = (int) $bull->batch_id;
+        $bull->batch_id = $batchId;
+        $bull->save();
+
+        return $previous;
+    }
+
     public function lockLastCodeWithPrefix(int $companyId, string $prefix): ?string
     {
         $code = ServiceOrder::withoutGlobalScopes()
@@ -277,6 +509,35 @@ class EloquentServiceOrderRepository implements IServiceOrderRepository
             'is_controlled_service' => (bool) $row->is_controlled_service,
             'service_method' => (string) ($row->service_method ?? 'NATURAL'),
         ];
+    }
+
+    public function findUnclosedOrderOnBatch(int $batchId, ?int $exceptOrderId = null): ?array
+    {
+        $row = ServiceOrder::withoutGlobalScopes()
+            ->where('batch_id', $batchId)
+            ->whereIn('status', ServiceOrderStatus::unclosedValues())
+            ->when($exceptOrderId !== null, fn ($query) => $query->where('id', '!=', $exceptOrderId))
+            ->orderBy('id')
+            ->first(['id', 'code', 'status']);
+
+        return $row === null ? null : [
+            'id' => (int) $row->id,
+            'code' => (string) $row->code,
+            'status' => (string) $row->status,
+        ];
+    }
+
+    public function findOpenOrderIdsHoldingFemales(?array $femaleIds, int $companyId): array
+    {
+        return DB::table('service_order_females')
+            ->join('service_orders', 'service_order_females.service_order_id', '=', 'service_orders.id')
+            ->where('service_orders.company_id', $companyId)
+            ->whereIn('service_orders.status', ServiceOrderStatus::openValues())
+            ->when($femaleIds !== null, fn ($query) => $query->whereIn('service_order_females.female_caravan_id', $femaleIds))
+            ->distinct()
+            ->pluck('service_orders.id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
     }
 
     public function findByBatch(int $batchId, int $companyId): array

@@ -41,7 +41,7 @@ final class EntryOrderReceiptSheetEntity
         private readonly ?int $id,
         private readonly int $number,
         private readonly ?int $dteId,
-        private readonly string $dteNumber,
+        private readonly ?string $dteNumber,
         private ReceiptSheetStatus $status,
         private readonly int $dteHeadCount,
         private readonly int $expectedHeadCount,
@@ -234,7 +234,7 @@ final class EntryOrderReceiptSheetEntity
         return $this->dteId;
     }
 
-    public function getDteNumber(): string
+    public function getDteNumber(): ?string
     {
         return $this->dteNumber;
     }

@@ -66,6 +66,19 @@ class BatchMapper
             );
         }
 
+        // Read with Batch::withBullsOnService().
+        if (array_key_exists('bulls_on_service_count', $model->getAttributes())) {
+            $entity->setBullsOnService(
+                (int) $model->bulls_on_service_count,
+                (int) $model->bulls_on_service_weighed_count,
+                (float) $model->bulls_on_service_total_weight
+            );
+        }
+
+        if (array_key_exists('weighed_category_count', $model->getAttributes())) {
+            $entity->setWeighedCategoryCount((int) $model->weighed_category_count);
+        }
+
         if (array_key_exists('untagged_calf_count', $model->getAttributes())) {
             $entity->setUntaggedCalfCount((int) $model->untagged_calf_count);
         }
@@ -87,6 +100,15 @@ class BatchMapper
                 'status' => (string) $order->status,
                 'planned_start_date' => $order->planned_start_date?->format('Y-m-d'),
                 'is_controlled_service' => (bool) $order->is_controlled_service,
+            ]);
+        }
+
+        if ($model->relationLoaded('unclosedServiceOrder')) {
+            $order = $model->unclosedServiceOrder;
+            $entity->setUnclosedServiceOrder($order === null ? null : [
+                'id' => (int) $order->id,
+                'code' => (string) $order->code,
+                'status' => (string) $order->status,
             ]);
         }
 

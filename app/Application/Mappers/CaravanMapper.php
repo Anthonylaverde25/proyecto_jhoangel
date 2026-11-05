@@ -6,7 +6,9 @@ namespace App\Application\Mappers;
 
 use App\Models\Caravan;
 use App\Core\Entities\CaravanEntity;
+use App\Core\Enums\CastrationMethod;
 use App\Core\ValueObjects\CaravanNumber;
+use App\Core\ValueObjects\CastrationRecord;
 use App\Core\ValueObjects\DeathRecord;
 use App\Core\ValueObjects\ExitRecord;
 use App\Core\Enums\AnimalCategory;
@@ -119,7 +121,30 @@ class CaravanMapper
             $model->tagged_at instanceof \DateTimeInterface ? $model->tagged_at->format('Y-m-d') : ($model->tagged_at !== null ? substr((string) $model->tagged_at, 0, 10) : null),
             self::death($model),
             self::nursingCalvesCount($model),
-            self::exit($model)
+            self::exit($model),
+            self::castration($model)
+        );
+    }
+
+    private static function castration(Caravan $model): ?CastrationRecord
+    {
+        if (!$model->exists) {
+            return null;
+        }
+
+        $model->loadMissing('activeCastration.fromCategory');
+        $castration = $model->activeCastration;
+
+        if ($castration === null) {
+            return null;
+        }
+
+        return new CastrationRecord(
+            (int) $castration->id,
+            $castration->castrated_on instanceof \DateTimeInterface ? $castration->castrated_on->format('Y-m-d') : substr((string) $castration->castrated_on, 0, 10),
+            $castration->method ? CastrationMethod::tryFrom($castration->method) : null,
+            $castration->notes,
+            $castration->fromCategory?->code
         );
     }
 

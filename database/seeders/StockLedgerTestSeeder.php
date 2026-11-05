@@ -248,13 +248,13 @@ class StockLedgerTestSeeder extends Seeder
     /** The batch of the examples; created empty when missing (its heads are declared per operation). */
     private function heifers(): Batch
     {
-        $existing = Batch::withoutGlobalScopes()->where('company_id', $this->companyId)->where('name', 'Vaquillonas')->first();
+        $existing = Batch::withoutGlobalScopes()->where('company_id', $this->companyId)->where('name', 'Recría Vaquillonas 2025')->first();
         if ($existing) {
             return $existing;
         }
         $id = DB::table('batches')->insertGetId([
             'company_id' => $this->companyId,
-            'name' => 'Vaquillonas',
+            'name' => 'Recría Vaquillonas 2025',
             'farm_id' => null,
             'is_active' => true,
             'is_system' => false,

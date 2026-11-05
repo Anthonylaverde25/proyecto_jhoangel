@@ -54,8 +54,50 @@ final class BatchEntity
         $this->nursingTotalWeight = $totalWeight;
     }
 
+    /** Bulls of a running service inside caravansCount, outside every measure of the batch. */
+    private int $bullsOnServiceCount = 0;
+
+    private int $bullsOnServiceWeighedCount = 0;
+
+    private float $bullsOnServiceTotalWeight = 0.0;
+
+    public function setBullsOnService(int $count, int $weighedCount, float $totalWeight): void
+    {
+        $this->bullsOnServiceCount = $count;
+        $this->bullsOnServiceWeighedCount = $weighedCount;
+        $this->bullsOnServiceTotalWeight = $totalWeight;
+    }
+
+    public function getBullsOnServiceCount(): int
+    {
+        return $this->bullsOnServiceCount;
+    }
+
+    public function getBullsOnServiceWeighedCount(): int
+    {
+        return $this->bullsOnServiceWeighedCount;
+    }
+
+    public function getBullsOnServiceTotalWeight(): float
+    {
+        return $this->bullsOnServiceTotalWeight;
+    }
+
     /** Calves born here that still wait for their tag; null when not read. */
     private ?int $untaggedCalfCount = null;
+
+    /** How many categories the current weights of the batch span; null when not read. */
+    private ?int $weighedCategoryCount = null;
+
+    public function getWeighedCategoryCount(): ?int
+    {
+        return $this->weighedCategoryCount;
+    }
+
+    public function setWeighedCategoryCount(?int $count): void
+    {
+        $this->weighedCategoryCount = $count;
+    }
 
     public function getUntaggedCalfCount(): ?int
     {
@@ -138,6 +180,37 @@ final class BatchEntity
     public function isActiveServiceOrderLoaded(): bool
     {
         return $this->activeServiceOrderLoaded;
+    }
+
+    /**
+     * The order that keeps the batch from starting another, when the repository read it.
+     *
+     * @var array{id: int, code: string, status: string}|null
+     */
+    private ?array $unclosedServiceOrder = null;
+
+    private bool $unclosedServiceOrderLoaded = false;
+
+    /**
+     * @param array{id: int, code: string, status: string}|null $order
+     */
+    public function setUnclosedServiceOrder(?array $order): void
+    {
+        $this->unclosedServiceOrder = $order;
+        $this->unclosedServiceOrderLoaded = true;
+    }
+
+    /**
+     * @return array{id: int, code: string, status: string}|null
+     */
+    public function getUnclosedServiceOrder(): ?array
+    {
+        return $this->unclosedServiceOrder;
+    }
+
+    public function isUnclosedServiceOrderLoaded(): bool
+    {
+        return $this->unclosedServiceOrderLoaded;
     }
 
     public function getCurrentWeight(): ?float

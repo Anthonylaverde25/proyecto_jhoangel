@@ -18,6 +18,8 @@ final readonly class StockTransferDTO
         public array $lines,
         public ?string $notes = null,
         public ?int $createdBy = null,
+        /** Who originated it (ItemDocumentSource), set by the route: never from the API. */
+        public ?string $source = null,
     ) {
     }
 

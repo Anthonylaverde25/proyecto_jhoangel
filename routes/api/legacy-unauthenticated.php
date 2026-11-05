@@ -8,7 +8,9 @@ use App\Http\Controllers\Api\BatchController;
 use App\Http\Controllers\Api\BatchTypeController;
 use App\Http\Controllers\Api\BirthController;
 use App\Http\Controllers\Api\BreedController;
+use App\Http\Controllers\Api\CaravanCategoryChangeController;
 use App\Http\Controllers\Api\CaravanController;
+use App\Http\Controllers\Api\CastrationController;
 use App\Http\Controllers\Api\DeathController;
 use App\Http\Controllers\Api\FarmController;
 use App\Http\Controllers\Api\FieldMappingController;
@@ -55,6 +57,7 @@ Route::controller(CaravanController::class)->prefix('caravans')->group(function 
     Route::post('/bulk-weights', 'bulkRecordWeights');
     Route::post('/bulk-birth', 'bulkBirth');
     Route::post('/{id}/gestation-loss', 'gestationLoss');
+    Route::post('/{id}/abortion', 'abortion');
     Route::post('/bulk-gestation-diagnosis', 'bulkGestationDiagnosis');
     Route::post('/{id}/gestation-diagnosis', 'registerGestationDiagnosis');
     Route::post('/bulk-transfer', 'bulkTransfer');
@@ -64,6 +67,9 @@ Route::controller(CaravanController::class)->prefix('caravans')->group(function 
 Route::get('/caravans/births-history', [BirthController::class, 'index']);
 Route::post('/caravans/tag', [TagCalvesController::class, 'store']);
 Route::post('/caravans/deaths', [DeathController::class, 'store']);
+Route::post('/caravans/castrations', [CastrationController::class, 'store']);
+Route::post('/caravans/castrations/{id}/void', [CastrationController::class, 'void'])->whereNumber('id');
+Route::get('/caravans/{id}/category-changes', [CaravanCategoryChangeController::class, 'index'])->whereNumber('id');
 
 Route::get('/weighing-types', [WeighingTypeController::class, 'index']);
 Route::patch('/weighing-types/{id}/active', [WeighingTypeController::class, 'toggle']);
@@ -93,11 +99,13 @@ Route::controller(BatchController::class)->prefix('batches')->group(function ():
     Route::patch('/{id}/activity', 'changeActivity');
     Route::patch('/{id}/management', 'changeManagement');
     Route::get('/{id}/weights', 'getWeightHistory');
+    Route::get('/{id}/weights/by-category', 'getCategoryWeightSeries')->whereNumber('id');
 });
 
 Route::get('/batches/{batchId}/weighing-orders', [WeighingOrderController::class, 'byBatch'])->whereNumber('batchId');
 Route::get('/batches/{id}/gestating-caravans', [CaravanController::class, 'gestatingByBatch']);
 Route::get('/batches/{batchId}/untagged-calves', [TagCalvesController::class, 'index'])->whereNumber('batchId');
+Route::get('/batches/{batchId}/castration-candidates', [CastrationController::class, 'candidates'])->whereNumber('batchId');
 
 // Reference catalogs.
 Route::get('/breeds', [BreedController::class, 'index']);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Resources;
 
 use App\Core\Entities\BatchEntity;
+use App\Core\Interfaces\IServiceOrderRepository;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -78,6 +79,12 @@ class BatchResource extends JsonResource
             'nursing_count'         => $this->resource->getNursingCount(),
             'nursing_weighed_count' => $this->resource->getNursingWeighedCount(),
             'nursing_total_weight'  => $this->resource->getNursingTotalWeight(),
+            // Inside head_count, outside every measure: weights, counts of weighed head and composition.
+            'bulls_on_service_count'         => $this->resource->getBullsOnServiceCount(),
+            'bulls_on_service_weighed_count' => $this->resource->getBullsOnServiceWeighedCount(),
+            'bulls_on_service_total_weight'  => $this->resource->getBullsOnServiceTotalWeight(),
+            // Above one, current_weight mixes categories: the overview has the average of each.
+            'weighed_category_count' => $this->resource->getWeighedCategoryCount() ?? 0,
             // Calves born here still waiting for their tag ("Caravanear crías").
             'untagged_calf_count'   => $this->resource->getUntaggedCalfCount() ?? 0,
             'is_active'     => $this->resource->isActive(),
@@ -93,11 +100,29 @@ class BatchResource extends JsonResource
             'is_weaning_batch'=> $this->resource->isWeaningBatch(),
             'is_in_service'   => $activeService !== null && $activeService['status'] === 'APPROVED',
             'active_service_order' => $activeService,
+            'unclosed_service_order' => $this->unclosedService(),
             'entry_order'   => $this->entryOrder,
             'incoming_entry_orders' => $this->incomingEntryOrders,
             'created_at'    => $this->resource->getCreatedAt()?->format('Y-m-d H:i:s'),
         ];
 
+    }
+
+    /**
+     * The order that keeps the batch from starting another. Read from the entity when the
+     * repository eager loaded it, so a batch list does not query once per row.
+     *
+     * @return array{id: int, code: string, status: string}|null
+     */
+    private function unclosedService(): ?array
+    {
+        if ($this->resource->isUnclosedServiceOrderLoaded()) {
+            return $this->resource->getUnclosedServiceOrder();
+        }
+
+        $batchId = $this->resource->getId();
+
+        return $batchId === null ? null : app(IServiceOrderRepository::class)->findUnclosedOrderOnBatch($batchId);
     }
 
     /**

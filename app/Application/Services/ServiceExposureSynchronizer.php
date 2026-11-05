@@ -7,8 +7,10 @@ namespace App\Application\Services;
 use App\Core\Enums\AnimalSex;
 use App\Core\Enums\ServiceExposureExitReason;
 use App\Core\Enums\ServiceMethod;
+use App\Core\Enums\ServiceOrderIncidentType;
 use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Interfaces\ICaravanRepository;
+use App\Core\Interfaces\IServiceOrderIncidentRepository;
 use App\Core\Interfaces\IServiceOrderRepository;
 
 /**
@@ -23,7 +25,9 @@ final class ServiceExposureSynchronizer
 {
     public function __construct(
         private readonly IServiceOrderRepository $serviceOrderRepository,
-        private readonly ICaravanRepository $caravanRepository
+        private readonly ICaravanRepository $caravanRepository,
+        private readonly PendingTactoFemales $pendingTacto,
+        private readonly IServiceOrderIncidentRepository $incidents
     ) {
     }
 
@@ -78,5 +82,25 @@ final class ServiceExposureSynchronizer
         }
 
         $this->serviceOrderRepository->openFemaleExposure($joinedService['id'], $companyId, $caravanId, $date, true);
+        $this->reportPendingTacto($caravanId, $joinedService['id'], $companyId, $date);
+    }
+
+    /** Moving her is a fact of the field and is never stopped: it is left for someone to settle. */
+    private function reportPendingTacto(int $caravanId, int $joinedOrderId, int $companyId, string $date): void
+    {
+        $pending = $this->pendingTacto->of([$caravanId], $companyId, $joinedOrderId);
+        if ($pending === []) {
+            return;
+        }
+
+        $this->incidents->raise(
+            companyId: $companyId,
+            serviceOrderId: $joinedOrderId,
+            femaleCaravanId: $caravanId,
+            type: ServiceOrderIncidentType::JOINED_WITH_PENDING_TACTO,
+            detail: "Entró al lote el " . date('d/m/Y', (int) strtotime($date)) . " con el tacto pendiente: {$this->pendingTacto->describe($pending)}. Quedó expuesta con los toros: tactala o apartala.",
+            metadata: ['joined_on' => $date, 'pending_order_id' => $pending[$caravanId]['order_id']],
+            raisedByUserId: null
+        );
     }
 }

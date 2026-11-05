@@ -68,6 +68,7 @@ class ItemDocumentResource extends JsonResource
             'reason' => $document->getReason(),
             'notes' => $document->getNotes(),
             'total_cost' => $document->totalCost(),
+            'source' => $document->getSource(),
             'created_by' => $document->getCreatedByName(),
             'created_at' => $document->getCreatedAt(),
             'lines' => array_map(fn (ItemDocumentLineEntity $line) => [

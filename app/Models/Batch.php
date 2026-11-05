@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Core\Enums\ServiceOrderStatus;
 use App\Models\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -103,7 +104,8 @@ class Batch extends Model
      * their mother's batch, so its head and its mean weight mix them with the adults. Adds
      * `nursing_count`, `nursing_weighed_count` and `nursing_total_weight`, read with the same
      * definition as the batch aggregates (caravans in possession, their current weight), so the
-     * adults are exactly the rest. Also `untagged_calf_count`: the calves still waiting for their tag.
+     * adults are exactly the rest. Also `untagged_calf_count`: the calves still waiting for their tag,
+     * and `weighed_category_count`: how many categories the weights of the batch span.
      */
     public function scopeWithNursingCalves(Builder $query): Builder
     {
@@ -123,12 +125,42 @@ class Batch extends Model
             'nursing_count' => $nursing()->selectRaw('COUNT(*)'),
             'nursing_weighed_count' => $weighed()->selectRaw('COUNT(*)'),
             'nursing_total_weight' => $weighed()->selectRaw('COALESCE(SUM(caravan_weights.weight), 0)'),
+            // More than one and the average of the batch describes no animal: it mixes categories.
+            'weighed_category_count' => Caravan::query()->inPossession()->resident()
+                ->join('caravan_weights', 'caravan_weights.caravan_id', '=', 'caravans.id')
+                ->where('caravan_weights.current', true)
+                ->whereColumn('caravans.batch_id', $this->getTable() . '.id')
+                ->selectRaw('COUNT(DISTINCT COALESCE(caravans.category_id, 0))'),
             // Calves born here that still wait for their tag: already caravans, already head.
             'untagged_calf_count' => Caravan::query()
                 ->whereNull('caravans.identification')
                 ->whereDoesntHave('death')
                 ->whereColumn('caravans.batch_id', $this->getTable() . '.id')
                 ->selectRaw('COUNT(*)'),
+        ]);
+    }
+
+    /**
+     * Bulls of a running service inside caravans_count but outside every measure of the batch.
+     * Adds `bulls_on_service_count`, and their weighed head and kilos, so the stock of the company
+     * can still add them up: the batch they came from no longer holds them.
+     */
+    public function scopeWithBullsOnService(Builder $query): Builder
+    {
+        if ($query->getQuery()->columns === null) {
+            $query->select($this->getTable() . '.*');
+        }
+
+        $bulls = fn () => Caravan::query()->inPossession()->onServiceInItsBatch()
+            ->whereColumn('caravans.batch_id', $this->getTable() . '.id');
+        $weighed = fn () => $bulls()
+            ->join('caravan_weights', 'caravan_weights.caravan_id', '=', 'caravans.id')
+            ->where('caravan_weights.current', true);
+
+        return $query->addSelect([
+            'bulls_on_service_count' => $bulls()->selectRaw('COUNT(*)'),
+            'bulls_on_service_weighed_count' => $weighed()->selectRaw('COUNT(*)'),
+            'bulls_on_service_total_weight' => $weighed()->selectRaw('COALESCE(SUM(caravan_weights.weight), 0)'),
         ]);
     }
 
@@ -196,6 +228,16 @@ class Batch extends Model
     {
         return $this->hasOne(ServiceOrder::class, 'batch_id')
             ->whereIn('status', ['DRAFT', 'APPROVED']);
+    }
+
+    /**
+     * The order that keeps the batch from starting another: running or waiting for its diagnosis.
+     */
+    public function unclosedServiceOrder(): HasOne
+    {
+        return $this->hasOne(ServiceOrder::class, 'batch_id')
+            ->whereIn('status', ServiceOrderStatus::unclosedValues())
+            ->orderBy('id');
     }
 
     public function isInService(): bool

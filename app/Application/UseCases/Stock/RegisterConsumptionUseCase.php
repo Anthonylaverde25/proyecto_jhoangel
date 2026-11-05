@@ -96,6 +96,7 @@ final class RegisterConsumptionUseCase
             idempotencyKey: $dto->idempotencyKey,
             createdBy: $dto->createdBy,
             serviceOrderId: $dto->serviceOrderId,
+            source: $dto->source,
         ), $dto->createdBy);
     }
 }

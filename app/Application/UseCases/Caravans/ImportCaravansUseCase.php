@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\UseCases\Caravans;
 
 use App\Application\DTOs\ImportCaravansDTO;
+use App\Application\Services\CaravanLoadPregnancyGuard;
 use App\Core\Entities\CaravanEntity;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Services\CaravanValueParser;
@@ -33,7 +34,8 @@ final class ImportCaravansUseCase
         private readonly BreedMatcherService $breedMatcher,
         private readonly ICompanyContext $companyContext,
         private readonly CaravanTraceabilityService $traceabilityService,
-        private readonly IBatchTypeRepository $batchTypeRepository
+        private readonly IBatchTypeRepository $batchTypeRepository,
+        private readonly CaravanLoadPregnancyGuard $pregnancyGuard
     ) {
     }
 
@@ -42,13 +44,14 @@ final class ImportCaravansUseCase
      * Each row is processed independently — failures don't roll back successful inserts.
      *
      * @param ImportCaravansDTO $dto
-     * @return array{imported: int, skipped: int, errors: array<int, array{row: int, reason: string}>}
+     * @return array{imported: int, skipped: int, errors: array<int, array{row: int, reason: string}>, warnings: array<int, array{row: int, reason: string}>}
      */
     public function __invoke(ImportCaravansDTO $dto): array
     {
         $imported = 0;
         $skipped = 0;
         $errors = [];
+        $warnings = [];
         $processedCaravanIds = [];
         $activeCompanyId = $this->companyContext->getCompanyId();
 
@@ -114,7 +117,10 @@ final class ImportCaravansUseCase
                 $existingEntity = $this->repository->findByIdentification($identification);
 
                 if ($existingEntity !== null) {
-                    $this->updateCaravan($existingEntity, $row, $allBreeds, $batchId, $dto->emptyDestinationBatchId, $dto->serviceOrderId);
+                    $warning = $this->updateCaravan($existingEntity, $row, $allBreeds, $batchId, $dto->emptyDestinationBatchId, $dto->serviceOrderId);
+                    if ($warning !== null) {
+                        $warnings[] = ['row' => $index + 1, 'reason' => $warning];
+                    }
                     $imported++;
                     if ($existingEntity->getId()) {
                         $processedCaravanIds[] = $existingEntity->getId();
@@ -136,7 +142,8 @@ final class ImportCaravansUseCase
                             $isEmpty = isset($row['is_empty']) ? filter_var($row['is_empty'], FILTER_VALIDATE_BOOLEAN) : false;
                         }
                     }
-                    $assignedBatchId = ($isEmpty && $dto->emptyDestinationBatchId) ? $dto->emptyDestinationBatchId : $batchId;
+                    // A current pregnancy stays, so she is not an empty one to set apart.
+                    $assignedBatchId = ($isEmpty && $dto->emptyDestinationBatchId && !$globalEntity->hasActiveGestation()) ? $dto->emptyDestinationBatchId : $batchId;
 
                     // Crear nueva instancia de entidad para la nueva compañía (Transferencia)
                     $transferEntity = new CaravanEntity(
@@ -171,7 +178,10 @@ final class ImportCaravansUseCase
                         $globalEntity->getSubcategoryName()
                     );
 
-                    $this->updateCaravan($transferEntity, $row, $allBreeds, $assignedBatchId, $dto->emptyDestinationBatchId, $dto->serviceOrderId);
+                    $warning = $this->updateCaravan($transferEntity, $row, $allBreeds, $assignedBatchId, $dto->emptyDestinationBatchId, $dto->serviceOrderId);
+                    if ($warning !== null) {
+                        $warnings[] = ['row' => $index + 1, 'reason' => $warning];
+                    }
                     $savedTransfer = $this->repository->save($transferEntity);
                     
                     if ($oldCompanyId && $activeCompanyId) {
@@ -298,6 +308,7 @@ final class ImportCaravansUseCase
             'imported' => $imported,
             'skipped' => $skipped,
             'errors' => $errors,
+            'warnings' => $warnings,
             'workday_code' => $savedWorkday->getCode(),
         ];
     }
@@ -309,7 +320,8 @@ final class ImportCaravansUseCase
         ?int $batchId,
         ?int $emptyDestinationBatchId = null,
         ?int $serviceOrderId = null
-    ): void {
+    ): ?string {
+        $warning = null;
         $category = null;
         $catId = $entity->getCategoryId();
         $subId = $entity->getSubcategoryId();
@@ -375,6 +387,12 @@ final class ImportCaravansUseCase
             }
         }
 
+        // An imported sheet never ends a pregnancy: a birth or a loss has its own flow.
+        if ($isEmpty && $entity->hasActiveGestation()) {
+            $warning = $this->pregnancyGuard->warningFor($entity);
+            $isEmpty = false;
+        }
+
         $assignedBatchId = ($isEmpty && $emptyDestinationBatchId) ? $emptyDestinationBatchId : $batchId;
 
         $entity->updateDetails($teeth, $entryWeight, $exitWeight, $sex, $entryDate, $assignedBatchId, $breedId, null, $catId, $subId);
@@ -384,16 +402,6 @@ final class ImportCaravansUseCase
             $arrivalCategory = $currentDetails?->getArrivalCategory() ?? ($category ?? AnimalCategory::VACA);
             
             $entity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
-
-            // Gestation Automation: If empty and has active gestation, close it as SUCCESSFUL (calving)
-            if ($isEmpty && $entity->hasActiveGestation()) {
-                $endDate = $entryDate ? $entryDate->format('Y-m-d') : date('Y-m-d');
-                $entity->getActiveGestation()->closeGestation(
-                    true,
-                    $endDate,
-                    'Closed via empty gestation diagnosis on batch import.'
-                );
-            }
 
             // Gestation Automation: If pregnant and does not have active gestation, start one
             if (!$isEmpty) {
@@ -408,6 +416,8 @@ final class ImportCaravansUseCase
         }
 
         $this->repository->save($entity);
+
+        return $warning;
     }
 
     private function resolveBreed(array $row, array &$allBreeds): array

@@ -29,6 +29,8 @@ class BullAptitudeRecalculationSeeder extends Seeder
         $caravanIds = Caravan::withoutGlobalScopes()
             ->where('company_id', $companyId)
             ->whereIn('sex', ['M', 'MACHO', 'MALE'])
+            // Only bulls: a steer or a calf has no reproductive aptitude to compute.
+            ->whereHas('category', static fn ($q) => $q->where('code', 'TORO'))
             ->pluck('id')
             ->map(static fn ($id): int => (int) $id)
             ->all();

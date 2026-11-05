@@ -17,6 +17,7 @@ use App\Core\Exceptions\StaleCountException;
 use App\Core\Interfaces\IItemDocumentRepository;
 use App\Core\Interfaces\IItemStockRepository;
 use App\Core\Interfaces\IUnvaluedLotRepository;
+use App\Core\Services\StockIssueSplit;
 use App\Core\Services\WeightedAverageCost;
 use App\Core\ValueObjects\Decimal;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -389,7 +390,7 @@ final class StockLedger
             $savedOut = $this->persist($out);
             $savedIn = $this->persist(new ItemDocumentEntity(
                 null, $companyId, null, ItemDocumentType::TRANSFER_IN, $toWarehouseId, $out->getOccurredAt(), $inLines,
-                notes: $out->getNotes(), createdBy: $userId, pairedDocumentId: $savedOut->getId(),
+                notes: $out->getNotes(), createdBy: $userId, pairedDocumentId: $savedOut->getId(), source: $out->getSource(),
             ));
 
             $raised = $this->apply($savedOut, $outPlans, $locked[$fromWarehouseId], $userId)
@@ -635,8 +636,7 @@ final class StockLedger
     private function leave(int $companyId, int $warehouseId, ItemDocumentLineEntity $line, Decimal $quantity, array &$current): array
     {
         $average = $current['average'];
-        $valued = $this->max($current['balance']->sub($current['unvalued']), Decimal::zero());
-        $wanted = $this->min($quantity->sub($this->min($quantity, $valued)), $current['unvalued']);
+        $wanted = StockIssueSplit::pending($current['balance'], $current['unvalued'], $quantity);
 
         $from = [];
         $pending = Decimal::zero();
@@ -865,15 +865,6 @@ final class StockLedger
         return array_map(fn (ItemDocumentLineEntity $line) => $line->getItemId(), $document->getLines());
     }
 
-    private function min(Decimal $a, Decimal $b): Decimal
-    {
-        return $a->compare($b) <= 0 ? $a : $b;
-    }
-
-    private function max(Decimal $a, Decimal $b): Decimal
-    {
-        return $a->compare($b) >= 0 ? $a : $b;
-    }
 
     /** 3.0000 → "3", 2.5000 → "2,5". */
     private function format(string $quantity): string

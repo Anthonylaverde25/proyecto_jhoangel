@@ -37,7 +37,8 @@ enum EntryOrderStatus: string
     }
 
     /**
-     * Some head bought have no DTE yet: another document can be loaded against it.
+     * Some head bought have no DTE yet: another document can be loaded against it, or the head
+     * declared to move without one. It never blocks: the DTE is recommended, not required.
      */
     public function acceptsDte(): bool
     {

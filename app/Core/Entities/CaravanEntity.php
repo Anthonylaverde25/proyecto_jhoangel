@@ -6,14 +6,17 @@ namespace App\Core\Entities;
 
 use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
+use App\Core\Enums\CastrationStatus;
 use App\Core\Enums\GestationStage;
 use App\Core\Enums\PhysiologicalState;
 use App\Core\Exceptions\AnimalDeathException;
 use App\Core\Exceptions\CaravanExitException;
 use App\Core\Exceptions\DomainException;
 use App\Core\Exceptions\UntaggedAnimalException;
+use App\Core\Services\CastrationPolicy;
 use App\Core\ValueObjects\AnimalLabel;
 use App\Core\ValueObjects\CaravanNumber;
+use App\Core\ValueObjects\CastrationRecord;
 use App\Core\ValueObjects\DeathRecord;
 use App\Core\ValueObjects\ExitRecord;
 use App\Core\ValueObjects\CaravanProvenance;
@@ -58,7 +61,8 @@ final class CaravanEntity
         private ?string $taggedAt = null,
         private ?DeathRecord $death = null,
         private ?int $nursingCalvesCount = null,
-        private ?ExitRecord $exit = null
+        private ?ExitRecord $exit = null,
+        private ?CastrationRecord $castration = null
     ) {
         $this->validateTeeth($teeth);
     }
@@ -185,6 +189,30 @@ final class CaravanEntity
     public function getExit(): ?ExitRecord
     {
         return $this->exit;
+    }
+
+    /** The active castration record, or null when intact / unrecorded. */
+    public function getCastration(): ?CastrationRecord
+    {
+        return $this->castration;
+    }
+
+    public function setCastration(?CastrationRecord $castration): void
+    {
+        $this->castration = $castration;
+    }
+
+    /**
+     * Resolves the calculated castration status via CastrationPolicy (DC1).
+     * Returns null for females.
+     */
+    public function getCastrationStatus(): ?CastrationStatus
+    {
+        return (new CastrationPolicy())->status(
+            $this->sex,
+            $this->categoryCode,
+            $this->castration !== null
+        );
     }
 
     public function isDead(): bool

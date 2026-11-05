@@ -23,6 +23,7 @@ class ServiceOrder extends Model
         'parent_service_order_id',
         'code',
         'status',
+        'kind',
         'requested_by_user_id',
         'reviewed_by_user_id',
         'approved_by_user_id',

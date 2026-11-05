@@ -8,6 +8,8 @@ use App\Models\Traits\BelongsToCompany;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use App\Core\Enums\AnimalSex;
+use App\Core\Enums\ServiceOrderMaleStatus;
+use App\Core\Enums\ServiceOrderStatus;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -177,6 +179,21 @@ class Caravan extends Model
         return $this->hasOne(ExitOrderAnimal::class, 'caravan_id')->where('status', 'EXITED')->withoutGlobalScopes();
     }
 
+    public function castrations(): HasMany
+    {
+        return $this->hasMany(CaravanCastration::class, 'caravan_id');
+    }
+
+    public function activeCastration(): HasOne
+    {
+        return $this->hasOne(CaravanCastration::class, 'caravan_id')->whereNull('voided_at');
+    }
+
+    public function categoryChanges(): HasMany
+    {
+        return $this->hasMany(CaravanCategoryChange::class, 'caravan_id');
+    }
+
     /**
      * Get the offspring of this caravan as a mother.
      */
@@ -202,6 +219,16 @@ class Caravan extends Model
     public function categoryRelation(): BelongsTo
     {
         return $this->belongsTo(\App\Models\AnimalCategory::class, 'category_id');
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->categoryRelation();
+    }
+
+    public function subcategory(): BelongsTo
+    {
+        return $this->subcategoryRelation();
     }
 
     /**
@@ -262,5 +289,34 @@ class Caravan extends Model
     public function scopeInPossession(Builder $query): Builder
     {
         return $query;
+    }
+
+    /**
+     * The bulls a running service keeps with the females of this batch. They are physically here
+     * (stock, movements, sanitary events), but they are passing through: what the batch measures
+     * is its own herd, so a bull joining a service must not bend its average or its composition.
+     * Nothing is stored on the caravan: the order already declares the fact. An order that did not
+     * start or was cancelled moved no bull, whatever the status of its male line says.
+     */
+    public function scopeOnServiceInItsBatch(Builder $query): Builder
+    {
+        return $query->whereExists(self::runningServiceStay());
+    }
+
+    /** The herd of a batch: every animal it holds except the bulls passing through on service. */
+    public function scopeResident(Builder $query): Builder
+    {
+        return $query->whereNotExists(self::runningServiceStay());
+    }
+
+    private static function runningServiceStay(): \Closure
+    {
+        return static fn ($stay) => $stay->selectRaw('1')
+            ->from('service_order_males')
+            ->join('service_orders', 'service_orders.id', '=', 'service_order_males.service_order_id')
+            ->whereColumn('service_order_males.male_caravan_id', 'caravans.id')
+            ->whereColumn('service_orders.batch_id', 'caravans.batch_id')
+            ->where('service_order_males.status', ServiceOrderMaleStatus::ACTIVE->value)
+            ->where('service_orders.status', ServiceOrderStatus::APPROVED->value);
     }
 }

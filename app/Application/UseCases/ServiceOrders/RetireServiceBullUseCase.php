@@ -63,7 +63,7 @@ final class RetireServiceBullUseCase
             );
 
             $servicedBatchId = (int) $serviceOrder->batch_id;
-            $this->batchWeightService->recalculateBatchWeight($servicedBatchId, BatchWeightCause::MOVEMENT_OUT);
+            $this->batchWeightService->recalculateServicedBatch($servicedBatchId, BatchWeightCause::MOVEMENT_OUT);
             if ($destinationBatchId !== null && $destinationBatchId !== $servicedBatchId) {
                 $this->batchWeightService->recalculateBatchWeight($destinationBatchId, BatchWeightCause::MOVEMENT_IN);
             }

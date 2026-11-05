@@ -17,9 +17,8 @@ use DateTimeInterface;
 /**
  * A weighing order: which animals go over the scale, why, and on which gut-fill basis.
  *
- * A GROUP order weighs one batch as a whole, from its loads or from an average already worked
- * out. What it measures is the batch: the measure is the document, and the weight each caravan
- * receives is the consequence.
+ * A GROUP order weighs one batch, from its loads or from the average of each category. The measure
+ * is the document, and the weight each caravan receives is the consequence.
  */
 final class WeighingOrderEntity
 {
@@ -54,9 +53,9 @@ final class WeighingOrderEntity
     }
 
     /**
-     * A cage weighing that already happened, registered in one go: the order is born executed.
+     * A batch weighing that already happened, registered in one go: the order is born executed.
      *
-     * @param WeighingOrderAnimalEntity[] $animals the animals in possession in the batch
+     * @param WeighingOrderAnimalEntity[] $animals the animals the weighing covers
      *
      * @throws WeighingOrderDomainException
      */
@@ -79,6 +78,13 @@ final class WeighingOrderEntity
             throw WeighingOrderDomainException::domainError(
                 "\"{$type->label()}\" se pesa animal por animal, no por lote.",
                 'TYPE_NOT_FOR_GROUP'
+            );
+        }
+
+        if ($type->batchEntry() !== $measure->entry) {
+            throw WeighingOrderDomainException::domainError(
+                "\"{$type->label()}\" no se carga de esa forma.",
+                'TYPE_ENTRY_MISMATCH'
             );
         }
 

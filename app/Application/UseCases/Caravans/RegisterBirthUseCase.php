@@ -11,6 +11,7 @@ use App\Core\Enums\AnimalCategory;
 use App\Core\Enums\AnimalSex;
 use App\Core\Exceptions\DomainException;
 use App\Core\Interfaces\IAnimalCategoryRepository;
+use App\Core\Interfaces\IBirthOrderRepository;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Interfaces\ICaravanLineageRepository;
 use App\Core\ValueObjects\CaravanNumber;
@@ -28,7 +29,8 @@ final class RegisterBirthUseCase
         private readonly ICaravanLineageRepository $lineageRepository,
         private readonly RecordCaravanWeightUseCase $recordCaravanWeightUseCase,
         private readonly BatchWeightService $batchWeightService,
-        private readonly IAnimalCategoryRepository $animalCategoryRepository
+        private readonly IAnimalCategoryRepository $animalCategoryRepository,
+        private readonly IBirthOrderRepository $birthOrderRepository
     ) {
     }
 
@@ -63,6 +65,16 @@ final class RegisterBirthUseCase
                 }
             } else {
                 $activeGestation = $mother->getActiveGestation();
+            }
+
+            // Whatever the path that got here: the calving season starts once the service is closed.
+            if ($activeGestation?->isCurrent()) {
+                $serviceOrder = $this->birthOrderRepository->mothersInOpenServiceOrder([$dto->motherId], (int) $mother->getCompanyId())[$dto->motherId] ?? null;
+                if ($serviceOrder !== null) {
+                    throw new DomainException(
+                        "La hembra quedó preñada en la orden de servicio {$serviceOrder['code']}, que sigue abierta. Cerrala antes de registrar el parto."
+                    );
+                }
             }
 
             // 3. Validate and resolve father

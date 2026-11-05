@@ -7,19 +7,34 @@ namespace App\Core\Interfaces;
 /**
  * Raw facts about the animals currently in a batch, read for the batch page. Every method
  * counts the caravans the batch holds today: a document that took an animal elsewhere no
- * longer speaks for this batch.
+ * longer speaks for this batch. The composition and the weights describe its herd: the bulls of a
+ * running service are read apart, with bullsOnService().
  */
 interface IBatchOverviewRepository
 {
+    /**
+     * The bulls a running service keeps in the batch for now.
+     *
+     * @return list<array{caravan_id: int, identification: ?string, category_name: ?string, weight: ?float, order_id: int, order_code: string, joined_at: ?string, origin_batch_id: ?int, origin_batch_name: ?string}>
+     */
+    public function bullsOnService(int $batchId): array;
+
     /**
      * @return array{M: int, H: int}
      */
     public function sexComposition(int $batchId): array;
 
     /**
-     * @return list<array{category_id: ?int, name: ?string, count: int}> largest first
+     * @return list<array{category_id: ?int, name: ?string, count: int, weighed_count: int, average_weight: ?float}> largest first
      */
     public function categoryComposition(int $batchId): array;
+
+    /**
+     * Every weight on record of the animals in the batch today, oldest first.
+     *
+     * @return list<array{caravan_id: int, category_id: ?int, category_name: ?string, weight: float, date: string}>
+     */
+    public function categoryWeightReadings(int $batchId): array;
 
     /**
      * Females in the batch, and how many of them carry a current gestation.
@@ -56,4 +71,9 @@ interface IBatchOverviewRepository
      * @return array{id: int, code: string, status: string, planned_start_date: ?string}|null
      */
     public function activeServiceOrder(int $batchId): ?array;
+
+    /**
+     * Total number of castration candidates in the batch (living male calves without active castration and toritos).
+     */
+    public function castrationCandidateCount(int $batchId, int $companyId): int;
 }

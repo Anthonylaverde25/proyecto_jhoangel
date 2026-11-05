@@ -25,6 +25,7 @@ class ServiceOrderResource extends JsonResource
             'batch_name'           => $this->resource->getBatchName(),
             'code'                 => $this->resource->getCode(),
             'status'               => $this->resource->getStatus()->value,
+            'kind'                 => $this->resource->getKind()->value,
             'requested_by_user_id' => $this->resource->getRequestedByUserId(),
             'reviewed_by_user_id'  => $this->resource->getReviewedByUserId(),
             'approved_by_user_id'  => $this->resource->getApprovedByUserId(),

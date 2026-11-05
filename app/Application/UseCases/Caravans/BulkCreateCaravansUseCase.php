@@ -16,13 +16,17 @@ final class BulkCreateCaravansUseCase
 
     /**
      * @param RegisterCaravanDTO[] $dtos
+     * @return list<string> what the operator should know about these rows
      */
-    public function __invoke(array $dtos): void
+    public function __invoke(array $dtos): array
     {
-        DB::transaction(function () use ($dtos) {
+        return DB::transaction(function () use ($dtos): array {
+            $warnings = [];
             foreach ($dtos as $dto) {
-                ($this->upsertCaravanUseCase)($dto);
+                array_push($warnings, ...($this->upsertCaravanUseCase)($dto)->warnings);
             }
+
+            return $warnings;
         });
     }
 }

@@ -136,7 +136,7 @@ class SemenStockTestSeeder extends Seeder
         if ($existing !== null) {
             return (int) $existing;
         }
-        $bull = Caravan::withoutGlobalScopes()->where('company_id', $this->companyId)->where('sex', AnimalSex::MALE->value)->orderBy('id')->value('id');
+        $bull = Caravan::withoutGlobalScopes()->where('company_id', $this->companyId)->where('sex', AnimalSex::MALE->value)->whereHas('category', static fn ($q) => $q->where('code', 'TORO'))->orderBy('id')->value('id');
 
         return $bull === null ? null : (int) app(CreateSemenSireUseCase::class)(new SemenSireDTO(null, null, null, null, (int) $bull, 'Toro propio con semen extraído.'), $this->companyId)->id;
     }

@@ -6,8 +6,11 @@ namespace App\Application\UseCases\Caravans;
 
 use App\Application\DTOs\RegisterCaravanDTO;
 use App\Application\DTOs\UpsertCaravanResultDTO;
+use App\Application\Services\CaravanLoadPregnancyGuard;
+use App\Application\Services\CaravanRecategorizer;
 use App\Core\Entities\CaravanEntity;
 use App\Core\Enums\AnimalCategory;
+use App\Core\Exceptions\DomainException;
 use App\Core\Interfaces\IAnimalCategoryRepository;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Interfaces\ICompanyContext;
@@ -26,7 +29,9 @@ final class UpsertCaravanUseCase
         private readonly CaravanTraceabilityService $traceabilityService,
         private readonly \App\Core\Services\BatchWeightService $batchWeightService,
         private readonly RecordCaravanWeightUseCase $recordCaravanWeightUseCase,
-        private readonly IAnimalCategoryRepository $animalCategoryRepository
+        private readonly IAnimalCategoryRepository $animalCategoryRepository,
+        private readonly CaravanRecategorizer $recategorizer,
+        private readonly CaravanLoadPregnancyGuard $pregnancyGuard
     ) {
     }
 
@@ -74,6 +79,7 @@ final class UpsertCaravanUseCase
 
     private function handleUpdate(CaravanEntity $entity, RegisterCaravanDTO $dto, ?AnimalCategory $category): UpsertCaravanResultDTO
     {
+        $warnings = [];
         $oldBatchId = $entity->getBatchId();
         $oldWeight = $entity->getEntryWeight() ?? 0.0;
         
@@ -98,6 +104,12 @@ final class UpsertCaravanUseCase
 
         [$catId, $subId] = $this->resolveCategoryIds($dto, $category);
         if ($catId !== null) {
+            if ($this->recategorizer !== null && $entity->getId() !== null) {
+                $refusals = $this->recategorizer->refusals([(int) $entity->getId() => (int) $catId]);
+                if (isset($refusals[(int) $entity->getId()])) {
+                    throw new DomainException($refusals[(int) $entity->getId()]);
+                }
+            }
             $entity->setCategoryId($catId);
         }
         if ($subId !== null) {
@@ -108,18 +120,16 @@ final class UpsertCaravanUseCase
             $currentDetails = $entity->getReproductiveDetails();
             $isEmpty = $dto->isEmpty !== null ? $dto->isEmpty : ($currentDetails?->isEmpty() ?? true);
             $arrivalCategory = $currentDetails?->getArrivalCategory() ?? ($category ?? AnimalCategory::VACA);
-            
-            $entity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
 
-            // Automatización Gestacional: Si pasa a vacía y tiene gestación activa, cerrarla como EXITOSA (Parto)
-            if ($isEmpty && $entity->hasActiveGestation()) {
-                $endDate = $dto->entryDate ?? date('Y-m-d');
-                $entity->getActiveGestation()->closeGestation(
-                    true,
-                    $endDate,
-                    'Closed via calving registration.'
-                );
+            // A load never ends a pregnancy: a birth or a loss has its own flow.
+            if ($entity->hasActiveGestation()) {
+                if ($dto->isEmpty === true) {
+                    $warnings[] = $this->pregnancyGuard->warningFor($entity);
+                }
+                $isEmpty = false;
             }
+
+            $entity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
 
             // Automatización Gestacional: Si está preñada y no tiene gestación activa, crear una
             if (!$isEmpty && !$entity->hasActiveGestation()) {
@@ -155,11 +165,12 @@ final class UpsertCaravanUseCase
             $this->batchWeightService->recalculateBatchWeight($newBatchId, BatchWeightCause::MOVEMENT_IN, $weighingDateObj);
         }
 
-        return new UpsertCaravanResultDTO('updated', $entity->getId());
+        return new UpsertCaravanResultDTO('updated', $entity->getId(), $warnings);
     }
 
     private function handleTransfer(CaravanEntity $entity, int $newCompanyId, RegisterCaravanDTO $dto, ?AnimalCategory $category): UpsertCaravanResultDTO
     {
+        $warnings = [];
         $oldCompanyId = $entity->getCompanyId();
         $oldBatchId = $entity->getBatchId();
         $newWeight = $dto->entryWeight !== null ? (float) $dto->entryWeight : null;
@@ -199,18 +210,16 @@ final class UpsertCaravanUseCase
             $currentDetails = $entity->getReproductiveDetails();
             $isEmpty = $dto->isEmpty !== null ? $dto->isEmpty : ($currentDetails?->isEmpty() ?? true);
             $arrivalCategory = $currentDetails?->getArrivalCategory() ?? ($category ?? AnimalCategory::VACA);
-            
-            $newEntity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
 
-            // Automatización Gestacional: Si pasa a vacía y tiene gestación activa, cerrarla como EXITOSA
-            if ($isEmpty && $newEntity->hasActiveGestation()) {
-                $endDate = $dto->entryDate ?? date('Y-m-d');
-                $newEntity->getActiveGestation()->closeGestation(
-                    true,
-                    $endDate,
-                    'Closed via calving registration.'
-                );
+            // A load never ends a pregnancy: a birth or a loss has its own flow.
+            if ($newEntity->hasActiveGestation()) {
+                if ($dto->isEmpty === true) {
+                    $warnings[] = $this->pregnancyGuard->warningFor($newEntity);
+                }
+                $isEmpty = false;
             }
+
+            $newEntity->recordFemaleDetails(new FemaleReproductiveDetails($isEmpty, $arrivalCategory));
 
             // Automatización Gestacional: Si está preñada y no tiene gestación activa, crear una
             if (!$isEmpty && !$newEntity->hasActiveGestation()) {
@@ -253,7 +262,7 @@ final class UpsertCaravanUseCase
             $this->traceabilityService->recordTransfer($savedEntity, $oldCompanyId, $newCompanyId);
         }
 
-        return new UpsertCaravanResultDTO('updated', $savedEntity->getId());
+        return new UpsertCaravanResultDTO('updated', $savedEntity->getId(), $warnings);
     }
 
     private function handleNewArrival(CaravanNumber $identification, int $activeCompanyId, RegisterCaravanDTO $dto, ?AnimalCategory $category): UpsertCaravanResultDTO

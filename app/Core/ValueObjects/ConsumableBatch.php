@@ -19,6 +19,8 @@ final readonly class ConsumableBatch
         public bool $isActive,
         public bool $isExternal,
         public ?string $typeCode,
+        /** The head it holds today: its caravans plus the head still waiting for their caravan. */
+        public int $headCount = 0,
     ) {
     }
 

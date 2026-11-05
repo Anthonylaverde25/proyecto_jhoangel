@@ -7,8 +7,9 @@ namespace App\Core\ValueObjects;
 use App\Core\Exceptions\WeighingOrderDomainException;
 
 /**
- * One load of a cage or truck scale: how many head went on, what the scale read, and its tare.
- * Only the net mass and the head count are facts; the average is derived from them.
+ * One load of a cage or truck scale: which category went on, how many head, what the scale read,
+ * and its tare. Only the net mass and the head count are facts; the average is derived from them.
+ * A null category stands for the animals of the batch with no category on record.
  */
 final readonly class CageGroupWeighing
 {
@@ -17,6 +18,8 @@ final readonly class CageGroupWeighing
         public int $headCount,
         public float $grossWeight,
         public float $tareWeight = 0.0,
+        public ?int $categoryId = null,
+        public ?string $categoryName = null,
     ) {
         if ($headCount < 1) {
             throw WeighingOrderDomainException::domainError("Jaula {$sequence}: indicá cuántas cabezas se pesaron.", 'GROUP_WITHOUT_HEADS');

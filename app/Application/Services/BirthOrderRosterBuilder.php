@@ -11,7 +11,8 @@ use App\Core\Interfaces\IBirthOrderRepository;
 
 /**
  * Turns the females the birth order screen chose into the roll of an order, and checks what an
- * ORDER needs: each one a female of the company with a pregnancy in course.
+ * ORDER needs: each one a female of the company with a pregnancy in course, whose service order is
+ * already closed: the calving season starts after the diagnosis has closed the service.
  *
  * Used by creating, by rewriting a draft, by issuing it and by registering, so all of them agree on
  * what a valid birth order is.
@@ -86,7 +87,38 @@ final class BirthOrderRosterBuilder
             );
         }
 
+        $this->assertServiceOrdersClosed($facts, $companyId);
+
         return $facts;
+    }
+
+    /**
+     * @param array<int, array{identification: string}> $facts
+     *
+     * @throws BirthOrderDomainException
+     */
+    private function assertServiceOrdersClosed(array $facts, int $companyId): void
+    {
+        $held = $this->repository->mothersInOpenServiceOrder(array_keys($facts), $companyId);
+
+        if ($held === []) {
+            return;
+        }
+
+        $tagsByCode = [];
+        foreach ($held as $motherId => $serviceOrder) {
+            $tagsByCode[$serviceOrder['code']][] = $facts[$motherId]['identification'];
+        }
+
+        $parts = [];
+        foreach ($tagsByCode as $code => $tags) {
+            $parts[] = implode(', ', $tags) . " (orden {$code})";
+        }
+
+        throw BirthOrderDomainException::domainError(
+            'Preñadas en una orden de servicio sin cerrar: ' . implode('; ', $parts) . '. Cerrala antes de empezar la parición.',
+            'SERVICE_ORDER_NOT_CLOSED'
+        );
     }
 
     /**

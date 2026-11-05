@@ -137,6 +137,11 @@ class EntryOrderResource extends JsonResource
             ], array_values($troop->breedsByPosition())),
             'with_dte_count' => $order->withDteCount(),
             'pending_dte_count' => $order->pendingDteCount(),
+            // Head nothing declares yet: what a new "Cargar DTE" or "Continuar sin DTE" would take.
+            'undeclared_head_count' => $order->undeclaredCount(),
+            // Head moving with their paper still to come: a reminder, never a block.
+            'without_dte' => $order->isWithoutDte(),
+            'without_dte_head_count' => $order->withoutDteHeadCount(),
             'in_transit_count' => $order->inTransitCount(),
             'received_count' => $order->receivedCount(),
             // Received by count, their caravans still to write (on an ING-03 or by hand).
@@ -147,7 +152,7 @@ class EntryOrderResource extends JsonResource
             'can_write_off' => $order->uncaravanedCount() > 0,
             'missing_count' => $order->missingCount(),
             'open_incidents_count' => $order->openIncidentsCount(),
-            'dte_count' => count($order->getDtes()),
+            'dte_count' => $order->documentedDteCount(),
             'requested_by' => $order->getRequestedByUserId() !== null
                 ? ['id' => $order->getRequestedByUserId(), 'name' => $order->name('requested_by')]
                 : null,

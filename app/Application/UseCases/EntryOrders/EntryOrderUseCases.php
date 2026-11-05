@@ -11,6 +11,7 @@ final class EntryOrderUseCases
         public readonly UpdateEntryOrderDraftUseCase $updateDraft,
         public readonly ConfirmEntryOrderUseCase $confirm,
         public readonly LoadEntryOrderDteUseCase $loadDte,
+        public readonly AttachEntryOrderDteDocumentUseCase $attachDteDocument,
         public readonly CorrectEntryOrderDteHeadCountUseCase $correctDteHeadCount,
         public readonly RegisterEntryUseCase $register,
         public readonly ReceiveEntryOrderUseCase $receive,

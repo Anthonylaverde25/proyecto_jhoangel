@@ -81,12 +81,12 @@ final readonly class ReceiveDTO
     }
 
     /**
-     * Every animal of a DTE received on one day: what "Registrar ingreso" does, with the DTE and
-     * the animals in hand at once.
+     * Every animal of a DTE received on one day: what "Registrar ingreso" does, with the DTE (if
+     * any) and the animals in hand at once. Without number, the one just recorded on the order.
      *
      * @param array<int, array<string, mixed>> $animals
      */
-    public static function wholeDte(string $dteNumber, string $receivedAt, array $animals): self
+    public static function wholeDte(?string $dteNumber, string $receivedAt, array $animals): self
     {
         return new self(
             method: ReceptionMethod::MANUAL,

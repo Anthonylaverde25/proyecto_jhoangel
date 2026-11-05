@@ -32,6 +32,8 @@ class BatchOverviewApiTest extends EntryOrderTestCase
         $this->assertSame(['M' => 1, 'H' => 3], $overview['sex_composition']);
         $this->assertSame(['females' => 3, 'pregnant' => 1, 'without_gestation' => 2, 'overdue' => 1], $overview['reproductive']);
         $this->assertSame(2, $overview['category_composition'][0]['count']);
+        $this->assertSame(0, $overview['category_composition'][0]['weighed_count']);
+        $this->assertNull($overview['category_composition'][0]['average_weight']);
         // The life of an animal comes first.
         $this->assertSame('OVERDUE_BIRTH', $overview['alerts'][0]['type']);
         $this->assertSame('error', $overview['alerts'][0]['severity']);
@@ -122,6 +124,75 @@ class BatchOverviewApiTest extends EntryOrderTestCase
         $batch->update(['activity_id' => $activity->id]);
 
         return $batch;
+    }
+
+    public function test_each_category_of_the_composition_carries_its_own_average(): void
+    {
+        $batch = $this->criaBatch('Rodeo Promedios');
+        $weigh = function (Caravan $caravan, float $weight): void {
+            $caravan->weights()->create([
+                'weighing_type_id' => \App\Models\WeighingType::idOf(\App\Core\Enums\WeighingTypeCode::CONTROL),
+                'weight' => $weight,
+                'weighing_date' => now()->toDateString(),
+                'current' => true,
+            ]);
+        };
+
+        $weigh($this->animal('PR-V-1', $batch, 'H', 'VACA'), 440.0);
+        $weigh($this->animal('PR-V-2', $batch, 'H', 'VACA'), 460.0);
+        $this->animal('PR-V-3', $batch, 'H', 'VACA');
+        $weigh($this->animal('PR-T-1', $batch, 'M', 'TORO'), 800.0);
+
+        $composition = $this->apiAs('GET', "/batches/{$batch->id}/overview")->assertOk()->json('category_composition');
+
+        $this->assertSame(3, $composition[0]['count']);
+        $this->assertSame(2, $composition[0]['weighed_count']);
+        $this->assertEqualsWithDelta(450.0, $composition[0]['average_weight'], 0.001);
+        $this->assertEqualsWithDelta(800.0, $composition[1]['average_weight'], 0.001);
+    }
+
+    public function test_the_weight_series_follows_each_category_with_the_latest_weight_of_its_animals(): void
+    {
+        $batch = $this->criaBatch('Rodeo Curvas');
+        $other = $this->criaBatch('Otro Rodeo');
+        $weigh = function (Caravan $caravan, float $weight, string $date, bool $current): void {
+            $caravan->weights()->create([
+                'weighing_type_id' => \App\Models\WeighingType::idOf(\App\Core\Enums\WeighingTypeCode::CONTROL),
+                'weight' => $weight,
+                'weighing_date' => $date,
+                'current' => $current,
+            ]);
+        };
+
+        $cowA = $this->animal('CU-V-1', $batch, 'H', 'VACA');
+        $cowB = $this->animal('CU-V-2', $batch, 'H', 'VACA');
+        $bull = $this->animal('CU-T-1', $batch, 'M', 'TORO');
+        $this->animal('CU-V-3', $batch, 'H', 'VACA');
+        $gone = $this->animal('CU-V-4', $other, 'H', 'VACA');
+
+        $weigh($cowA, 400.0, '2026-09-01', false);
+        $weigh($cowB, 500.0, '2026-09-01', true);
+        $weigh($bull, 800.0, '2026-09-01', true);
+        $weigh($gone, 900.0, '2026-09-01', true);
+        // Only one cow goes on the scale: the category moves by her gain, not to her weight.
+        $weigh($cowA, 420.0, '2026-10-01', true);
+
+        $series = $this->apiAs('GET', "/batches/{$batch->id}/weights/by-category")->assertOk()->json();
+
+        $this->assertCount(3, $series);
+        $this->assertSame('2026-09-01', $series[0]['weighing_date']);
+        $this->assertEqualsWithDelta(450.0, $series[0]['average_weight'], 0.001, 'An animal in another batch stays out');
+        $this->assertSame(2, $series[0]['weighed_count']);
+        $this->assertSame(3, $series[0]['head_count']);
+        $this->assertEqualsWithDelta(800.0, $series[1]['average_weight'], 0.001);
+        $this->assertSame('2026-10-01', $series[2]['weighing_date']);
+        $this->assertEqualsWithDelta(460.0, $series[2]['average_weight'], 0.001);
+
+        // The last point of a category is what the batch page shows as its average.
+        $composition = $this->apiAs('GET', "/batches/{$batch->id}/overview")->json('category_composition');
+        $this->assertEqualsWithDelta($composition[0]['average_weight'], $series[2]['average_weight'], 0.001);
+
+        $this->apiAs('GET', '/batches/999999/weights/by-category')->assertStatus(422);
     }
 
     private function animal(string $identification, Batch $batch, string $sex, string $category): Caravan

@@ -6,6 +6,7 @@ namespace Tests\Feature\Batches;
 
 use App\Core\Enums\WeighingTypeCode;
 use App\Core\Interfaces\IBatchRepository;
+use App\Models\AnimalCategory;
 use App\Models\Batch;
 use App\Models\Caravan;
 use App\Models\CaravanLineage;
@@ -95,6 +96,28 @@ class BatchNursingCalvesTest extends TestCase
         $this->assertSame(2, $entity->getNursingCount());
         $this->assertSame(1, $entity->getNursingWeighedCount(), 'TERN-2 has no weight yet');
         $this->assertEqualsWithDelta(35.5, $entity->getNursingTotalWeight(), 0.001);
+    }
+
+    public function test_the_batch_read_counts_the_categories_its_weights_span(): void
+    {
+        $batch = Batch::create(['company_id' => $this->company->id, 'name' => 'Cría mezclada', 'is_active' => true]);
+        $category = static fn (string $code): int => (int) AnimalCategory::where('code', $code)->value('id');
+
+        $this->caravan($batch, 'VACA-1', 450.0)->update(['category_id' => $category('VACA')]);
+        $this->caravan($batch, 'VACA-2', 430.0)->update(['category_id' => $category('VACA')]);
+        $calf = $this->caravan($batch, 'TERN-1', null);
+        $calf->update(['category_id' => $category('TERNERO')]);
+
+        $this->assertSame(1, app(IBatchRepository::class)->findById($batch->id)->getWeighedCategoryCount(), 'The calf has no weight yet');
+
+        $calf->weights()->create([
+            'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::CONTROL),
+            'weight' => 100.0,
+            'weighing_date' => now()->toDateString(),
+            'current' => true,
+        ]);
+
+        $this->assertSame(2, app(IBatchRepository::class)->findById($batch->id)->getWeighedCategoryCount());
     }
 
     public function test_a_batch_without_calves_reads_zero_not_null(): void

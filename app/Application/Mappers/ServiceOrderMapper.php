@@ -7,6 +7,7 @@ namespace App\Application\Mappers;
 use App\Core\Entities\ServiceOrderEntity;
 use App\Core\Entities\ServiceOrderHistoryEntity;
 use App\Core\Enums\ServiceMethod;
+use App\Core\Enums\ServiceOrderKind;
 use App\Core\Enums\ServiceOrderStatus;
 use App\Models\ServiceOrder;
 
@@ -171,7 +172,8 @@ class ServiceOrderMapper
             batchName: $model->relationLoaded('batch') ? $model->batch?->name : null,
             diagnosisCompletedAt: self::dateOrNull($model->diagnosis_completed_at),
             parentServiceOrderId: $model->parent_service_order_id !== null ? (int) $model->parent_service_order_id : null,
-            serviceMethod: ServiceMethod::tryFrom((string) ($model->service_method ?? '')) ?? ServiceMethod::NATURAL
+            serviceMethod: ServiceMethod::tryFrom((string) ($model->service_method ?? '')) ?? ServiceMethod::NATURAL,
+            kind: ServiceOrderKind::tryFrom((string) ($model->kind ?? '')) ?? ServiceOrderKind::ISSUED
         );
 
     }
@@ -205,6 +207,7 @@ class ServiceOrderMapper
         $model->service_type = $entity->getServiceType();
         $model->is_controlled_service = $entity->isControlledService();
         $model->service_method = $entity->getServiceMethod()->value;
+        $model->kind = $entity->getKind()->value;
 
         return $model;
     }

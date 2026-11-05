@@ -99,7 +99,7 @@ final class AddRepasoBullsUseCase
             foreach ($donorBatchIds as $donorBatchId) {
                 $this->batchWeightService->recalculateBatchWeight($donorBatchId, BatchWeightCause::MOVEMENT_OUT);
             }
-            $this->batchWeightService->recalculateBatchWeight($order->getBatchId(), BatchWeightCause::MOVEMENT_IN);
+            $this->batchWeightService->recalculateServicedBatch($order->getBatchId(), BatchWeightCause::MOVEMENT_IN);
 
             $labels = implode(', ', array_map(fn (int $id) => (string) $bulls->get($id)->identification, $maleCaravanIds));
             ServiceOrderHistory::create([

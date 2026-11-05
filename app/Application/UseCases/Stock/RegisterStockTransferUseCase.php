@@ -93,6 +93,7 @@ final class RegisterStockTransferUseCase
             notes: $dto->notes,
             idempotencyKey: $dto->idempotencyKey,
             createdBy: $dto->createdBy,
+            source: $dto->source,
         ), $to->id, $from->code, $items, $dto->createdBy);
     }
 }

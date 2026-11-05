@@ -25,9 +25,17 @@ class RecordCaravanWeightRequest extends FormRequest
     {
         return [
             'weight'           => 'required|numeric|gt:0|max:2000',
-            'weighing_date'    => 'required|date',
+            'weighing_date'    => 'required|date|before_or_equal:today',
             'notes'            => 'nullable|string',
             ...WeighingFieldRules::rules(),
+        ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return [
+            'weighing_date.before_or_equal' => 'La fecha del pesaje no puede ser futura.',
         ];
     }
 }

@@ -47,6 +47,7 @@ final class ItemDocumentEntity
         private readonly ?string $providerName = null,
         private readonly ?int $serviceOrderId = null,
         private readonly ?string $serviceOrderCode = null,
+        private readonly ?string $source = null,
     ) {
         if ($lines === []) {
             throw ItemDocumentException::on('lines', 'La operación no tiene renglones.');
@@ -102,6 +103,7 @@ final class ItemDocumentEntity
         return null;
     }
 
+    public function getSource(): ?string { return $this->source; }
     public function getId(): ?int { return $this->id; }
     public function getCompanyId(): int { return $this->companyId; }
     public function getNumber(): ?int { return $this->number; }

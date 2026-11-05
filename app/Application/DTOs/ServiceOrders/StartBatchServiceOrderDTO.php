@@ -30,7 +30,9 @@ final class StartBatchServiceOrderDTO
         /** The order this one continues: the bulls stayed with the empty females of a closed one. */
         public readonly ?int $parentServiceOrderId = null,
         public readonly ServiceMethod $serviceMethod = ServiceMethod::NATURAL,
-        public readonly array $plannedSemen = []
+        public readonly array $plannedSemen = [],
+        /** The planned order this start fulfils: it keeps its code instead of taking a new one. */
+        public readonly ?int $plannedOrderId = null
     ) {
     }
 

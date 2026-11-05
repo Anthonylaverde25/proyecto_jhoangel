@@ -7,6 +7,7 @@ namespace Tests\Feature\Insemination;
 use App\Models\Activity;
 use App\Models\Batch;
 use App\Models\Caravan;
+use Database\Seeders\FitTestBullsSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
@@ -28,6 +29,9 @@ abstract class InseminationTestCase extends SemenTestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // The fit bulls these services run with are a scenario, not part of the base seed.
+        $this->seed(FitTestBullsSeeder::class);
 
         $cria = Activity::updateOrCreate(['code' => 'CRIA'], ['name' => 'Cría']);
         $this->rodeo = $this->newBatch('Rodeo IA ' . Str::random(4), $cria->id);

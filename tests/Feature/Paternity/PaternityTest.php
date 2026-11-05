@@ -162,6 +162,10 @@ class PaternityTest extends VeterinaryTestCase
             'diagnosis_date' => $this->day(-200),
         ])->assertStatus(200);
         $gestationId = (int) CaravanGestation::where('caravan_id', $cow->id)->where('is_current', true)->value('id');
+        // The calving season starts once the service order is closed; the order goes back to its
+        // state afterwards, because these scenarios go on diagnosing other cows of the same order.
+        $status = DB::table('service_orders')->where('id', $orderId)->value('status');
+        DB::table('service_orders')->where('id', $orderId)->update(['status' => 'SUCCESS']);
 
         $this->apiAs('POST', '/caravans/bulk-birth', ['births' => [[
             'calf_identification' => $calfTag,
@@ -173,6 +177,7 @@ class PaternityTest extends VeterinaryTestCase
             'mother_id' => $cow->id,
             'gestation_id' => $gestationId,
         ]]])->assertStatus(201);
+        DB::table('service_orders')->where('id', $orderId)->update(['status' => $status]);
 
         return Caravan::where('identification', $calfTag)->firstOrFail();
     }

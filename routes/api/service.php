@@ -8,7 +8,18 @@ use App\Http\Controllers\Api\ProcessLabResultsController;
 use App\Http\Controllers\Api\SanitaryExposureAlertController;
 use App\Http\Controllers\Api\ServiceOrderController;
 use App\Http\Controllers\Api\ServiceOrderInseminationController;
+use App\Http\Controllers\Api\ServiceOrderIssuanceController;
 use Illuminate\Support\Facades\Route;
+
+// How a service order comes to exist: started or planned over its batches, or registered afterwards.
+Route::controller(ServiceOrderIssuanceController::class)->prefix('service-orders')->group(function (): void {
+    Route::post('/issue', 'issue');
+    Route::post('/register', 'register');
+    Route::get('/bull-locations', 'bullLocations');
+    Route::get('/pending-tacto-females', 'pendingTactoFemales');
+    Route::post('/{id}/start', 'startPlanned')->whereNumber('id');
+    Route::patch('/{id}/planned', 'updatePlanned')->whereNumber('id');
+});
 
 // Service orders (natural service and AI).
 Route::controller(ServiceOrderController::class)->prefix('service-orders')->group(function (): void {

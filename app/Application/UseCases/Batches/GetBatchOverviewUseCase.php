@@ -78,6 +78,8 @@ final class GetBatchOverviewUseCase
             lastWeighingDate: $this->caravans->getLatestWeighingDateByBatch($batchId),
             reproductive: $reproductive,
             alerts: $alerts,
+            castrationCandidateCount: $this->overview->castrationCandidateCount($batchId, $companyId),
+            bullsOnService: $this->overview->bullsOnService($batchId),
         );
     }
 
@@ -184,7 +186,7 @@ final class GetBatchOverviewUseCase
         return [new BatchAlert(
             type: BatchAlert::ACTIVE_SERVICE,
             severity: BatchAlert::SEVERITY_INFO,
-            message: "Servicio {$state}" . ($service['planned_start_date'] !== null ? " desde {$service['planned_start_date']}" : ''),
+            message: "Servicio {$state}" . ($service['planned_start_date'] !== null ? ' desde ' . (new \DateTimeImmutable($service['planned_start_date']))->format('d/m/Y') : ''),
             linkKind: 'service_order',
             linkId: $service['id'],
             linkCode: $service['code'],
@@ -212,7 +214,8 @@ final class GetBatchOverviewUseCase
      */
     private function unweighedAlerts(BatchEntity $batch): array
     {
-        $unweighed = (int) $batch->getCaravansCount() - (int) $batch->getWeighedCount();
+        // Over the herd, like the weighed count: a bull on service is not a head of it.
+        $unweighed = (int) $batch->getCaravansCount() - $batch->getBullsOnServiceCount() - (int) $batch->getWeighedCount();
 
         if ($unweighed <= 0) {
             return [];

@@ -61,11 +61,14 @@ class ExtractionActSeeder extends Seeder
         }
 
 
-        // Bulls that are NOT the untouched test trio: those must stay without sanitary history.
+        // Bulls with no sanitary record of their own: the test trio must stay without history, and an
+        // act on TR-001..015 would change the aptitude their evaluations are there to show.
         $bulls = Caravan::withoutGlobalScopes()
             ->where('company_id', $companyId)
             ->whereIn('sex', ['M', 'MACHO', 'MALE'])
+            ->whereHas('category', static fn ($q) => $q->where('code', 'TORO'))
             ->where('identification', 'not like', 'ANTHONY-TORO-TEST-OOX%')
+            ->where('identification', 'not like', 'TR-%')
             ->orderBy('id')
             ->limit(8)
             ->get();

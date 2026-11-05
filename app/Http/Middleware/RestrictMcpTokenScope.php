@@ -27,7 +27,7 @@ final class RestrictMcpTokenScope
 
     /** @var array<string, list<string>> the only writes allowed to an MCP token, by method */
     private const ALLOWED_WRITES = [
-        'POST' => ['api/tasks'],
+        'POST' => ['api/tasks', 'api/caravans/*/ai-weighing', 'api/item-documents/ai-consumptions'],
         'PATCH' => ['api/tasks/*'],
     ];
 
@@ -46,7 +46,7 @@ final class RestrictMcpTokenScope
         }
 
         if (!in_array($request->method(), self::READ_METHODS, true) && !$this->isAllowedWrite($request)) {
-            return $this->deny('Una conexión de IA sólo puede consultar; no modifica datos.');
+            return $this->deny('Una conexión de IA sólo puede consultar y registrar lo permitido; esta acción se hace desde el sistema.');
         }
 
         $isSessionRoute = $request->is('api/mcp/session');

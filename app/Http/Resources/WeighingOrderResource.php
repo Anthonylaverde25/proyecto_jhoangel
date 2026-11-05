@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Resources;
 
 use App\Core\ValueObjects\CageGroupWeighing;
+use App\Core\ValueObjects\CategoryAverageWeighing;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -42,12 +43,20 @@ class WeighingOrderResource extends JsonResource
             'entry' => $order->getMeasure()?->entry->value,
             'groups' => array_map(static fn (CageGroupWeighing $g): array => [
                 'sequence' => $g->sequence,
+                'category_id' => $g->categoryId,
+                'category_name' => $g->categoryName,
                 'head_count' => $g->headCount,
                 'gross_weight' => $g->grossWeight,
                 'tare_weight' => $g->tareWeight,
                 'net_weight' => round($g->netWeight(), 2),
                 'average_weight' => round($g->averageWeight(), 2),
             ], $order->getMeasure()?->loads ?? []),
+            'category_averages' => array_map(static fn (CategoryAverageWeighing $a): array => [
+                'category_id' => $a->categoryId,
+                'category_name' => $a->categoryName,
+                'head_count' => $a->headCount,
+                'average_weight' => round($a->averageWeight, 2),
+            ], $order->getMeasure()?->averagesByCategory() ?? []),
             'responsable' => $order->getResponsable(),
             'observations' => $order->getObservations(),
             'created_at' => $order->getCreatedAt()?->format(DATE_ATOM),

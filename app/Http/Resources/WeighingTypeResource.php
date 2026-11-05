@@ -25,6 +25,7 @@ class WeighingTypeResource extends JsonResource
             'default_shrunk_condition' => $this->resource->getDefaultShrunkCondition()->value,
             'allows_individual'        => $this->resource->getCode()->allowsIndividualWeighing(),
             'allows_group'             => $this->resource->getCode()->allowsGroupWeighing(),
+            'batch_entry'              => $this->resource->getCode()->batchEntry()?->value,
             'display_order'            => $this->resource->getDisplayOrder(),
             'is_system'                => $this->resource->isSystem(),
             'is_active'                => $this->resource->isActive(),

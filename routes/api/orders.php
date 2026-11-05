@@ -64,6 +64,7 @@ Route::controller(EntryOrderController::class)->prefix('entry-orders')->group(fu
     Route::post('/{id}/printed', 'printed')->whereNumber('id');
     Route::post('/{id}/dtes', 'loadDte')->whereNumber('id');
     Route::patch('/{id}/dtes/{dteId}', 'correctDteHeadCount')->whereNumber(['id', 'dteId']);
+    Route::put('/{id}/dtes/{dteId}/document', 'attachDteDocument')->whereNumber(['id', 'dteId']);
     Route::post('/{id}/receive', 'receive')->whereNumber('id')->middleware('dry.run');
     Route::put('/{id}/destinations', 'redistribute')->whereNumber('id');
     Route::post('/{id}/pending-heads/write-off', 'writeOffPending')->whereNumber('id');
@@ -83,6 +84,7 @@ Route::controller(BirthOrderController::class)->prefix('birth-orders')->group(fu
     Route::post('/register', 'register');
     Route::get('/by-code/{code}', 'byCode');
     Route::get('/open-mothers', 'openMothers');
+    Route::get('/mothers-in-open-service', 'mothersInOpenService');
     Route::get('/{id}', 'show')->whereNumber('id');
     Route::put('/{id}', 'update')->whereNumber('id');
     Route::post('/{id}/issue', 'issue')->whereNumber('id');

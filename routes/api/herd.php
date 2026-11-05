@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\CaravanController;
 use App\Http\Controllers\Api\HerdSummaryController;
 use App\Http\Controllers\Api\LookupCaravansController;
 use App\Http\Controllers\Api\OperationalKpiController;
+use App\Http\Controllers\Api\RecordAiWeighingController;
 use App\Http\Controllers\Api\RegisterNewCaravansController;
 use Illuminate\Support\Facades\Route;
 
@@ -13,6 +14,9 @@ use Illuminate\Support\Facades\Route;
 Route::post('/caravans/lookup', LookupCaravansController::class);
 Route::get('/caravans/{id}', [CaravanController::class, 'show'])->whereNumber('id');
 Route::post('/caravans/register-new', RegisterNewCaravansController::class);
+
+// The only write on the herd open to an AI client (see RestrictMcpTokenScope).
+Route::post('/caravans/{id}/ai-weighing', RecordAiWeighingController::class)->whereNumber('id');
 
 Route::get('/dashboard/operational-kpis', [OperationalKpiController::class, 'index']);
 Route::get('/dashboard/herd-summary', HerdSummaryController::class);

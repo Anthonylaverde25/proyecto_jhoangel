@@ -14,8 +14,10 @@ use App\Core\Enums\WeighingOrderMode;
 use App\Core\Enums\WeighingTypeCode;
 use App\Core\ValueObjects\BatchWeighingMeasure;
 use App\Core\ValueObjects\CageGroupWeighing;
+use App\Core\ValueObjects\CategoryAverageWeighing;
 use App\Models\WeighingOrder;
 use App\Models\WeighingOrderAnimal;
+use App\Models\WeighingOrderCategoryAverage;
 use App\Models\WeighingOrderGroup;
 
 final class WeighingOrderMapper
@@ -70,6 +72,16 @@ final class WeighingOrderMapper
                     (int) $g->head_count,
                     (float) $g->gross_weight,
                     (float) $g->tare_weight,
+                    $g->category_id,
+                    $g->category?->name,
+                )
+            )->all()),
+            BatchWeighingEntry::BY_CATEGORY => BatchWeighingMeasure::fromCategoryAverages($model->categoryAverages->map(
+                static fn (WeighingOrderCategoryAverage $a) => new CategoryAverageWeighing(
+                    $a->category_id,
+                    (int) $a->head_count,
+                    (float) $a->average_weight,
+                    $a->category?->name,
                 )
             )->all()),
             null => null,

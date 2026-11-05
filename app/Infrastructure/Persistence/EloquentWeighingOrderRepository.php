@@ -10,13 +10,14 @@ use App\Core\Enums\BatchWeighingEntry;
 use App\Core\Interfaces\IWeighingOrderRepository;
 use App\Models\WeighingOrder;
 use App\Models\WeighingOrderAnimal;
+use App\Models\WeighingOrderCategoryAverage;
 use App\Models\WeighingOrderGroup;
 use App\Models\WeighingOrderHistory;
 use App\Models\WeighingType;
 
 class EloquentWeighingOrderRepository implements IWeighingOrderRepository
 {
-    private const RELATIONS = ['weighingType', 'batch', 'groups', 'animals.caravan'];
+    private const RELATIONS = ['weighingType', 'batch', 'groups.category', 'categoryAverages.category', 'animals.caravan'];
 
     public function create(WeighingOrderEntity $order, ?int $userId): WeighingOrderEntity
     {
@@ -52,10 +53,21 @@ class EloquentWeighingOrderRepository implements IWeighingOrderRepository
                 'company_id' => $order->getCompanyId(),
                 'weighing_order_id' => $model->id,
                 'sequence' => $group->sequence,
+                'category_id' => $group->categoryId,
                 'head_count' => $group->headCount,
                 'gross_weight' => $group->grossWeight,
                 'tare_weight' => $group->tareWeight,
                 'weighed_at' => $order->getFirstExecutedAt(),
+            ]);
+        }
+
+        foreach ($measure?->categoryAverages ?? [] as $average) {
+            WeighingOrderCategoryAverage::create([
+                'company_id' => $order->getCompanyId(),
+                'weighing_order_id' => $model->id,
+                'category_id' => $average->categoryId,
+                'head_count' => $average->headCount,
+                'average_weight' => $average->averageWeight,
             ]);
         }
 

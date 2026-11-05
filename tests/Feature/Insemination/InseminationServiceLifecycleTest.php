@@ -56,7 +56,7 @@ class InseminationServiceLifecycleTest extends InseminationTestCase
         $this->assertSame(1, $summary['provisional_empty']);
     }
 
-    public function test_end_service_from_the_menu_frees_the_batch(): void
+    public function test_end_service_from_the_menu_keeps_the_batch_until_the_order_is_closed(): void
     {
         [$a, $b] = $this->cows(2);
         $orderId = (int) $this->startAi([$a, $b])->assertStatus(201)->json('id');
@@ -76,8 +76,8 @@ class InseminationServiceLifecycleTest extends InseminationTestCase
         $this->inseminate($orderId, [$this->row($b, $this->lotA, date: now()->subDays(7)->toDateString())])->assertStatus(201);
         $this->inseminate($orderId, [$this->row($b, $this->lotA, date: now()->subDays(1)->toDateString())])->assertStatus(422);
 
-        // The batch takes another service while the tacto goes on.
-        $this->startAi($this->cows(1))->assertStatus(201);
+        // An order ends when it is closed: the batch takes no other service while the tacto goes on.
+        $this->startAi($this->cows(1))->assertStatus(422);
         $this->tacto($orderId, $a, true)->assertSuccessful();
     }
 

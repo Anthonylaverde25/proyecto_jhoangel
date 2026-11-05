@@ -61,6 +61,8 @@ use Illuminate\Support\Facades\DB;
  *  - EN-20260928-0016 (IN_TRANSIT, partly distributed): 6 Terneros of both sexes, only the males with
  *    a destination ("Recría Macho (TEST ING)"); the females go to its transit batch "338-16". DTE
  *    DTE-TEST-ING-014 declares 6, R1 by code.
+ *  - EN-20260928-0018 (IN_TRANSIT, Sin DTE): 6 Terneros machos moving with the paper still to come,
+ *    its R1 issued: receive them as usual and load the DTE from the order, before or after.
  *  - EN-20260928-0017 (IN_TRANSIT): 4 Terneros machos to "Recría cerrada (TEST ING)", a batch closed
  *    after the purchase: any reception is refused (DESTINATION_UNAVAILABLE) until the order is
  *    redistributed. DTE DTE-TEST-ING-015 declares 4, R1 by code.
@@ -87,6 +89,7 @@ use Illuminate\Support\Facades\DB;
  *    (no image yet) destinos por sexo             EN-20260928-0014   per animal     ING-T-91..100, each to its own batch
  *    (no image yet) destino parcial               EN-20260928-0016   per animal     ING-T-111..116, females to the transit batch
  *    (no image yet) destino cerrado               EN-20260928-0017   per animal     ING-T-121..124, refused until redistributed
+ *    (no image yet) sin DTE                       EN-20260928-0018   per animal     ING-T-131..136, order marked Sin DTE
  *
  * The first three take numbers 1 to 3; the others take the next free numbers (4, 5… on a fresh base,
  * later ones if orders were created by hand). Their external batches are named after the code
@@ -107,7 +110,7 @@ class EntryOrderTestSeeder extends Seeder
         'EN-20260928-0001', 'EN-20260928-0002', 'EN-20260928-0003', 'EN-20260928-0004', 'EN-20260928-0005', 'EN-20260928-0006',
         'EN-20260928-0007', 'EN-20260928-0008', 'EN-20260928-0009', 'EN-20260928-0010', 'EN-20260928-0011',
         'EN-20260928-0012', 'EN-20260928-0013', 'EN-20260928-0014', 'EN-20260928-0015', 'EN-20260928-0016',
-        'EN-20260928-0017',
+        'EN-20260928-0017', 'EN-20260928-0018',
     ];
     private const OWN_BATCHES = ['Recría Macho (TEST ING)', 'Reposición Vaquillonas (TEST ING)', 'Recría cerrada (TEST ING)'];
     private const PURCHASE_DATE = '2026-09-28';
@@ -149,7 +152,7 @@ class EntryOrderTestSeeder extends Seeder
             $waiting = EntryOrder::withoutGlobalScopes()->create([
                 ...$base,
                 'code' => self::CODES[0],
-                'number' => 1,
+                'number' => $this->nextNumber($companyId),
                 'status' => 'AWAITING_DTE',
                 'kind' => 'PLANNED',
                 'auction_number' => '338',
@@ -181,7 +184,7 @@ class EntryOrderTestSeeder extends Seeder
             $partial = EntryOrder::withoutGlobalScopes()->create([
                 ...$base,
                 'code' => self::CODES[1],
-                'number' => 2,
+                'number' => $this->nextNumber($companyId),
                 'status' => 'AWAITING_DTE',
                 'kind' => 'PLANNED',
                 'auction_number' => null,
@@ -212,7 +215,7 @@ class EntryOrderTestSeeder extends Seeder
             $draft = EntryOrder::withoutGlobalScopes()->create([
                 ...$base,
                 'code' => self::CODES[2],
-                'number' => 3,
+                'number' => $this->nextNumber($companyId),
                 'status' => 'DRAFT',
                 'kind' => 'PLANNED',
                 'auction_number' => '412',
@@ -332,6 +335,7 @@ class EntryOrderTestSeeder extends Seeder
             $this->pendingHeadsOrder($companyId, $base, $mainFarm, self::CODES[14], 'DTE-TEST-ING-013', $males);
             $this->partlyDistributedOrder($companyId, $base, $mainFarm, self::CODES[15], 'DTE-TEST-ING-014', $males);
             $this->closedDestinationOrder($companyId, $base, $mainFarm, self::CODES[16], 'DTE-TEST-ING-015', $closed);
+            $this->withoutDteOrder($companyId, $base, $mainFarm, self::CODES[17]);
         });
 
         $this->command?->info('EntryOrderTestSeeder: órdenes ' . implode(', ', self::CODES) . ' listas.');
@@ -474,6 +478,33 @@ class EntryOrderTestSeeder extends Seeder
     }
 
     /**
+     * Its head move with the paper still to come: marked "Sin DTE", with its R1 issued.
+     *
+     * @param array<string, mixed> $base
+     */
+    private function withoutDteOrder(int $companyId, array $base, Farm $farm, string $code): void
+    {
+        $batch = $this->externalBatch($companyId, (int) $farm->id, $this->batchName($code), 180, 160, 200, true);
+        $order = EntryOrder::withoutGlobalScopes()->create([
+            ...$base,
+            ...$this->calves('MALE', 6),
+            'code' => $code,
+            'number' => $this->nextNumber($companyId),
+            'status' => 'IN_TRANSIT',
+            'auction_number' => '338',
+            'batch_id' => $batch->id,
+            'batch_name' => $this->batchName($code),
+            'batch_name_mode' => 'AUTO',
+        ]);
+        $this->categories($order, [['TERNERO', 6]]);
+        $breedLine = $this->breeds($order, [['Angus', 'Negro']])[0];
+        $this->history($order, null, 'AWAITING_DTE', 'Compra confirmada: en espera de DTE');
+        $dte = $this->loadDte($order, $breedLine, (int) $batch->id, $farm, null, null, 'M', 6);
+        $this->history($order, 'AWAITING_DTE', 'IN_TRANSIT', null, ['dte_number' => null, 'without_dte' => true, 'head_count' => 6, 'with_dte_total' => 0, 'pending_dte' => 6]);
+        $this->receiptSheet($order, $dte);
+    }
+
+    /**
      * Its destination was closed after the purchase: receptions are refused until redistributed.
      *
      * @param array<string, mixed> $base
@@ -579,10 +610,10 @@ class EntryOrderTestSeeder extends Seeder
      *
      * @param list<int> $received
      */
-    private function loadDte(EntryOrder $order, int $breedLineId, int $batchId, Farm $farm, string $dteNumber, string $dteDate, string $sex, int $head, array $received = [], int $missing = 0): EntryOrderDte
+    private function loadDte(EntryOrder $order, int $breedLineId, int $batchId, Farm $farm, ?string $dteNumber, ?string $dteDate, string $sex, int $head, array $received = [], int $missing = 0): EntryOrderDte
     {
         $companyId = (int) $order->company_id;
-        $receivedAt = date('Y-m-d', strtotime($dteDate . ' +1 day'));
+        $receivedAt = date('Y-m-d', strtotime(($dteDate ?? self::PURCHASE_DATE) . ' +1 day'));
         $breedLine = $order->breeds()->find($breedLineId);
         // The orders with received caravans declare a single category: every caravan is of it.
         $categoryLine = $order->categories()->first();

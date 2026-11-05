@@ -47,6 +47,11 @@ final readonly class CaravanSummaryRow
         /** The day it left by an exit order and that order's code (the "Vendida" mark). */
         public ?string $exitDate = null,
         public ?string $exitOrderCode = null,
+        public ?string $castrationStatus = null,
+        public ?string $castrationStatusLabel = null,
+        public ?array $castration = null,
+        /** The running service that keeps this bull in the batch for now; null for everyone else. */
+        public ?string $serviceOrderCodeOnStay = null,
     ) {
     }
 }

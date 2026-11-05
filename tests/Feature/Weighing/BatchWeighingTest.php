@@ -6,6 +6,7 @@ namespace Tests\Feature\Weighing;
 
 use App\Core\Enums\WeighingTypeCode;
 use App\Models\Activity;
+use App\Models\AnimalCategory;
 use App\Models\Batch;
 use App\Models\BatchType;
 use App\Models\BatchWeight;
@@ -14,13 +15,15 @@ use App\Models\CaravanWeight;
 use App\Models\Company;
 use App\Models\Tenant;
 use App\Models\WeighingOrder;
+use App\Models\WeighingOrderCategoryAverage;
+use App\Models\WeighingOrderGroup;
 use App\Models\WeighingType;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
 
 /**
- * A cage weighing measures the batch: the loads stay on a registered order and each caravan
- * receives the average, so the mass of the batch is exactly the net mass of the scale.
+ * A batch weighing stays on a registered order and each caravan covered receives its average. A
+ * cage weighing averages the whole batch; a general average weighing, each category on its own.
  */
 class BatchWeighingTest extends TestCase
 {
@@ -150,60 +153,129 @@ class BatchWeighingTest extends TestCase
             ->assertJsonPath('0.groups.0.average_weight', 440);
     }
 
-    public function test_an_average_already_worked_out_is_registered_as_declared_not_as_a_load(): void
+    /** @return array{0: Batch, 1: array<string, Caravan[]>} two cows and one calf, the three already weighed */
+    private function mixedBatch(): array
     {
         [$batch, $caravans] = $this->batchWith(3);
+        $category = static fn (string $code): int => (int) AnimalCategory::where('code', $code)->value('id');
 
-        $response = $this->postJson('http://test.localhost/api/weighing-orders/register-batch', [
-            'batch_id' => $batch->id,
-            'weighing_type' => 'BATCH_CONTROL',
-            'weighing_date' => '2026-10-01',
-            'entry' => 'AVERAGE',
-            'average_weight' => 412.5,
-            'head_count' => 3,
-        ], $this->headers())->assertStatus(201);
+        $caravans[0]->update(['category_id' => $category('VACA')]);
+        $caravans[1]->update(['category_id' => $category('VACA')]);
+        $caravans[2]->update(['category_id' => $category('TERNERO')]);
 
-        $response->assertJsonPath('entry', 'AVERAGE')
-            ->assertJsonPath('groups', [])
-            ->assertJsonPath('total_heads', 3);
-        $this->assertEqualsWithDelta(1237.5, $response->json('total_net_weight'), 0.01);
-
-        $order = WeighingOrder::firstOrFail();
-        $this->assertSame('AVERAGE', $order->batch_entry);
-        $this->assertSame(3, $order->declared_head_count);
-        $this->assertEqualsWithDelta(412.5, (float) $order->declared_average_weight, 0.001);
-        $this->assertSame(0, \App\Models\WeighingOrderGroup::count());
-
-        foreach ($caravans as $caravan) {
-            $current = CaravanWeight::where('caravan_id', $caravan->id)->where('current', true)->firstOrFail();
-            $this->assertEqualsWithDelta(412.5, (float) $current->weight, 0.001);
-            $this->assertSame('AVERAGE', $current->method);
-        }
-
-        $point = BatchWeight::where('batch_id', $batch->id)->latest('id')->firstOrFail();
-        $this->assertEqualsWithDelta(1237.5, (float) $point->total_weight, 0.01);
+        return [$batch, ['VACA' => [$caravans[0], $caravans[1]], 'TERNERO' => [$caravans[2]]]];
     }
 
-    public function test_a_declared_average_over_fewer_heads_than_the_batch_is_rejected(): void
+    private function averagesPayload(Batch $batch, array $averages): array
     {
-        [$batch] = $this->batchWith(3);
-
-        $this->postJson('http://test.localhost/api/weighing-orders/register-batch', [
+        return [
             'batch_id' => $batch->id,
-            'weighing_type' => 'BATCH_CONTROL',
+            'weighing_type' => 'BATCH_AVERAGE',
             'weighing_date' => '2026-10-01',
-            'entry' => 'AVERAGE',
-            'average_weight' => 412.5,
-            'head_count' => 2,
-        ], $this->headers())
+            'entry' => 'BY_CATEGORY',
+            'averages' => $averages,
+        ];
+    }
+
+    private function currentWeight(Caravan $caravan): CaravanWeight
+    {
+        return CaravanWeight::where('caravan_id', $caravan->id)->where('current', true)->firstOrFail();
+    }
+
+    public function test_each_category_receives_its_own_average_in_one_order(): void
+    {
+        [$batch, $caravans] = $this->mixedBatch();
+        $vaca = $caravans['VACA'][0]->category_id;
+        $ternero = $caravans['TERNERO'][0]->category_id;
+
+        $response = $this->postJson('http://test.localhost/api/weighing-orders/register-batch', $this->averagesPayload($batch, [
+            ['category_id' => $vaca, 'head_count' => 2, 'average_weight' => 450],
+            ['category_id' => $ternero, 'head_count' => 1, 'average_weight' => 120],
+        ]), $this->headers())->assertStatus(201);
+
+        $response->assertJsonPath('entry', 'BY_CATEGORY')
+            ->assertJsonPath('groups', [])
+            ->assertJsonPath('total_heads', 3)
+            ->assertJsonPath('weighed_count', 3)
+            ->assertJsonPath('category_averages.0.category_name', 'Vaca Adulta');
+        $this->assertEqualsWithDelta(1020.0, $response->json('total_net_weight'), 0.01);
+
+        $this->assertSame(1, WeighingOrder::count());
+        $this->assertSame(2, WeighingOrderCategoryAverage::count());
+        $this->assertSame(0, WeighingOrderGroup::count());
+
+        $this->assertEqualsWithDelta(450.0, (float) $this->currentWeight($caravans['VACA'][0])->weight, 0.001);
+        $this->assertEqualsWithDelta(450.0, (float) $this->currentWeight($caravans['VACA'][1])->weight, 0.001);
+        $this->assertEqualsWithDelta(120.0, (float) $this->currentWeight($caravans['TERNERO'][0])->weight, 0.001);
+        $this->assertSame('AVERAGE', $this->currentWeight($caravans['TERNERO'][0])->method);
+
+        $this->assertEqualsWithDelta(1020.0, (float) $batch->fresh()->total_weight, 0.01);
+        $this->assertSame(1, BatchWeight::where('batch_id', $batch->id)->where('weighing_type_id', WeighingType::idOf(WeighingTypeCode::BATCH_AVERAGE))->count());
+    }
+
+    public function test_a_category_left_out_keeps_its_weight_and_stays_off_the_order(): void
+    {
+        [$batch, $caravans] = $this->mixedBatch();
+        $calf = $caravans['TERNERO'][0];
+        $before = (float) $this->currentWeight($calf)->weight;
+
+        $response = $this->postJson('http://test.localhost/api/weighing-orders/register-batch', $this->averagesPayload($batch, [
+            ['category_id' => $caravans['VACA'][0]->category_id, 'head_count' => 2, 'average_weight' => 450],
+        ]), $this->headers())->assertStatus(201);
+
+        $response->assertJsonPath('total_heads', 2)->assertJsonPath('planned_head_count', 2);
+        $this->assertEqualsWithDelta($before, (float) $this->currentWeight($calf)->weight, 0.001);
+        $this->assertSame(1, CaravanWeight::where('caravan_id', $calf->id)->count());
+    }
+
+    public function test_animals_without_a_category_are_weighed_as_their_own_group(): void
+    {
+        [$batch, $caravans] = $this->batchWith(2);
+
+        $this->postJson('http://test.localhost/api/weighing-orders/register-batch', $this->averagesPayload($batch, [
+            ['category_id' => null, 'head_count' => 2, 'average_weight' => 380],
+        ]), $this->headers())->assertStatus(201)->assertJsonPath('category_averages.0.category_id', null);
+
+        $this->assertEqualsWithDelta(380.0, (float) $this->currentWeight($caravans[0])->weight, 0.001);
+    }
+
+    public function test_a_category_that_changed_since_the_screen_opened_is_rejected_without_writing_anything(): void
+    {
+        [$batch, $caravans] = $this->mixedBatch();
+
+        $this->postJson('http://test.localhost/api/weighing-orders/register-batch', $this->averagesPayload($batch, [
+            ['category_id' => $caravans['VACA'][0]->category_id, 'head_count' => 3, 'average_weight' => 450],
+        ]), $this->headers())
             ->assertStatus(422)
             ->assertJsonPath('code', 'GROUP_COVERAGE_MISMATCH')
-            ->assertJsonPath('message', 'El pesaje declara 2 cabezas y el lote tiene 3. Faltan 1: pesalas o revisá el conteo.');
+            ->assertJsonPath('message', 'El pesaje declara 3 cabezas de Vaca Adulta y el lote tiene 2. Sobran 1: revisá el conteo.');
 
         $this->assertSame(0, WeighingOrder::count());
     }
 
-    public function test_an_average_entry_needs_its_average_and_heads(): void
+    public function test_a_category_cannot_be_declared_twice(): void
+    {
+        [$batch, $caravans] = $this->mixedBatch();
+        $vaca = $caravans['VACA'][0]->category_id;
+
+        $this->postJson('http://test.localhost/api/weighing-orders/register-batch', $this->averagesPayload($batch, [
+            ['category_id' => $vaca, 'head_count' => 2, 'average_weight' => 450],
+            ['category_id' => $vaca, 'head_count' => 2, 'average_weight' => 430],
+        ]), $this->headers())
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'DUPLICATE_CATEGORY_AVERAGE');
+    }
+
+    public function test_a_general_average_needs_at_least_one_category(): void
+    {
+        [$batch] = $this->batchWith(1);
+
+        $this->postJson('http://test.localhost/api/weighing-orders/register-batch', $this->averagesPayload($batch, []), $this->headers())
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['averages']);
+    }
+
+    public function test_one_average_for_the_whole_batch_is_no_longer_accepted(): void
     {
         [$batch] = $this->batchWith(1);
 
@@ -212,9 +284,101 @@ class BatchWeighingTest extends TestCase
             'weighing_type' => 'BATCH_CONTROL',
             'weighing_date' => '2026-10-01',
             'entry' => 'AVERAGE',
+            'average_weight' => 412.5,
+            'head_count' => 1,
         ], $this->headers())
             ->assertStatus(422)
-            ->assertJsonValidationErrors(['average_weight', 'head_count']);
+            ->assertJsonValidationErrors(['entry']);
+    }
+
+    public function test_each_purpose_only_takes_its_own_entry(): void
+    {
+        [$batch] = $this->batchWith(1);
+
+        $this->postJson('http://test.localhost/api/weighing-orders/register-batch', $this->payload($batch, [
+            ['head_count' => 1, 'gross_weight' => 300],
+        ], ['weighing_type' => 'BATCH_AVERAGE']), $this->headers())
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'TYPE_ENTRY_MISMATCH');
+    }
+
+    public function test_an_order_registered_with_one_average_can_still_be_read(): void
+    {
+        [$batch] = $this->batchWith(1);
+
+        WeighingOrder::create([
+            'company_id' => $this->company->id,
+            'code' => 'PS-20260901-0001',
+            'status' => 'EXECUTED',
+            'kind' => 'REGISTERED',
+            'mode' => 'GROUP',
+            'weighing_type_id' => WeighingType::idOf(WeighingTypeCode::BATCH_CONTROL),
+            'batch_id' => $batch->id,
+            'batch_entry' => 'AVERAGE',
+            'declared_head_count' => 1,
+            'declared_average_weight' => 412.5,
+            'weighing_date' => '2026-09-01',
+            'planned_head_count' => 1,
+        ]);
+
+        $this->getJson("http://test.localhost/api/batches/{$batch->id}/weighing-orders", $this->headers())
+            ->assertOk()
+            ->assertJsonPath('0.entry', 'AVERAGE')
+            ->assertJsonPath('0.average_weight', 412.5);
+    }
+
+    public function test_each_cage_averages_only_its_own_category(): void
+    {
+        [$batch, $caravans] = $this->mixedBatch();
+        $vaca = $caravans['VACA'][0]->category_id;
+        $ternero = $caravans['TERNERO'][0]->category_id;
+
+        $response = $this->postJson('http://test.localhost/api/weighing-orders/register-batch', $this->payload($batch, [
+            ['category_id' => $vaca, 'head_count' => 1, 'gross_weight' => 440],
+            ['category_id' => $vaca, 'head_count' => 1, 'gross_weight' => 460],
+            ['category_id' => $ternero, 'head_count' => 1, 'gross_weight' => 120],
+        ]), $this->headers())->assertStatus(201);
+
+        $response->assertJsonPath('groups.0.category_name', 'Vaca Adulta')
+            ->assertJsonPath('groups.2.category_id', $ternero)
+            ->assertJsonPath('category_averages.0.category_id', $vaca)
+            ->assertJsonPath('category_averages.0.head_count', 2);
+
+        $this->assertEqualsWithDelta(450.0, (float) $this->currentWeight($caravans['VACA'][0])->weight, 0.001);
+        $this->assertEqualsWithDelta(450.0, (float) $this->currentWeight($caravans['VACA'][1])->weight, 0.001);
+        $this->assertEqualsWithDelta(120.0, (float) $this->currentWeight($caravans['TERNERO'][0])->weight, 0.001);
+        $this->assertEqualsWithDelta(1020.0, (float) $batch->fresh()->total_weight, 0.01);
+
+        // The order still reads back with its categories.
+        $this->getJson("http://test.localhost/api/batches/{$batch->id}/weighing-orders", $this->headers())
+            ->assertOk()
+            ->assertJsonPath('0.groups.1.category_id', $vaca);
+    }
+
+    public function test_a_category_without_cages_keeps_its_weight(): void
+    {
+        [$batch, $caravans] = $this->mixedBatch();
+        $calf = $caravans['TERNERO'][0];
+        $before = (float) $this->currentWeight($calf)->weight;
+
+        $this->postJson('http://test.localhost/api/weighing-orders/register-batch', $this->payload($batch, [
+            ['category_id' => $caravans['VACA'][0]->category_id, 'head_count' => 2, 'gross_weight' => 900],
+        ]), $this->headers())->assertStatus(201)->assertJsonPath('planned_head_count', 2);
+
+        $this->assertEqualsWithDelta($before, (float) $this->currentWeight($calf)->weight, 0.001);
+    }
+
+    public function test_a_mixed_batch_cannot_be_weighed_by_cage_without_declaring_the_category(): void
+    {
+        [$batch] = $this->mixedBatch();
+
+        $this->postJson('http://test.localhost/api/weighing-orders/register-batch', $this->payload($batch, [
+            ['head_count' => 3, 'gross_weight' => 1020],
+        ]), $this->headers())
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'GROUP_COVERAGE_MISMATCH');
+
+        $this->assertSame(0, WeighingOrder::count());
     }
 
     public function test_loads_that_do_not_cover_the_batch_are_rejected_without_writing_anything(): void
@@ -251,6 +415,14 @@ class BatchWeighingTest extends TestCase
         ], ['weighing_type' => 'CONTROL']), $this->headers())
             ->assertStatus(422)
             ->assertJsonValidationErrors(['weighing_type']);
+
+        foreach (['WEANING', 'PRE_SERVICE', 'PREGNANCY_CHECK', 'ENTRY', 'EXIT', 'EMERGENCY'] as $type) {
+            $this->postJson('http://test.localhost/api/weighing-orders/register-batch', $this->payload($batch, [
+                ['head_count' => 1, 'gross_weight' => 300],
+            ], ['weighing_type' => $type]), $this->headers())
+                ->assertStatus(422)
+                ->assertJsonValidationErrors(['weighing_type']);
+        }
     }
 
     public function test_a_single_caravan_cannot_be_weighed_as_a_batch(): void
@@ -260,6 +432,10 @@ class BatchWeighingTest extends TestCase
 
         $this->postJson("http://test.localhost/api/caravans/{$id}/weights", [
             'weight' => 410, 'weighing_date' => '2026-10-01', 'weighing_type' => 'BATCH_CONTROL',
+        ], $this->headers())->assertStatus(422)->assertJsonValidationErrors(['weighing_type']);
+
+        $this->postJson("http://test.localhost/api/caravans/{$caravans[0]->id}/weights", [
+            'weight' => 410, 'weighing_date' => '2026-10-01', 'weighing_type' => 'BATCH_AVERAGE',
         ], $this->headers())->assertStatus(422)->assertJsonValidationErrors(['weighing_type']);
 
         $this->postJson("http://test.localhost/api/caravans/{$id}/weights", [

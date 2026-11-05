@@ -40,8 +40,8 @@ final readonly class WeighingReading
             throw new InvalidWeighingException('El porcentaje de desbaste sólo aplica al desbaste calculado.');
         }
 
-        if ($type === WeighingTypeCode::BATCH_CONTROL && $method !== WeighingMethod::AVERAGE) {
-            throw new InvalidWeighingException('El repesaje de lote en jaula sólo existe como promedio del lote.');
+        if ($type->allowsGroupWeighing() && $method !== WeighingMethod::AVERAGE) {
+            throw new InvalidWeighingException("\"{$type->label()}\" sólo existe como promedio del lote.");
         }
 
         if ($time !== null && preg_match('/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/', $time) !== 1) {

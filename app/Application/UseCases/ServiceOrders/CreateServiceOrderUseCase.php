@@ -43,7 +43,7 @@ final class CreateServiceOrderUseCase
 
         $this->startPolicy->assertBatchCanStartService(
             $targetBatch,
-            $this->repository->findActiveServiceOnBatch($dto->batchId) !== null
+            $this->repository->findUnclosedOrderOnBatch($dto->batchId)
         );
         $this->startPolicy->assertHasBulls($dto->maleCaravanIds);
 

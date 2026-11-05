@@ -127,6 +127,7 @@ class StartServiceOnOperationalBatchTest extends VeterinaryTestCase
             'withdrawal_date' => '2026-12-30',
             'default_destination_batch_id' => $this->bullPaddock->id,
         ])->assertStatus(200);
+        ServiceOrder::withoutGlobalScopes()->where('batch_id', $this->rodeo->id)->update(['status' => 'SUCCESS']);
 
         $controlled = $this->start([$bull->id], null, '2027-01-15', controlled: true)->assertStatus(201);
         $this->assertNotContains($calf->id, $controlled->json('female_caravan_ids'));
@@ -160,6 +161,58 @@ class StartServiceOnOperationalBatchTest extends VeterinaryTestCase
         $response->assertStatus(422);
         $this->assertStringContainsString('ya tiene un servicio activo', (string) $response->json('message'));
         $this->assertSame(1, ServiceOrder::withoutGlobalScopes()->where('batch_id', $this->rodeo->id)->count());
+    }
+
+    public function test_a_batch_cannot_start_a_service_while_its_last_order_waits_for_the_tacto(): void
+    {
+        $this->cow('SRV-V-10');
+        $bull1 = $this->bullIn('ANTHONY-TORO-TEST-004', $this->bullPaddock);
+        $bull2 = $this->bullIn('ANTHONY-TORO-TEST-005', $this->bullPaddock);
+        $first = (int) $this->start([$bull1->id])->assertStatus(201)->json('id');
+        $code = (string) ServiceOrder::withoutGlobalScopes()->whereKey($first)->value('code');
+        ServiceOrder::withoutGlobalScopes()->whereKey($first)->update(['status' => 'BULLS_WITHDRAWN']);
+
+        $response = $this->start([$bull2->id]);
+
+        $response->assertStatus(422);
+        $this->assertStringContainsString("{$code} sin cerrar", (string) $response->json('message'));
+        $this->assertSame(1, ServiceOrder::withoutGlobalScopes()->where('batch_id', $this->rodeo->id)->count());
+    }
+
+    public function test_a_female_entering_with_her_tacto_pending_leaves_an_incident_on_the_order(): void
+    {
+        $moved = $this->cow('SRV-V-21');
+        $bull1 = $this->bullIn('ANTHONY-TORO-TEST-004', $this->bullPaddock);
+        $bull2 = $this->bullIn('ANTHONY-TORO-TEST-005', $this->bullPaddock);
+        $first = (int) $this->start([$bull1->id])->assertStatus(201)->json('id');
+        ServiceOrder::withoutGlobalScopes()->whereKey($first)->update(['status' => 'BULLS_WITHDRAWN']);
+
+        $this->cow('SRV-V-22', $this->neighbour);
+        $joined = (int) $this->apiAs('POST', "/batches/{$this->neighbour->id}/start-service", [
+            'male_caravan_ids' => [$bull2->id],
+            'planned_start_date' => '2026-11-01',
+        ])->assertStatus(201)->json('id');
+
+        $this->transfer([$moved], $this->neighbour, '2026-11-02');
+
+        $this->assertNotNull($this->exposure($joined, $moved));
+        $incident = \App\Models\ServiceOrderIncident::withoutGlobalScopes()->where('service_order_id', $joined)->firstOrFail();
+        $this->assertSame('JOINED_WITH_PENDING_TACTO', $incident->type instanceof \BackedEnum ? $incident->type->value : (string) $incident->type);
+        $this->assertSame($moved->id, (int) $incident->female_caravan_id);
+        $this->assertStringContainsString('SRV-V-21', (string) $incident->detail);
+    }
+
+    public function test_a_female_entering_without_a_pending_tacto_leaves_no_incident(): void
+    {
+        $this->cow('SRV-V-23');
+        $moved = $this->cow('SRV-V-24', $this->neighbour);
+        $bull = $this->bullIn('ANTHONY-TORO-TEST-004', $this->bullPaddock);
+        $order = (int) $this->start([$bull->id])->assertStatus(201)->json('id');
+
+        $this->transfer([$moved], $this->rodeo, '2026-11-02');
+
+        $this->assertNotNull($this->exposure($order, $moved));
+        $this->assertSame(0, \App\Models\ServiceOrderIncident::withoutGlobalScopes()->where('service_order_id', $order)->count());
     }
 
     public function test_service_codes_are_numbered_per_company(): void
@@ -244,6 +297,7 @@ class StartServiceOnOperationalBatchTest extends VeterinaryTestCase
             'withdrawal_date' => '2026-01-30',
             'default_destination_batch_id' => $this->bullPaddock->id,
         ])->assertStatus(200);
+        ServiceOrder::withoutGlobalScopes()->whereKey($first)->update(['status' => 'SUCCESS']);
 
         $second = (int) $this->start([$bull->id], null, '2026-11-01')->assertStatus(201)->json('id');
 

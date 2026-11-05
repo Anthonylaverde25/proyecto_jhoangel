@@ -18,6 +18,7 @@ enum WeighingTypeCode: string
     case WEANING = 'WEANING';
     case CONTROL = 'CONTROL';
     case BATCH_CONTROL = 'BATCH_CONTROL';
+    case BATCH_AVERAGE = 'BATCH_AVERAGE';
     case PRE_SERVICE = 'PRE_SERVICE';
     case PREGNANCY_CHECK = 'PREGNANCY_CHECK';
     case ENTRY = 'ENTRY';
@@ -32,7 +33,7 @@ enum WeighingTypeCode: string
     public function affectsAdpv(): bool
     {
         return match ($this) {
-            self::BIRTH, self::WEANING, self::CONTROL, self::BATCH_CONTROL,
+            self::BIRTH, self::WEANING, self::CONTROL, self::BATCH_CONTROL, self::BATCH_AVERAGE,
             self::PRE_SERVICE, self::EMERGENCY => true,
             self::PREGNANCY_CHECK, self::ENTRY, self::EXIT => false,
         };
@@ -45,6 +46,7 @@ enum WeighingTypeCode: string
             self::WEANING => 'Pesaje al Destete',
             self::CONTROL => 'Control Individual (ADPV)',
             self::BATCH_CONTROL => 'Repesaje de Lote en Jaula',
+            self::BATCH_AVERAGE => 'Pesada General Promedio',
             self::PRE_SERVICE => 'Evaluación Pre-Entore',
             self::PREGNANCY_CHECK => 'Pesaje en Tacto / Diagnóstico',
             self::ENTRY => 'Recepción / Ingreso de Tropa',
@@ -59,7 +61,8 @@ enum WeighingTypeCode: string
             self::BIRTH => 'Primer peso del ternero, dentro de las primeras 24 h de vida, con balanza portátil en el potrero.',
             self::WEANING => 'Peso al corte de lactancia (6 a 8 meses), base del ajuste a 205 días.',
             self::CONTROL => 'Control periódico de la ganancia diaria de peso vivo, animal por animal en la manga.',
-            self::BATCH_CONTROL => 'Pesada del lote por grupos en jaula o báscula de camión; el promedio se asigna a cada caravana.',
+            self::BATCH_CONTROL => 'Pesada por jaula o báscula de camión; cada jaula declara su categoría y el promedio se asigna a las caravanas de esa categoría.',
+            self::BATCH_AVERAGE => 'Promedio por cabeza de cada categoría del lote; se asigna a las caravanas de esa categoría y el resto conserva su peso.',
             self::PRE_SERVICE => 'Peso crítico de entore en vaquillonas (60 a 65 % del peso adulto).',
             self::PREGNANCY_CHECK => 'Pesaje aprovechando el paso por la manga en el diagnóstico de preñez; no entra en la curva de ganancia.',
             self::ENTRY => 'Pesaje al arribo de una compra; fija la línea base y la merma contra el DTE. No entra en la curva de ganancia.',
@@ -69,28 +72,38 @@ enum WeighingTypeCode: string
     }
 
     /**
-     * Whether the purpose can be measured on one animal. A cage re-weighing measures a group by
+     * Whether the purpose can be measured on one animal. A batch weighing measures a group by
      * definition: offering it on a single caravan would make one animal "average" itself.
      */
     public function allowsIndividualWeighing(): bool
     {
-        return $this !== self::BATCH_CONTROL;
+        return $this->batchEntry() === null;
     }
 
     /**
-     * Whether the purpose can be measured on a batch as a whole (cage or truck scale). Birth is
-     * weighed calf by calf in the paddock; an individual control exists to follow each animal.
+     * Whether the purpose is a weighing of a whole batch. A chute purpose such as a pre-service
+     * or a pregnancy check is taken animal by animal; entry and exit have their own documents.
      */
     public function allowsGroupWeighing(): bool
     {
-        return $this !== self::BIRTH && $this !== self::CONTROL;
+        return $this->batchEntry() !== null;
+    }
+
+    /** What the operator writes down for this purpose when weighing a batch. Null: not a batch weighing. */
+    public function batchEntry(): ?BatchWeighingEntry
+    {
+        return match ($this) {
+            self::BATCH_CONTROL => BatchWeighingEntry::LOADS,
+            self::BATCH_AVERAGE => BatchWeighingEntry::BY_CATEGORY,
+            default => null,
+        };
     }
 
     public function defaultMethod(): WeighingMethod
     {
         return match ($this) {
             self::BIRTH => WeighingMethod::PORTABLE_FIELD,
-            self::BATCH_CONTROL, self::ENTRY => WeighingMethod::AVERAGE,
+            self::BATCH_CONTROL, self::BATCH_AVERAGE, self::ENTRY => WeighingMethod::AVERAGE,
             default => WeighingMethod::INDIVIDUAL,
         };
     }

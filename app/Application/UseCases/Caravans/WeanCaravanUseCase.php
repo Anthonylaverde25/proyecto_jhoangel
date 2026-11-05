@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\UseCases\Caravans;
 
 use App\Application\DTOs\WeanCaravanDTO;
+use App\Application\Services\CaravanRecategorizer;
 use App\Application\UseCases\Batches\CreateBatchUseCase;
 use App\Core\Entities\CaravanMovementEntity;
 use App\Core\Enums\BatchWeightCause;
@@ -40,7 +41,8 @@ final class WeanCaravanUseCase
         private readonly IFarmRepository $farmRepository,
         private readonly ICompanyRepository $companyRepository,
         private readonly BatchWeightService $batchWeightService,
-        private readonly CreateBatchUseCase $createBatchUseCase
+        private readonly CreateBatchUseCase $createBatchUseCase,
+        private readonly CaravanRecategorizer $recategorizer
     ) {
     }
 
@@ -101,10 +103,8 @@ final class WeanCaravanUseCase
             // decided, reclassify it whole: a new category without subcategory clears the old one.
             $fromBatchId = $calf->getBatchId();
 
-            if ($dto->newCategoryId !== null) {
-                $this->caravanRepository->updateBatchAndReclassify($dto->caravanId, $targetBatchId, $dto->newCategoryId, $dto->newSubcategoryId);
-            } else {
-                $newCatId = null;
+            $targetCategoryId = $dto->newCategoryId;
+            if ($targetCategoryId === null) {
                 if ($dto->newCategory !== null) {
                     $searchCode = strtoupper($dto->newCategory);
                     $codeMap = [
@@ -113,11 +113,23 @@ final class WeanCaravanUseCase
                         'VACA VACIA' => 'VACA',
                     ];
                     $searchCode = $codeMap[$searchCode] ?? $searchCode;
-                    $newCatId = \App\Models\AnimalCategory::where('code', $searchCode)->value('id');
+                    $targetCategoryId = \App\Models\AnimalCategory::where('code', $searchCode)->value('id');
                 } elseif ($calf->getCategoryId() === null) {
-                    $newCatId = \App\Models\AnimalCategory::where('code', 'TERNERO')->value('id');
+                    $targetCategoryId = \App\Models\AnimalCategory::where('code', 'TERNERO')->value('id');
                 }
-                $this->caravanRepository->updateBatchAndCategory($dto->caravanId, $targetBatchId, $newCatId);
+            }
+
+            if ($targetCategoryId !== null && $this->recategorizer !== null) {
+                $refusals = $this->recategorizer->refusals([$dto->caravanId => (int) $targetCategoryId]);
+                if (isset($refusals[$dto->caravanId])) {
+                    throw new DomainException($refusals[$dto->caravanId]);
+                }
+            }
+
+            if ($dto->newCategoryId !== null) {
+                $this->caravanRepository->updateBatchAndReclassify($dto->caravanId, $targetBatchId, $dto->newCategoryId, $dto->newSubcategoryId);
+            } else {
+                $this->caravanRepository->updateBatchAndCategory($dto->caravanId, $targetBatchId, $targetCategoryId);
             }
 
             $weaningDate = new \DateTime($dto->weaningDate);

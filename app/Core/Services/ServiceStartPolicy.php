@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Services;
 
 use App\Core\Entities\BatchEntity;
+use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Exceptions\ServiceOrderDomainException;
 
 /**
@@ -17,9 +18,14 @@ use App\Core\Exceptions\ServiceOrderDomainException;
 final class ServiceStartPolicy
 {
     /**
+     * A batch works one order at a time: an order is over when it is closed with its diagnosis, not
+     * when the bulls leave, so one still waiting for its tacto keeps the batch taken.
+     *
+     * @param array{id: int, code: string, status: string}|null $unclosedOrder the order still open on the batch
+     *
      * @throws ServiceOrderDomainException
      */
-    public function assertBatchCanStartService(BatchEntity $batch, bool $hasActiveService): void
+    public function assertBatchCanStartService(BatchEntity $batch, ?array $unclosedOrder): void
     {
         if (!$batch->isOwn()) {
             throw ServiceOrderDomainException::domainError(
@@ -33,11 +39,20 @@ final class ServiceStartPolicy
             );
         }
 
-        if ($hasActiveService) {
+        if ($unclosedOrder === null) {
+            return;
+        }
+
+        $code = $unclosedOrder['code'];
+        if (in_array($unclosedOrder['status'], [ServiceOrderStatus::DRAFT->value, ServiceOrderStatus::APPROVED->value], true)) {
             throw ServiceOrderDomainException::domainError(
-                "El lote '{$batch->getName()}' ya tiene un servicio activo en curso."
+                "El lote '{$batch->getName()}' ya tiene un servicio activo en curso (orden {$code})."
             );
         }
+
+        throw ServiceOrderDomainException::domainError(
+            "El lote '{$batch->getName()}' tiene la orden {$code} sin cerrar: cargá su tacto y cerrala antes de iniciar otra."
+        );
     }
 
     /**

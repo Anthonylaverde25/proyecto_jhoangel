@@ -154,6 +154,7 @@ class CaravanController extends Controller
         return response()->json([
             'action' => $result->action,
             'id'     => $result->id,
+            'warnings' => $result->warnings,
         ], $result->action === 'created' ? 201 : 200);
     }
 
@@ -232,9 +233,9 @@ class CaravanController extends Controller
             );
         }, $request->input('caravans'));
 
-        ($this->caravan->bulk)($dtos);
+        $warnings = ($this->caravan->bulk)($dtos);
 
-        return response()->json(['message' => 'Caravanas procesadas correctamente'], 201);
+        return response()->json(['message' => 'Caravanas procesadas correctamente', 'warnings' => $warnings], 201);
     }
 
     /**
@@ -293,6 +294,31 @@ class CaravanController extends Controller
         return response()->json(
             new CaravanResource($entity)
         );
+    }
+
+    /**
+     * Registra un aborto para una caravana preñada, con opción de pasar a vaca si es vaquillona.
+     */
+    public function abortion(
+        \App\Http\Requests\Caravans\RegisterAbortionRequest $request,
+        int $id,
+        \App\Application\UseCases\Caravans\RegisterAbortionUseCase $useCase,
+        \App\Core\Interfaces\ICompanyContext $companyContext
+    ): JsonResponse {
+        $companyId = (int) ($companyContext->getCompanyId() ?: $request->header('X-Company-ID'));
+
+        $dto = new \App\Application\DTOs\Caravans\RegisterAbortionDTO(
+            caravanId: $id,
+            companyId: $companyId,
+            userId: $request->user()?->id ? (int) $request->user()->id : null,
+            abortedOn: (string) $request->validated('aborted_on'),
+            notes: $request->validated('notes'),
+            becomesCow: (bool) $request->validated('becomes_cow', false)
+        );
+
+        $entity = $useCase($dto);
+
+        return response()->json(new CaravanResource($entity), 200);
     }
 
     /**

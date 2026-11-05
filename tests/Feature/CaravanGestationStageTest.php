@@ -221,7 +221,7 @@ class CaravanGestationStageTest extends TestCase
         $this->assertNull($gestation->gestation_months);
     }
 
-    public function test_updating_pregnant_caravan_to_empty_closes_active_gestation_successfully(): void
+    public function test_a_load_saying_empty_never_ends_a_current_pregnancy(): void
     {
         // 1. Create a pregnant caravan via API
         $response = $this->postJson('http://test.localhost/api/caravans', [
@@ -250,12 +250,61 @@ class CaravanGestationStageTest extends TestCase
         ]);
         $responseUpdate->assertStatus(200);
 
-        // 3. Verify the gestation has been closed
-        $gestationUpdated = CaravanGestation::where('caravan_id', $caravan->id)->first();
-        $this->assertFalse((bool)$gestationUpdated->is_current);
-        $this->assertTrue((bool)$gestationUpdated->success);
-        $this->assertNotNull($gestationUpdated->end_date);
-        $this->assertEquals('Closed via calving registration.', $gestationUpdated->notes);
+        // 3. The load never ends the pregnancy: the operator is told instead
+        $gestationKept = CaravanGestation::where('caravan_id', $caravan->id)->first();
+        $this->assertTrue((bool)$gestationKept->is_current);
+        $this->assertNull($gestationKept->success);
+        $this->assertNull($gestationKept->end_date);
+        $this->assertStringContainsString('MOTHER-1 sigue preñada', implode(' ', $responseUpdate->json('warnings')));
+        $this->assertFalse((bool) $caravan->fresh()->femaleDetail->is_empty);
+    }
+
+    public function test_bulk_entry_saying_empty_never_ends_a_current_pregnancy(): void
+    {
+        $this->withoutMiddleware();
+        $this->postJson('http://test.localhost/api/caravans', [
+            'identification' => 'MOTHER-2',
+            'sex' => 'H',
+            'category' => 'vaca',
+            'teeth' => 4,
+            'is_empty' => false,
+            'gestation_stage' => 'body',
+        ])->assertStatus(201);
+        $caravan = Caravan::where('identification', 'MOTHER-2')->first();
+
+        $response = $this->postJson('http://test.localhost/api/caravans/bulk', [
+            'caravans' => [
+                ['identification' => 'MOTHER-2', 'sex' => 'H', 'category' => 'vaca', 'teeth' => 6, 'is_empty' => true],
+            ],
+        ]);
+
+        $response->assertStatus(201);
+        $this->assertStringContainsString('MOTHER-2 sigue preñada', implode(' ', $response->json('warnings')));
+        $this->assertTrue((bool) CaravanGestation::where('caravan_id', $caravan->id)->first()->is_current);
+        $this->assertSame(6, (int) $caravan->fresh()->teeth);
+    }
+
+    public function test_a_load_saying_empty_says_nothing_when_she_is_not_pregnant(): void
+    {
+        $this->withoutMiddleware();
+        $this->postJson('http://test.localhost/api/caravans', [
+            'identification' => 'EMPTY-1',
+            'sex' => 'H',
+            'category' => 'vaca',
+            'teeth' => 4,
+            'is_empty' => true,
+        ])->assertStatus(201);
+
+        $response = $this->postJson('http://test.localhost/api/caravans', [
+            'identification' => 'EMPTY-1',
+            'sex' => 'H',
+            'category' => 'vaca',
+            'teeth' => 4,
+            'is_empty' => true,
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertSame([], $response->json('warnings'));
     }
 
     public function test_can_import_caravans_with_gestations_and_service_order(): void
@@ -288,7 +337,7 @@ class CaravanGestationStageTest extends TestCase
             'company_id' => $this->company->id,
             'batch_id' => $batch->id,
             'code' => 'SO-TEST-123',
-            'status' => 'approved',
+            'status' => 'APPROVED',
             'service_type' => 'IATF',
             'planned_start_date' => date('Y-m-d'),
         ]);
@@ -321,7 +370,7 @@ class CaravanGestationStageTest extends TestCase
         $this->assertEquals($so->id, $gestation->service_order_id);
         $this->assertTrue((bool)$gestation->is_current);
 
-        // 3. Import empty diagnosis to close gestation
+        // 3. An imported "empty" never ends the pregnancy
         $responseEmpty = $this->postJson('http://test.localhost/api/caravans/import', [
             'work_type' => 'update',
             'rows' => [
@@ -337,9 +386,24 @@ class CaravanGestationStageTest extends TestCase
 
         $responseEmpty->assertStatus(201);
 
-        $gestationClosed = CaravanGestation::where('caravan_id', $caravan->id)->first();
-        $this->assertFalse((bool)$gestationClosed->is_current);
-        $this->assertTrue((bool)$gestationClosed->success);
-        $this->assertEquals('Closed via empty gestation diagnosis on batch import.', $gestationClosed->notes);
+        $gestationKept = CaravanGestation::where('caravan_id', $caravan->id)->first();
+        $this->assertTrue((bool)$gestationKept->is_current);
+        $this->assertNull($gestationKept->success);
+        $warning = $responseEmpty->json('data.warnings.0');
+        $this->assertSame(1, $warning['row']);
+        $this->assertStringContainsString('IMP-COW-1 sigue preñada (orden', $warning['reason']);
+
+        // 4. Nor is she set apart with the empty ones
+        $empties = \App\Models\Batch::create(['company_id' => $this->company->id, 'name' => 'Vacias Test', 'is_active' => true]);
+        $batchBefore = $caravan->fresh()->batch_id;
+        $this->postJson('http://test.localhost/api/caravans/import', [
+            'work_type' => 'update',
+            'empty_destination_batch_id' => $empties->id,
+            'rows' => [
+                ['identification' => 'IMP-COW-1', 'category' => 'vaca', 'sex' => 'H', 'teeth' => '4', 'diagnostico' => 'Vacía'],
+            ],
+        ])->assertStatus(201);
+        $this->assertSame($batchBefore, $caravan->fresh()->batch_id);
+        $this->assertTrue((bool) CaravanGestation::where('caravan_id', $caravan->id)->first()->is_current);
     }
 }

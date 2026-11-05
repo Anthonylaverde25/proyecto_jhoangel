@@ -18,6 +18,7 @@ use App\Core\Exceptions\EntryDteValidationException;
 use App\Core\Exceptions\EntryOrderDomainException;
 use App\Core\Interfaces\ICompanyContext;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\EntryOrders\AttachEntryOrderDteDocumentRequest;
 use App\Http\Requests\EntryOrders\CorrectEntryOrderDteHeadCountRequest;
 use App\Http\Requests\EntryOrders\LoadEntryOrderDteRequest;
 use App\Http\Requests\EntryOrders\ReadTriRequest;
@@ -144,6 +145,28 @@ final class EntryOrderController extends Controller
         }
 
         return $this->withWarnings($request, $result, 201);
+    }
+
+    /**
+     * "Cargar DTE" on head that moved without it.
+     */
+    public function attachDteDocument(AttachEntryOrderDteDocumentRequest $request, int $id, int $dteId): JsonResponse
+    {
+        try {
+            $result = ($this->useCases->attachDteDocument)(
+                $id,
+                $this->companyId(),
+                $request->user()?->id,
+                $dteId,
+                LoadDteDTO::fromArray($request->validated())
+            );
+        } catch (EntryDteValidationException $e) {
+            return $this->dteError($e);
+        } catch (EntryOrderDomainException $e) {
+            return $this->domainError($e);
+        }
+
+        return $this->withWarnings($request, $result);
     }
 
     /**

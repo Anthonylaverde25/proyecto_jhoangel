@@ -134,7 +134,7 @@ final class ServiceBullWithdrawal
             ServiceExposureExitReason::BULLS_WITHDRAWN
         );
 
-        $this->batchWeightService->recalculateBatchWeight($serviceBatchId, BatchWeightCause::MOVEMENT_OUT);
+        $this->batchWeightService->recalculateServicedBatch($serviceBatchId, BatchWeightCause::MOVEMENT_OUT);
         foreach (array_unique(array_values($resolvedDestinations)) as $destinationId) {
             if ($destinationId !== $serviceBatchId) {
                 $this->batchWeightService->recalculateBatchWeight($destinationId, BatchWeightCause::MOVEMENT_IN);

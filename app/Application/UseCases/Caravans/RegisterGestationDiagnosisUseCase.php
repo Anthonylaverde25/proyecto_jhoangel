@@ -84,6 +84,8 @@ final class RegisterGestationDiagnosisUseCase
             throw new DomainException("{$identification} no tiene inseminación registrada en la orden {$serviceOrder->getCode()}: cargala antes del tacto.");
         }
 
+        $this->assertKeepsCurrentGestation($serviceOrder, $caravan, $identification);
+
         $diagnosisDate = $this->resolveDiagnosisDate($dto->diagnosisDate, $serviceOrder);
         $roundId = $this->serviceOrderRepository->findOrCreateDiagnosisRound($dto->serviceOrderId, $companyId, $diagnosisDate);
         $category = $caravan->getReproductiveDetails()?->getArrivalCategory() ?? AnimalCategory::VACA;
@@ -245,8 +247,26 @@ final class RegisterGestationDiagnosisUseCase
     }
 
     /**
+     * A tacto never ends a pregnancy of another order, whatever its verdict: a typing slip must not
+     * erase one. The loss is a fact of its own, and once it is registered the tacto loads.
+     *
      * @throws DomainException
      */
+    private function assertKeepsCurrentGestation(ServiceOrderEntity $serviceOrder, CaravanEntity $caravan, string $identification): void
+    {
+        $current = $caravan->getActiveGestation();
+        $currentOrderId = $current?->getServiceOrderId();
+        if ($current === null || $currentOrderId === $serviceOrder->getId()) {
+            return;
+        }
+
+        $where = $currentOrderId !== null ? $this->serviceOrderRepository->findById($currentOrderId, $serviceOrder->getCompanyId())?->getCode() : null;
+
+        throw new DomainException(
+            "{$identification} tiene una preñez vigente" . ($where !== null ? " de la orden {$where}" : '') . ': este tacto no la reemplaza. Si la perdió, registrá la pérdida primero.'
+        );
+    }
+
     private function assertOrderAcceptsDiagnosis(ServiceOrderEntity $serviceOrder): void
     {
         if ($serviceOrder->acceptsDiagnosis()) {

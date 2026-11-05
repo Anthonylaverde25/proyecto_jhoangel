@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Entities;
 
 use App\Core\Enums\ServiceMethod;
+use App\Core\Enums\ServiceOrderKind;
 use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Exceptions\ServiceOrderDomainException;
 use App\Core\ValueObjects\ServiceOrderDiagnosisSummary;
@@ -60,7 +61,8 @@ final class ServiceOrderEntity
         private ?string $batchName = null,
         private ?string $diagnosisCompletedAt = null,
         private ?int $parentServiceOrderId = null,
-        private ServiceMethod $serviceMethod = ServiceMethod::NATURAL
+        private ServiceMethod $serviceMethod = ServiceMethod::NATURAL,
+        private ServiceOrderKind $kind = ServiceOrderKind::ISSUED
     ) {
         if (empty($this->allMaleCaravanIds)) {
             $this->allMaleCaravanIds = $this->maleCaravanIds;
@@ -155,6 +157,16 @@ final class ServiceOrderEntity
     public function getServiceMethod(): ServiceMethod
     {
         return $this->serviceMethod;
+    }
+
+    public function getKind(): ServiceOrderKind
+    {
+        return $this->kind;
+    }
+
+    public function isRegistered(): bool
+    {
+        return $this->kind === ServiceOrderKind::REGISTERED;
     }
 
     public function isInsemination(): bool
@@ -605,6 +617,7 @@ final class ServiceOrderEntity
         }
 
         $allowed = [
+            ServiceOrderStatus::PLANNED,
             ServiceOrderStatus::DRAFT,
             ServiceOrderStatus::APPROVED
         ];
@@ -626,6 +639,11 @@ final class ServiceOrderEntity
     {
         if ($this->status === $newStatus) {
             return;
+        }
+
+        // A planned order only starts ("Iniciar", which validates everything again) or is cancelled.
+        if ($newStatus === ServiceOrderStatus::PLANNED || ($this->status === ServiceOrderStatus::PLANNED && $newStatus !== ServiceOrderStatus::CANCELLED)) {
+            throw ServiceOrderDomainException::invalidStateTransition($this->status->value, $newStatus->value);
         }
 
         if ($newStatus === ServiceOrderStatus::APPROVED) {

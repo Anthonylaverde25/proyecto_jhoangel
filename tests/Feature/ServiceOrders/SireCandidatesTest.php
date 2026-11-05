@@ -124,6 +124,8 @@ class SireCandidatesTest extends VeterinaryTestCase
         $this->assertSame([$out->id => false, $in->id => false], $this->siresOf($other));
 
         $gestationId = (int) CaravanGestation::where('caravan_id', $cow->id)->where('is_current', true)->value('id');
+        // The calving season starts once the service order is closed.
+        DB::table('service_orders')->where('id', $orderId)->update(['status' => 'SUCCESS']);
         $this->apiAs('POST', '/caravans/bulk-birth', ['births' => [[
             'calf_identification' => 'PAT-06-CRIA',
             'calf_sex' => 'H',

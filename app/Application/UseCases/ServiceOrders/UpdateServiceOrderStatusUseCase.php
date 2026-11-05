@@ -51,9 +51,13 @@ final class UpdateServiceOrderStatusUseCase
                 foreach ($donorBatchIds as $donorBatchId) {
                     $this->batchWeightService->recalculateBatchWeight($donorBatchId, BatchWeightCause::MOVEMENT_OUT);
                 }
-                if ($donorBatchIds !== []) {
-                    $this->batchWeightService->recalculateBatchWeight($entity->getBatchId(), BatchWeightCause::MOVEMENT_IN);
-                }
+                // Only a bull that already lived here changes the herd: he stops being part of it.
+                $this->batchWeightService->recalculateServicedBatch($entity->getBatchId(), BatchWeightCause::MOVEMENT_OUT);
+            }
+
+            // The order stopped running with its bulls still here: they are part of the herd again.
+            if ($wasApproved && $newStatus !== ServiceOrderStatus::APPROVED) {
+                $this->batchWeightService->recalculateServicedBatch($entity->getBatchId(), BatchWeightCause::MOVEMENT_IN);
             }
 
             return $savedEntity;

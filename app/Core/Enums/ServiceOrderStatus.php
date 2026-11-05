@@ -9,9 +9,13 @@ namespace App\Core\Enums;
  * natural service (BULLS_WITHDRAWN); an AI service ends with SERVICE_ENDED (its repaso bulls
  * withdrawn, or ended from the menu). The order is closed (SUCCESS) only by its pregnancy
  * diagnosis, which can be loaded from the first day of service.
+ *
+ * A PLANNED order will happen on a future day: it moves no animal and takes neither the batch nor
+ * the animals until someone starts it. Reaching its date does not start it.
  */
 enum ServiceOrderStatus: string
 {
+    case PLANNED = 'PLANNED';
     case DRAFT = 'DRAFT';
     case APPROVED = 'APPROVED';
     case BULLS_WITHDRAWN = 'BULLS_WITHDRAWN';
@@ -36,6 +40,17 @@ enum ServiceOrderStatus: string
     public function isOpen(): bool
     {
         return $this === self::APPROVED || $this->hasServiceEnded();
+    }
+
+    /**
+     * Holds the batch until it is closed: a batch cannot start another service meanwhile. A draft
+     * counts because it is one approval away from running; a planned order takes nothing yet.
+     *
+     * @return list<string>
+     */
+    public static function unclosedValues(): array
+    {
+        return [self::DRAFT->value, ...self::openValues()];
     }
 
     /** @return list<string> */

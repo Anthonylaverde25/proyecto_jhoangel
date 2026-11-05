@@ -68,7 +68,7 @@ final class ProcessLser01SubmissionUseCase
             try {
                 $this->startPolicy->assertBatchCanStartService(
                     $batch,
-                    $this->serviceOrderRepository->findActiveServiceOnBatch($dto->batchId) !== null
+                    $this->serviceOrderRepository->findUnclosedOrderOnBatch($dto->batchId)
                 );
             } catch (DomainException $e) {
                 $headerErrors[] = $this->headerError('batch_id', 'BATCH_NOT_ELIGIBLE', $e->getMessage());

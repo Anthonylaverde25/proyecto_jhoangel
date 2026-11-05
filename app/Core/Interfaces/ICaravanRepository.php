@@ -93,17 +93,20 @@ interface ICaravanRepository
 
 
     /**
+     * The category of each animal in possession in a batch.
+     *
+     * @return array<int, ?int> caravan id => category id
+     */
+    public function findCategoriesInPossessionByBatch(int $batchId): array;
+
+    /**
      * @param int $batchId
      * @return int
      */
-    /**
-     * The animals the company holds in a batch right now: those that count for its weight.
-     *
-     * @return int[]
-     */
-    public function findIdsInPossessionByBatch(int $batchId): array;
-
     public function countByBatch(int $batchId): int;
+
+    /** The herd of the batch: every caravan it holds except the bulls of a running service. */
+    public function countResidentByBatch(int $batchId): int;
 
     /**
      * The calves of the list that still wait for their tag, named after their mother.
@@ -189,8 +192,9 @@ interface ICaravanRepository
     ): array;
 
     /**
-     * How many head of the batch have a current weight. This is the set the average is
-     * computed over, and it may be smaller than the batch itself.
+     * How many head of the herd have a current weight. This is the set the average is computed
+     * over, and it may be smaller than the batch itself. Bulls on service are never part of it:
+     * this method and the other weight aggregates below measure the herd.
      */
     public function countWeighedByBatch(int $batchId): int;
 

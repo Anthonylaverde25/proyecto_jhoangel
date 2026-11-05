@@ -34,6 +34,7 @@ class ItemDocument extends Model
         'notes',
         'idempotency_key',
         'created_by',
+        'source',
     ];
 
     protected $casts = [

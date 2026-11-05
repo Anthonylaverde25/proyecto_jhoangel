@@ -12,6 +12,7 @@ use App\Core\Enums\BatchWeightCause;
 use App\Core\Enums\WeighingMethod;
 use App\Core\Enums\WeighingSource;
 use App\Core\Exceptions\WeighingOrderDomainException;
+use App\Core\Interfaces\IAnimalCategoryRepository;
 use App\Core\Interfaces\IBatchRepository;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Interfaces\IWeighingOrderRepository;
@@ -22,12 +23,11 @@ use App\Core\ValueObjects\WeighingReading;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Registers a weighing of a whole batch on a cage or truck scale, after it happened, from its
- * loads or from the average the operator already has.
+ * Registers a weighing of a batch after it happened, from its loads on a cage or truck scale or
+ * from the average of each category; either way each category gets its own average.
  *
- * What was measured is the batch: the measure stays on the order as the document, each caravan
- * receives the average as an AVERAGE weight, and the batch is recomputed from its animals, so
- * its mass is exactly the net mass the scale read.
+ * The measure stays on the order as the document, each caravan of a category weighed receives the
+ * average of its category as an AVERAGE weight, and the batch is recomputed from its animals.
  */
 final class RegisterBatchWeighingUseCase
 {
@@ -39,6 +39,7 @@ final class RegisterBatchWeighingUseCase
         private readonly GroupWeightImputation $imputation,
         private readonly CaravanWeighingRecorder $recorder,
         private readonly BatchWeightService $batchWeightService,
+        private readonly IAnimalCategoryRepository $categories,
     ) {
     }
 
@@ -58,8 +59,16 @@ final class RegisterBatchWeighingUseCase
         }
 
         return DB::transaction(function () use ($dto, $date): WeighingOrderEntity {
-            $caravanIds = $this->caravans->findIdsInPossessionByBatch($dto->batchId);
-            $weights = $this->imputation->impute($dto->measure, $caravanIds);
+            $categoryNames = [];
+            foreach ($this->categories->all() as $category) {
+                $categoryNames[(int) $category->getId()] = $category->getName();
+            }
+
+            $weights = $this->imputation->impute(
+                $dto->measure,
+                $this->caravans->findCategoriesInPossessionByBatch($dto->batchId),
+                $categoryNames
+            );
 
             $order = WeighingOrderEntity::registerBatchWeighing(
                 companyId: $dto->companyId,
@@ -76,7 +85,7 @@ final class RegisterBatchWeighingUseCase
                 measure: $dto->measure,
                 animals: array_map(
                     static fn (int $id) => new WeighingOrderAnimalEntity(null, $id, $dto->batchId),
-                    $caravanIds
+                    array_keys($weights)
                 ),
             );
 
@@ -93,7 +102,7 @@ final class RegisterBatchWeighingUseCase
                     shrunkCondition: $dto->shrunkCondition,
                     shrinkPct: $dto->shrinkPct,
                     time: $dto->weighingTime,
-                    notes: "Promedio del lote ({$order->getCode()})",
+                    notes: "Promedio de su categoría ({$order->getCode()})",
                     weighingOrderId: $order->getId(),
                 ));
 

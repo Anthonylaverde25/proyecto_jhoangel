@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\AiConsumptionController;
 use App\Http\Controllers\Api\BatchController;
 use App\Http\Controllers\Api\DeliveryNoteController;
 use App\Http\Controllers\Api\FiscalCatalogController;
@@ -79,6 +80,10 @@ Route::controller(ItemDocumentController::class)->prefix('item-documents')->grou
     Route::post('/transfers', 'storeTransfer');
     Route::post('/{id}/reversal', 'reverse')->whereNumber('id');
 });
+
+// A consumption on behalf of an AI client: what it would do, then the option the user confirmed.
+Route::get('/item-documents/ai-consumptions/preview', [AiConsumptionController::class, 'preview']);
+Route::post('/item-documents/ai-consumptions', [AiConsumptionController::class, 'store']);
 
 Route::controller(ItemStockController::class)->prefix('items/{id}')->group(function (): void {
     Route::get('/stock', 'show')->whereNumber('id');

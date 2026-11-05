@@ -19,6 +19,7 @@ final class BirthOrderUseCases
         public readonly ExecuteBirthOrderUseCase $execute,
         public readonly RegisterBirthsUseCase $register,
         public readonly ListOpenBirthOrderMothersUseCase $openMothers,
+        public readonly ListMothersInOpenServiceOrderUseCase $mothersInOpenService,
     ) {
     }
 }

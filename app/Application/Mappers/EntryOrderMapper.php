@@ -102,8 +102,8 @@ class EntryOrderMapper
 
                 $dtes[] = new EntryOrderDteEntity(
                     id: (int) $dte->id,
-                    dteNumber: (string) $dte->dte_number,
-                    dteDate: self::date($dte->dte_date),
+                    dteNumber: $dte->dte_number !== null ? (string) $dte->dte_number : null,
+                    dteDate: $dte->dte_date !== null ? self::date($dte->dte_date) : null,
                     headCount: (int) $dte->head_count,
                     missingHeadCount: (int) $dte->missing_head_count,
                     animals: $animals,
@@ -161,7 +161,7 @@ class EntryOrderMapper
                     id: (int) $sheet->id,
                     number: (int) $sheet->number,
                     dteId: (int) $sheet->entry_order_dte_id,
-                    dteNumber: (string) ($dteNumbers[$sheet->entry_order_dte_id] ?? ''),
+                    dteNumber: $dteNumbers[$sheet->entry_order_dte_id] ?? null,
                     status: ReceiptSheetStatus::from($sheet->status),
                     dteHeadCount: (int) $sheet->dte_head_count,
                     expectedHeadCount: (int) $sheet->expected_head_count,

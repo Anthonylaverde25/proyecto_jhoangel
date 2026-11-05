@@ -10,6 +10,8 @@ use DateTimeInterface;
 /**
  * One official transit document loaded for an entry order. It declares how many head move: the
  * caravans are only known when the animals arrive, and each one received is recorded against it.
+ * The paper is recommended, never required: without number nor date it is a group of head moving
+ * with the document still to come, and everything else works the same until attachDocument().
  * A manual reception confirms head, not caravans: head received whose caravan is not written yet
  * are "uncaravaned", and writing a caravan later identifies one of them. Received is caravans plus
  * uncaravaned head (plus the ones written off before getting a caravan); what is in transit is head
@@ -29,13 +31,13 @@ final class EntryOrderDteEntity
      */
     public function __construct(
         private readonly ?int $id,
-        private readonly string $dteNumber,
-        private readonly string $dteDate,
+        private ?string $dteNumber,
+        private ?string $dteDate,
         private int $headCount,
         private int $missingHeadCount = 0,
         private array $animals = [],
         private readonly ?int $loadedByUserId = null,
-        private readonly ?string $observations = null,
+        private ?string $observations = null,
         private readonly ?string $loadedByUserName = null,
         private readonly ?DateTimeInterface $createdAt = null,
         private readonly ?int $storedReceivedCount = null,
@@ -54,14 +56,43 @@ final class EntryOrderDteEntity
         return $this->id;
     }
 
-    public function getDteNumber(): string
+    public function getDteNumber(): ?string
     {
         return $this->dteNumber;
     }
 
-    public function getDteDate(): string
+    public function getDteDate(): ?string
     {
         return $this->dteDate;
+    }
+
+    /**
+     * Whether the paper was loaded. Without it the head move all the same, marked "Sin DTE".
+     */
+    public function isDocumented(): bool
+    {
+        return $this->dteNumber !== null;
+    }
+
+    /**
+     * How messages name it: "DTE 0123" or "ingreso sin DTE".
+     */
+    public function label(): string
+    {
+        return $this->dteNumber !== null ? "DTE {$this->dteNumber}" : 'ingreso sin DTE';
+    }
+
+    /**
+     * The paper arrived: its number, date and the head it declares. What differs from what was
+     * received is the order's to raise.
+     */
+    public function attachDocument(string $dteNumber, string $dteDate, int $headCount, ?string $observations): void
+    {
+        $this->dteNumber = $dteNumber;
+        $this->dteDate = $dteDate;
+        $this->headCount = $headCount;
+        $this->observations = $observations ?? $this->observations;
+        $this->changed = true;
     }
 
     /**
@@ -262,7 +293,7 @@ final class EntryOrderDteEntity
 
         if ($head < 1 || $head > $pending) {
             throw EntryOrderDomainException::invalid(
-                "El DTE {$this->dteNumber} tiene {$pending} cabezas por identificar en ese lote: no se pueden dar de baja {$head}.",
+                "El {$this->label()} tiene {$pending} cabezas por identificar en ese lote: no se pueden dar de baja {$head}.",
                 'PENDING_WRITE_OFF_EXCEEDS',
                 'head_count'
             );
@@ -330,7 +361,7 @@ final class EntryOrderDteEntity
     }
 
     /**
-     * A stored DTE whose declared, missing or uncaravaned head changed in this operation.
+     * A stored DTE whose document, declared, missing or uncaravaned head changed in this operation.
      */
     public function isChanged(): bool
     {

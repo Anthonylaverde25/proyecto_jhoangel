@@ -49,6 +49,11 @@ class WeighingOrder extends Model
         return $this->hasMany(WeighingOrderGroup::class)->orderBy('sequence');
     }
 
+    public function categoryAverages(): HasMany
+    {
+        return $this->hasMany(WeighingOrderCategoryAverage::class)->orderBy('id');
+    }
+
     public function animals(): HasMany
     {
         return $this->hasMany(WeighingOrderAnimal::class);

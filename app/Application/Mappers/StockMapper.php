@@ -75,6 +75,7 @@ final class StockMapper
             $model->relationLoaded('provider') ? $model->provider?->name : null,
             $model->service_order_id === null ? null : (int) $model->service_order_id,
             $model->relationLoaded('serviceOrder') ? $model->serviceOrder?->code : null,
+            $model->source,
         );
     }
 

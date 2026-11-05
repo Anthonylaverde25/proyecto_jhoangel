@@ -58,11 +58,112 @@ interface IServiceOrderRepository
     public function lockLastCodeWithPrefix(int $companyId, string $prefix): ?string;
 
     /**
+     * A planned order: no animal moves and no exposure opens until it starts.
+     *
+     * @param array<string, mixed> $attributes columns of the order
+     * @param int[] $femaleIds
+     * @param int[] $maleIds
+     * @param array<int, int> $plannedSemen female_caravan_id => semen item id
+     */
+    public function createPlanned(array $attributes, array $femaleIds, array $maleIds, array $plannedSemen, string $reason): int;
+
+    /**
+     * Changes what a planned order says; its bulls are replaced by the given ones.
+     *
+     * @param array<string, mixed> $attributes columns of the order
+     * @param int[] $maleIds
+     */
+    public function updatePlanned(int $orderId, int $companyId, array $attributes, array $maleIds, int $userId): void;
+
+    /**
+     * An order that ended in the field, born ended with its real dates.
+     *
+     * @param array<string, mixed> $attributes columns of the order
+     * @param int[] $femaleIds
+     * @param list<array{male_caravan_id: int, joined_at: string, retired_at: string}> $bulls
+     */
+    public function createRegistered(array $attributes, array $femaleIds, array $bulls, ServiceExposureExitReason $exitReason, int $userId, string $reason): int;
+
+    /**
+     * Code of an order of the batch that ran on these days, if any. Touching on one day is no overlap.
+     */
+    public function findOverlappingOrderOnBatch(int $batchId, int $companyId, string $from, string $until): ?string;
+
+    /**
+     * Females served in another order on these days.
+     *
+     * @param int[] $femaleIds
+     * @return list<array{identification: string, code: string}>
+     */
+    public function findOverlappingFemales(array $femaleIds, int $companyId, string $from, string $until): array;
+
+    /**
+     * Code of an order where the bull served on these days, if any. Leaving a batch and joining
+     * another on the same day is no overlap.
+     */
+    public function findOverlappingBullOrder(int $bullId, int $companyId, string $from, string $until): ?string;
+
+    /**
+     * Females among these with a current gestation.
+     *
+     * @param int[] $femaleIds
+     * @return string[] their identifications
+     */
+    public function findFemalesWithCurrentGestation(array $femaleIds, int $companyId): array;
+
+    /**
+     * Batches of the company among these.
+     *
+     * @param int[] $batchIds
+     * @return int[]
+     */
+    public function findCompanyBatchIds(array $batchIds, int $companyId): array;
+
+    /**
+     * Where each bull was on the given day according to its movements, and whether it moved after
+     * another day.
+     *
+     * @param int[] $bullIds
+     * @return list<array{caravan_id: int, batch_id: ?int, current_batch_id: ?int, moved_after: bool}>
+     */
+    public function findBullLocations(array $bullIds, int $companyId, string $onDay, string $movedAfterDay): array;
+
+    /**
+     * A dated movement of a bull, between batches declared by the operator. It does not change the
+     * batch the bull is in today.
+     */
+    public function recordBullMovement(int $bullId, int $companyId, int $fromBatchId, int $toBatchId, string $date, string $observations): void;
+
+    /**
+     * Puts the bull in the batch.
+     *
+     * @return ?int the batch it was in, or null when it did not change
+     */
+    public function relocateBull(int $bullId, int $companyId, int $batchId): ?int;
+
+    /**
      * The active (DRAFT or APPROVED) service running on a batch, as a lightweight reference.
      *
      * @return array{id: int, status: string, is_controlled_service: bool, service_method: string}|null
      */
     public function findActiveServiceOnBatch(int $batchId): ?array;
+
+    /**
+     * The order still open on a batch: running, or over and waiting for its diagnosis. The oldest
+     * one, because it is the first that has to be closed.
+     *
+     * @param int|null $exceptOrderId the order asking, when it is itself a draft
+     * @return array{id: int, code: string, status: string}|null
+     */
+    public function findUnclosedOrderOnBatch(int $batchId, ?int $exceptOrderId = null): ?array;
+
+    /**
+     * The orders in service or waiting for their diagnosis that hold these females; all of them when null.
+     *
+     * @param int[]|null $femaleIds
+     * @return int[]
+     */
+    public function findOpenOrderIdsHoldingFemales(?array $femaleIds, int $companyId): array;
 
     /**
      * Every service order run on a batch, newest first.

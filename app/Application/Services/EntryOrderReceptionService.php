@@ -109,7 +109,7 @@ final class EntryOrderReceptionService
             $warnings[] = [
                 'code' => 'PENDING_SPLIT_CORRECTED',
                 'message' => "Una caravana de {$this->batchLabel($correction['batch_id'], $targets)} identificó una cabeza que se había anotado en otro lote "
-                    . "(DTE {$correction['dte_number']}): el reparto declarado al recibir no era exacto y se corrigió.",
+                    . "({$correction['dte_label']}): el reparto declarado al recibir no era exacto y se corrigió.",
             ];
         }
         $sheet?->process($dto->pages !== [] ? $dto->pages : range(1, $sheet->getPageCount()));
@@ -265,7 +265,7 @@ final class EntryOrderReceptionService
         }
 
         if ($sheet !== null && $sheet->getDteId() !== $dte->getId()) {
-            $header[] = $this->error('receipt_sheet_id', 'SHEET_NOT_OF_DTE', "La hoja {$sheet->label()} es del DTE {$sheet->getDteNumber()}, no del {$dte->getDteNumber()}.");
+            $header[] = $this->error('receipt_sheet_id', 'SHEET_NOT_OF_DTE', "La hoja {$sheet->label()} no es del {$dte->label()}.");
         }
 
         if ($sheet?->getStatus() === ReceiptSheetStatus::REPLACED) {
@@ -284,7 +284,7 @@ final class EntryOrderReceptionService
         } elseif (!$open && count($dto->animals) > $uncaravaned) {
             $header[] = $this->error('animals', 'CARAVANS_EXCEED_UNCARAVANED', "La orden está {$order->getStatus()->label()}: sólo se pueden cargar las caravanas de las {$uncaravaned} cabezas recibidas sin caravana.");
         } elseif ($byHead ? $dte->pendingCount() === 0 : $dte->toIdentifyCount() === 0) {
-            $header[] = $this->error('dte_id', 'DTE_NOTHING_PENDING', "El DTE {$dte->getDteNumber()} no tiene cabezas en tránsito.");
+            $header[] = $this->error('dte_id', 'DTE_NOTHING_PENDING', "El {$dte->label()} no tiene cabezas en tránsito.");
         }
 
         if ($byHead && count($dto->animals) > $uncaravaned + $dto->receivedHeadCount) {
@@ -297,7 +297,7 @@ final class EntryOrderReceptionService
 
         if ($dto->receivedAt > now()->toDateString()) {
             $header[] = $this->error('received_at', 'DATE_IN_FUTURE', 'La fecha de recepción no puede ser futura.');
-        } elseif ($dto->receivedAt < $dte->getDteDate()) {
+        } elseif ($dte->getDteDate() !== null && $dto->receivedAt < $dte->getDteDate()) {
             $header[] = $this->error('received_at', 'RECEIVED_BEFORE_DTE', 'La hacienda no pudo llegar antes de que se emitiera su DTE.');
         }
 
@@ -563,7 +563,12 @@ final class EntryOrderReceptionService
             }
         }
 
-        return $dto->dteNumber !== null ? $order->findDteByNumber($dto->dteNumber) : null;
+        if ($dto->dteNumber !== null) {
+            return $order->findDteByNumber($dto->dteNumber);
+        }
+
+        // "Registrar ingreso" without the paper: the head just recorded on the order, not stored yet.
+        return $id === null ? ($order->unsavedDtes()[0] ?? null) : null;
     }
 
     /**
@@ -661,9 +666,10 @@ final class EntryOrderReceptionService
             'provenance_metadata' => $provenance,
         ]);
 
+        $document = $dte->isDocumented() ? "DTE {$dte->getDteNumber()}" : 'sin DTE';
         $where = $sheet !== null
-            ? "{$order->getCode()}, DTE {$dte->getDteNumber()}, hoja {$sheet->label()}"
-            : "{$order->getCode()}, DTE {$dte->getDteNumber()}";
+            ? "{$order->getCode()}, {$document}, hoja {$sheet->label()}"
+            : "{$order->getCode()}, {$document}";
 
         if ($weight !== null) {
             $average = $sheet?->getWeighingMode() === WeighingMode::AVERAGE;
@@ -701,7 +707,9 @@ final class EntryOrderReceptionService
             'type' => 'PURCHASE',
             'movement_date' => $receivedAt,
             'provenance_metadata' => $caravan->provenance_metadata,
-            'observations' => "Ingreso por DTE {$dte->getDteNumber()} de la orden {$order->getCode()}",
+            'observations' => $dte->isDocumented()
+                ? "Ingreso por DTE {$dte->getDteNumber()} de la orden {$order->getCode()}"
+                : "Ingreso sin DTE de la orden {$order->getCode()}",
         ]);
 
         return new EntryOrderAnimalEntity(

@@ -33,6 +33,9 @@ use Illuminate\Support\Facades\DB;
  * executed from the screen and calvings registered afterwards all arrive here as the same
  * submission, so the same checks hold for all of them.
  *
+ * A pregnancy of a service order that is not closed yet cannot be worked here: first the order closes
+ * with its diagnosis, then comes the calving season. A row that declares nothing is not affected.
+ *
  * Each row is a pregnant female and what the round found: a live calf (V) — created in the batch
  * its mother is in, never in one the sheet names —, a calf born dead (NM, charged to the mother), a
  * calf born alive that died at foot (M, charged to the calf), or that she passed her due date
@@ -157,6 +160,7 @@ final class ProcessPar01SubmissionUseCase
         $existingCalves = $this->caravanRepository->findByIdentifications($calfTags);
         $motherIds = array_values(array_map(fn (CaravanEntity $c) => (int) $c->getId(), $mothersByTag));
         $committed = $this->orderRepository->findCommittedMothers($motherIds, $dto->companyId, $order?->getId());
+        $inOpenService = $this->orderRepository->mothersInOpenServiceOrder($motherIds, $dto->companyId);
         $breeds = BreedCoatCatalog::fromBreeds($this->breedRepository->getAll());
         $fathers = [];
         $lossReasonIds = [];
@@ -223,6 +227,11 @@ final class ProcessPar01SubmissionUseCase
             }
 
             if ($pending) {
+                if (isset($inOpenService[$motherId])) {
+                    $errorsByRow[$index][] = $this->serviceOrderNotClosed($tag, $inOpenService[$motherId]['code']);
+                    continue;
+                }
+
                 $active = $mother->getActiveGestation();
 
                 if ($active === null) {
@@ -251,6 +260,11 @@ final class ProcessPar01SubmissionUseCase
                 }
 
                 $alreadyRegistered[] = ['row_index' => $index, 'caravana_madre' => $tag, 'kind' => $known['kind'], 'message' => $known['message']];
+                continue;
+            }
+
+            if (isset($inOpenService[$motherId])) {
+                $errorsByRow[$index][] = $this->serviceOrderNotClosed($tag, $inOpenService[$motherId]['code']);
                 continue;
             }
 
@@ -955,6 +969,16 @@ final class ProcessPar01SubmissionUseCase
     private function headerError(string $field, string $code, string $message): array
     {
         return ['field' => $field, 'code' => $code, 'message' => $message];
+    }
+
+    /** @return array{code: string, message: string, field: string} */
+    private function serviceOrderNotClosed(string $tag, string $orderCode): array
+    {
+        return $this->error(
+            'SERVICE_ORDER_NOT_CLOSED',
+            "'{$tag}' quedó preñada en la orden de servicio {$orderCode}, que sigue abierta. Cerrala antes de registrar la parición.",
+            'caravana_madre'
+        );
     }
 
     /**

@@ -34,6 +34,9 @@ interface IItemDocumentRepository
     /** @return array{data: list<ItemDocumentEntity>, total: int} */
     public function search(ItemDocumentFilters $filters, int $companyId): array;
 
+    /** Sets the notes of an operation and of the other half of its transfer, once they are known. */
+    public function annotate(int $documentId, int $companyId, string $notes): void;
+
     public function nextNumber(int $companyId): int;
 
     /** Inserts header and valuated lines; returns them with their ids, in the same order. */

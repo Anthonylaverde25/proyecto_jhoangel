@@ -18,8 +18,9 @@ use App\Core\Interfaces\IEntryOrderRepository;
 use Illuminate\Support\Facades\DB;
 
 /**
- * "Registrar ingreso": the DTE and the animals are already in hand. The order, its batch, the DTE
- * with the head it declares and a caravan for every animal received on the entry day are created
+ * "Registrar ingreso": the animals are already in hand, and usually the DTE (recommended, never
+ * required: without it the order is marked "Sin DTE" until it is loaded). The order, its batch, the
+ * DTE with the head it declares and a caravan for every animal received on the entry day are created
  * in one transaction: if any row fails, nothing exists. If fewer head than were bought have a DTE,
  * the order stays AWAITING_DTE; if fewer animals than the DTE declares arrived, the rest stay in
  * transit. Either way a closing reason closes it incomplete right away.
@@ -59,7 +60,7 @@ final class RegisterEntryUseCase
             $saved = $this->repository->save(
                 $order,
                 $dto->userId,
-                $order->getClosingReason() ?? 'Ingreso registrado con su DTE',
+                $order->getClosingReason() ?? ($dte->dteNumber !== null ? 'Ingreso registrado con su DTE' : 'Ingreso registrado sin DTE'),
                 [...$loaded['metadata'], 'received_at' => $enteredAt, 'received' => $received['metadata']['received']]
             );
             $this->receptionService->settleBatch($saved, $received['metadata']);

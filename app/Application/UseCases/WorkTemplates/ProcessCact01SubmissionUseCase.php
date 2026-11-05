@@ -6,6 +6,7 @@ namespace App\Application\UseCases\WorkTemplates;
 
 use App\Application\DTOs\Cact01\Cact01SubmissionDTO;
 use App\Application\DTOs\CreateBatchDTO;
+use App\Application\Services\CaravanRecategorizer;
 use App\Application\Services\MotherCalfSeparation;
 use App\Application\Services\TransferOrderExecutionService;
 use App\Application\UseCases\Batches\CreateBatchUseCase;
@@ -76,7 +77,8 @@ final class ProcessCact01SubmissionUseCase
         private readonly CreateBatchUseCase $createBatch,
         private readonly TransferOrderExecutionService $orderExecution,
         private readonly IAnimalCategoryRepository $categoryRepository,
-        private readonly MotherCalfSeparation $separation
+        private readonly MotherCalfSeparation $separation,
+        private readonly CaravanRecategorizer $recategorizer
     ) {
     }
 
@@ -284,6 +286,24 @@ final class ProcessCact01SubmissionUseCase
             }
 
             $animalsByRow[$index] = $animal;
+        }
+
+        if ($this->recategorizer !== null && $categoryByRow !== []) {
+            $catIdByCaravanId = [];
+            $rowByCaravanId = [];
+            foreach ($categoryByRow as $index => $change) {
+                $animal = $animalsByRow[$index] ?? null;
+                if ($animal !== null && $animal->getId() !== null) {
+                    $cId = (int) $animal->getId();
+                    $catIdByCaravanId[$cId] = (int) $change['category']->getId();
+                    $rowByCaravanId[$cId] = $index;
+                }
+            }
+            $refusals = $this->recategorizer->refusals($catIdByCaravanId);
+            foreach ($refusals as $cId => $message) {
+                $rIdx = $rowByCaravanId[$cId];
+                $errorsByRow[$rIdx][] = $this->error('FORBIDDEN_CATEGORY', $message);
+            }
         }
 
         if ($seenTags === []) {

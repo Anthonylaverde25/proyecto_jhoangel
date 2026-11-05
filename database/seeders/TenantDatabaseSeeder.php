@@ -7,6 +7,10 @@ namespace Database\Seeders;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
+/**
+ * What a new tenant starts with: catalogs, partners, stock and a clean rodeo. The test scenarios,
+ * each with its own batches and tags, are not part of it: see TestScenariosSeeder.
+ */
 class TenantDatabaseSeeder extends Seeder
 {
     use WithoutModelEvents;
@@ -29,12 +33,14 @@ class TenantDatabaseSeeder extends Seeder
             ActivitySeeder::class,
             // Catalog of weighing purposes; every seeder below that weighs depends on it.
             WeighingTypeSeeder::class,
-            BatchWeightSeeder::class,
             WorkTemplateSeeder::class,
             BatchTypeSeeder::class,
             SecondaryCompanyLivestockSeeder::class,
             PathogenSeeder::class,
             BullHealthSeeder::class,
+            // The rodeo: 10 active batches, every animal with its category and its weights. It needs
+            // the bulls above, and the stock examples below hang from its batches.
+            RodeoDemoSeeder::class,
             // Base units and categories for every company (the company observer does not run here),
             // then the catalog that backs the B1 screens: it needs the providers seeded above.
             CompanyItemCatalogSeeder::class,
@@ -47,8 +53,6 @@ class TenantDatabaseSeeder extends Seeder
             WarehouseTestSeeder::class,
             // Semen stock (semen S-A): tanks, sires, lots and straws without lot.
             SemenStockTestSeeder::class,
-            // AI service orders (semen S-B): a batch ready for AI and one already inseminating.
-            InseminationServiceTestSeeder::class,
             // Sanitary diagnostics module: catalogues, evidentiary protocols, portal access
             // links, and a final aptitude recomputation under the venereal rule (ADR-4).
             VeterinaryCatalogSeeder::class,
@@ -57,38 +61,8 @@ class TenantDatabaseSeeder extends Seeder
             ExtractionActSeeder::class,
             VeterinaryPortalAccessTokenSeeder::class,
             BullAptitudeRecalculationSeeder::class,
-            // Va último a propósito: el recálculo anterior crea una evaluación para todo toro que
-            // no tenga ninguna, y estos tres deben quedar sin historia sanitaria alguna.
-            UnevaluatedTestBullsSeeder::class,
-            // Contraparte de los crudos: tres toros con todos los parámetros correctos (APTOS).
-            FitTestBullsSeeder::class,
-            // Crías al pie DST-T-01..46 para las planillas de prueba DEST-01 (ai-agent/image_test/dest001).
-            WeaningTestCalvesSeeder::class,
-            // Vientres preñados PAR-V-01..36 y la orden de parición PA-20260929-0001 (PAR-01).
-            BirthOrderTestSeeder::class,
-            ActivityChangeTestAnimalsSeeder::class,
-            Cact01ActivityChangeScanTestSeeder::class,
-            // Escenario "Zoo": cada etapa del rodeo con sus animales reales y un destino vacío por
-            // etapa, para probar las órdenes de transferencia contra la zootecnia.
-            TransferOrderZootechnicsTestSeeder::class,
-            // Ejemplos 3.1, 3.3 y 3.5 del plan de curva de peso: un lote cuyo promedio baja
-            // porque se clasificaron los pesados, un destino que ya tenía animales, y un
-            // lote que queda vacío. Sirven para mirar en pantalla que ninguna caída es
-            // una pérdida de peso.
-            BatchCompositionCurveSeeder::class,
-            // Simulación histórica de ingresos progresivos en 'lote ejemplo peso 1' a lo largo de 5 meses.
-            SimulateBatchProgressiveEntriesSeeder::class,
-            // Dos lotes vacíos para pruebas interactivas de usuario: 'LOTE DE INGRESO ANIMALES TEST' y 'LOTE DESTINO EGRESO ANIMALES TEST'
-            TestGraphBatchesSeeder::class,
-            // Caravanas con número electrónico (032000000000001..012) que el simulador del lector BLE
-            // vuelve a leer: ya registradas en la empresa activa y en Hacienda Secundaria.
-            BleReaderTestCaravansSeeder::class,
-            // Órdenes de ingreso de hacienda externa (ING-02): una en espera de DTE, una parcial con
-            // su DTE cargado (ING-T-01..06) y un borrador, para probar /batches/external.
-            EntryOrderTestSeeder::class,
-            // Servicio sobre lote operacional: un rodeo en servicio con ingresos y salidas, uno con
-            // tacto cargado (3 vacías) y uno listo para "Iniciar servicio" con toros aptos libres.
-            ServiceOnOperationalBatchTestSeeder::class,
+            // After the recalculation above: a service only admits a bull that is fit by then.
+            RodeoDemoServicesSeeder::class,
         ]);
     }
 }

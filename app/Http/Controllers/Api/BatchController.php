@@ -44,6 +44,12 @@ class BatchController extends Controller
         return response()->json(BatchWeightResource::collection($weights));
     }
 
+    /** One row per day a category of the batch was weighed: the curve of a mixed batch. */
+    public function getCategoryWeightSeries(int $id): JsonResponse
+    {
+        return response()->json(($this->batch->categoryWeightSeries)($id));
+    }
+
     /**
      * Lista todos los lotes, opcionalmente filtrados por granja, tipo o alcance (own | external).
      */

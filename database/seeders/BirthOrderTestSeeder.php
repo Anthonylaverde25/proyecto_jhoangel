@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Core\Enums\ServiceOrderStatus;
 use App\Models\Activity;
 use App\Models\AnimalCategory;
 use App\Models\Batch;
@@ -16,6 +17,8 @@ use App\Models\CaravanLineage;
 use App\Models\CaravanMovement;
 use App\Models\CaravanWeight;
 use App\Models\Company;
+use App\Models\ServiceOrder;
+use App\Models\ServiceOrderFemale;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -32,6 +35,8 @@ use Illuminate\Support\Facades\DB;
  *    "Sires pendientes"; the rest have none.
  *  - PAR-V-37: an open cow (no gestation) in the first batch, for an unplanned calving.
  *  - PAR-C-USADA: a calf tag already in use, for the duplicated-tag check.
+ *  - PAR-V-45: pregnant in SO-PAR-ABIERTA, a service order waiting to be closed: her calving season
+ *    has not started, so neither an order nor a sheet may take her until that order closes.
  *  - PA-20260929-0001: an ISSUED order with PAR-V-01..20 and PAR-V-31..33.
  *  - PA-20260929-0002: a PARTIAL order halfway through the season, one line per state:
  *      PAR-V-38 BORN (calf PAR-C-38) · PAR-V-39 LOST, born dead (NM) · PAR-V-40 BORN_DIED (M) ·
@@ -56,6 +61,8 @@ class BirthOrderTestSeeder extends Seeder
     private const TWO_SIRES_UP_TO = 24;
     private const OPEN_COW = 'PAR-V-37';
     private const USED_CALF_TAG = 'PAR-C-USADA';
+    private const COW_IN_OPEN_SERVICE = 'PAR-V-45';
+    public const OPEN_SERVICE_CODE = 'SO-PAR-ABIERTA';
 
     /** Fixed, not generated: a test sheet prints it and must keep resolving. */
     public const ORDER_CODE = 'PA-20260929-0001';
@@ -107,13 +114,14 @@ class BirthOrderTestSeeder extends Seeder
 
         $openCow = $this->caravan($companyId, self::OPEN_COW, (int) $batch->id, 'H', $categories['VACA'] ?? null);
         $this->caravan($companyId, self::USED_CALF_TAG, (int) $batch->id, 'M', $categories['TERNERO'] ?? null);
+        $cowInOpenService = $this->caravan($companyId, self::COW_IN_OPEN_SERVICE, (int) $otherBatch->id, 'H', $categories['VACA'] ?? null);
 
         $inProgressIds = [];
         foreach (array_keys(self::IN_PROGRESS) as $n) {
             $inProgressIds[$n] = (int) $this->caravan($companyId, $this->tag($n), (int) $batch->id, 'H', $categories['VACA'] ?? null)->id;
         }
 
-        $this->eraseLoads([...array_values($femaleIds), ...array_values($inProgressIds), (int) $openCow->id], [(int) $batch->id, (int) $otherBatch->id]);
+        $this->eraseLoads([...array_values($femaleIds), ...array_values($inProgressIds), (int) $openCow->id, (int) $cowInOpenService->id], [(int) $batch->id, (int) $otherBatch->id]);
 
         $gestationIds = [];
         foreach ($femaleIds as $n => $id) {
@@ -123,6 +131,7 @@ class BirthOrderTestSeeder extends Seeder
 
         $this->seedOrder($companyId, $femaleIds, $gestationIds);
         $this->seedInProgressOrder($companyId, (int) $batch->id, $inProgressIds, $bullA, $categories['TERNERO'] ?? null);
+        $this->seedPregnancyInOpenService($companyId, (int) $otherBatch->id, (int) $cowInOpenService->id);
 
         $this->command?->info(sprintf(
             'BirthOrderTestSeeder: %d vientres preñados (PAR-V-01..%02d) en "%s" y "%s", %s vacía, %s usada, la orden %s emitida y la ' . self::IN_PROGRESS_CODE . ' en curso.',
@@ -178,6 +187,29 @@ class BirthOrderTestSeeder extends Seeder
     /**
      * @param Caravan[] $sires
      */
+    private function seedPregnancyInOpenService(int $companyId, int $batchId, int $cowId): void
+    {
+        $order = ServiceOrder::withoutGlobalScopes()->updateOrCreate(
+            ['company_id' => $companyId, 'code' => self::OPEN_SERVICE_CODE],
+            [
+                'batch_id' => $batchId,
+                'status' => ServiceOrderStatus::BULLS_WITHDRAWN->value,
+                'service_type' => 'single',
+                'service_method' => 'NATURAL',
+                'planned_start_date' => now()->subMonths(10)->toDateString(),
+                'actual_start_date' => now()->subMonths(10)->toDateString(),
+                'actual_end_date' => now()->subMonths(8)->toDateString(),
+            ]
+        );
+
+        ServiceOrderFemale::withoutGlobalScopes()->updateOrCreate(
+            ['service_order_id' => $order->id, 'female_caravan_id' => $cowId],
+            ['company_id' => $companyId, 'reproductive_status' => 'PREGNANT']
+        );
+
+        CaravanGestation::whereKey($this->pregnancy($cowId, $this->dueDate(1), []))->update(['service_order_id' => $order->id]);
+    }
+
     private function pregnancy(int $femaleId, string $dueDate, array $sires): int
     {
         $daysToDue = (int) round((strtotime($dueDate) - strtotime(now()->toDateString())) / 86400);

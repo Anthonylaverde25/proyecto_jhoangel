@@ -56,6 +56,16 @@ interface IBirthOrderRepository
     public function openMothers(int $companyId): array;
 
     /**
+     * The females whose current pregnancy comes from a service order that is not closed yet: their
+     * calving season has not started. A pregnancy of a closed order, or of no order at all (bought
+     * pregnant, declared), is free, whatever else is running on her batch today.
+     *
+     * @param int[]|null $motherIds null: every female of the company
+     * @return array<int, array{order_id: int, code: string}> caravan id => the service order
+     */
+    public function mothersInOpenServiceOrder(?array $motherIds, int $companyId): array;
+
+    /**
      * Each female of the list that belongs to the company: where she is, her sex and her current
      * gestation. What an order is checked against before it takes a female.
      *

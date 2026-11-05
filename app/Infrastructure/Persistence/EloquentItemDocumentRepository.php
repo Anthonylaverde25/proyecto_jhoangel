@@ -101,6 +101,14 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
         return ['data' => $models->map(fn (ItemDocument $m) => StockMapper::documentToEntity($m))->all(), 'total' => $total];
     }
 
+    public function annotate(int $documentId, int $companyId, string $notes): void
+    {
+        ItemDocument::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->where(fn ($q) => $q->where('id', $documentId)->orWhere('paired_document_id', $documentId))
+            ->update(['notes' => $notes]);
+    }
+
     public function nextNumber(int $companyId): int
     {
         return (int) $this->query($companyId)->max('number') + 1;
@@ -125,6 +133,7 @@ class EloquentItemDocumentRepository implements IItemDocumentRepository
             'notes' => $document->getNotes(),
             'idempotency_key' => $document->getIdempotencyKey(),
             'created_by' => $document->getCreatedBy(),
+            'source' => $document->getSource(),
         ]);
 
         foreach ($document->getLines() as $line) {

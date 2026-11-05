@@ -8,7 +8,9 @@ final readonly class UpsertCaravanResultDTO
 {
     public function __construct(
         public string $action,
-        public int $id
+        public int $id,
+        /** @var list<string> */
+        public array $warnings = []
     ) {
     }
 }

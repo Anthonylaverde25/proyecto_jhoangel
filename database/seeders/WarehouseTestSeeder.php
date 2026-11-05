@@ -41,7 +41,7 @@ class WarehouseTestSeeder extends Seeder
         $main = Warehouse::withoutGlobalScopes()->where('company_id', $this->companyId)->where('kind', WarehouseKind::GENERAL->value)->where('is_default', true)->first();
         $salt = $this->item('Sal mineral');
         $ivermectin = $this->item('Ivermectina 1%');
-        $heifers = Batch::withoutGlobalScopes()->where('company_id', $this->companyId)->where('name', 'Vaquillonas')->first();
+        $heifers = Batch::withoutGlobalScopes()->where('company_id', $this->companyId)->where('name', 'Recría Vaquillonas 2025')->first();
         if (!$main || !$salt || !$ivermectin || !$heifers) {
             $this->command?->warn('WarehouseTestSeeder: falta lo que cargan los seeders de B2 y C. Se omite.');
 

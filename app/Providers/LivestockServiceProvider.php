@@ -12,12 +12,14 @@ use App\Core\Interfaces\IBatchTypeRepository;
 use App\Core\Interfaces\IBirthOrderRepository;
 use App\Core\Interfaces\IBreedRepository;
 use App\Core\Interfaces\IBreedingEligibilityRepository;
+use App\Core\Interfaces\ICaravanCastrationRepository;
 use App\Core\Interfaces\ICaravanDeathRepository;
 use App\Core\Interfaces\ICaravanLineageRepository;
 use App\Core\Interfaces\ICaravanMovementRepository;
 use App\Core\Interfaces\ICaravanRegistrationSubmissionRepository;
 use App\Core\Interfaces\ICaravanRepository;
 use App\Core\Interfaces\ICaravanWeightRepository;
+use App\Core\Interfaces\ICategoryChangeRepository;
 use App\Core\Interfaces\IDeathCauseRepository;
 use App\Core\Interfaces\IEntryOrderRepository;
 use App\Core\Interfaces\IFarmRepository;
@@ -46,12 +48,14 @@ use App\Infrastructure\Persistence\EloquentBatchTypeRepository;
 use App\Infrastructure\Persistence\EloquentBirthOrderRepository;
 use App\Infrastructure\Persistence\EloquentBreedRepository;
 use App\Infrastructure\Persistence\EloquentBreedingEligibilityRepository;
+use App\Infrastructure\Persistence\EloquentCaravanCastrationRepository;
 use App\Infrastructure\Persistence\EloquentCaravanDeathRepository;
 use App\Infrastructure\Persistence\EloquentCaravanLineageRepository;
 use App\Infrastructure\Persistence\EloquentCaravanMovementRepository;
 use App\Infrastructure\Persistence\EloquentCaravanRegistrationSubmissionRepository;
 use App\Infrastructure\Persistence\EloquentCaravanRepository;
 use App\Infrastructure\Persistence\EloquentCaravanWeightRepository;
+use App\Infrastructure\Persistence\EloquentCategoryChangeRepository;
 use App\Infrastructure\Persistence\EloquentDeathCauseRepository;
 use App\Infrastructure\Persistence\EloquentEntryOrderRepository;
 use App\Infrastructure\Persistence\EloquentFarmRepository;
@@ -90,12 +94,14 @@ final class LivestockServiceProvider extends ServiceProvider
         IBirthOrderRepository::class => EloquentBirthOrderRepository::class,
         IBreedRepository::class => EloquentBreedRepository::class,
         IBreedingEligibilityRepository::class => EloquentBreedingEligibilityRepository::class,
+        ICaravanCastrationRepository::class => EloquentCaravanCastrationRepository::class,
         ICaravanDeathRepository::class => EloquentCaravanDeathRepository::class,
         ICaravanLineageRepository::class => EloquentCaravanLineageRepository::class,
         ICaravanMovementRepository::class => EloquentCaravanMovementRepository::class,
         ICaravanRegistrationSubmissionRepository::class => EloquentCaravanRegistrationSubmissionRepository::class,
         ICaravanRepository::class => EloquentCaravanRepository::class,
         ICaravanWeightRepository::class => EloquentCaravanWeightRepository::class,
+        ICategoryChangeRepository::class => EloquentCategoryChangeRepository::class,
         IDeathCauseRepository::class => EloquentDeathCauseRepository::class,
         IEntryOrderRepository::class => EloquentEntryOrderRepository::class,
         IFarmRepository::class => EloquentFarmRepository::class,

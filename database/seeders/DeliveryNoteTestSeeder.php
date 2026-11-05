@@ -48,7 +48,7 @@ class DeliveryNoteTestSeeder extends Seeder
         $salt = $this->item('Sal mineral');
         $visit = $this->item('Visita veterinaria');
         $gasoil = Item::withoutGlobalScopes()->where('company_id', $this->companyId)->where('code', 'GASOIL')->first();
-        $heifers = Batch::withoutGlobalScopes()->where('company_id', $this->companyId)->where('name', 'Vaquillonas')->first();
+        $heifers = Batch::withoutGlobalScopes()->where('company_id', $this->companyId)->where('name', 'Recría Vaquillonas 2025')->first();
         if (!$elTala || !$south || !$fuel || !$ivermectin || !$salt || !$visit || !$gasoil || !$heifers) {
             $this->command?->warn('DeliveryNoteTestSeeder: falta lo que carga StockLedgerTestSeeder. Se omite.');
 

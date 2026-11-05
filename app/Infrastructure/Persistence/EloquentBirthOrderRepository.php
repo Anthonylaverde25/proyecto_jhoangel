@@ -7,6 +7,7 @@ namespace App\Infrastructure\Persistence;
 use App\Application\Mappers\BirthOrderMapper;
 use App\Core\Entities\BirthOrderEntity;
 use App\Core\Enums\BirthOrderAnimalStatus;
+use App\Core\Enums\ServiceOrderStatus;
 use App\Core\Enums\TransferOrderStatus;
 use App\Core\Interfaces\IBirthOrderRepository;
 use App\Models\BirthOrder;
@@ -160,6 +161,23 @@ class EloquentBirthOrderRepository implements IBirthOrderRepository
             ->whereIn('birth_order_animals.status', BirthOrderAnimalStatus::openValues())
             ->pluck('birth_orders.code', 'birth_order_animals.mother_caravan_id')
             ->mapWithKeys(fn ($code, $motherId) => [(int) $motherId => (string) $code])
+            ->all();
+    }
+
+    public function mothersInOpenServiceOrder(?array $motherIds, int $companyId): array
+    {
+        if ($motherIds === []) {
+            return [];
+        }
+
+        return DB::table('caravan_gestations')
+            ->join('service_orders', 'service_orders.id', '=', 'caravan_gestations.service_order_id')
+            ->where('service_orders.company_id', $companyId)
+            ->where('caravan_gestations.is_current', true)
+            ->whereIn('service_orders.status', ServiceOrderStatus::openValues())
+            ->when($motherIds !== null, fn ($query) => $query->whereIn('caravan_gestations.caravan_id', $motherIds))
+            ->get(['caravan_gestations.caravan_id', 'service_orders.id', 'service_orders.code'])
+            ->mapWithKeys(fn ($row) => [(int) $row->caravan_id => ['order_id' => (int) $row->id, 'code' => (string) $row->code]])
             ->all();
     }
 

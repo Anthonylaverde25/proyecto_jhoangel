@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Application\UseCases\Caravans;
 
+use App\Application\Services\CaravanRecategorizer;
 use App\Core\Entities\CaravanEntity;
 use App\Core\Enums\AnimalCategory;
+use App\Core\Enums\CategoryChangeCause;
+use App\Core\Enums\CategoryChangeSource;
 use App\Core\Exceptions\DomainException;
 use App\Core\Interfaces\IAnimalCategoryRepository;
 use App\Core\Interfaces\IBirthOrderRepository;
@@ -31,7 +34,8 @@ final class RegisterGestationLossUseCase
         private readonly ICaravanRepository $caravanRepository,
         private readonly IAnimalCategoryRepository $animalCategoryRepository,
         private readonly IBirthOrderRepository $birthOrderRepository,
-        private readonly IServiceOrderRepository $serviceOrderRepository
+        private readonly IServiceOrderRepository $serviceOrderRepository,
+        private readonly CaravanRecategorizer $recategorizer
     ) {
     }
 
@@ -47,9 +51,10 @@ final class RegisterGestationLossUseCase
         string $lossDate,
         bool $promoteToCow = false,
         bool $fromBirthOrder = false,
-        ?int $actionUserId = null
+        ?int $actionUserId = null,
+        ?CategoryChangeCause $promotionCause = null
     ): CaravanEntity {
-        return DB::transaction(function () use ($caravanId, $lossReasonId, $lossNotes, $lossDate, $promoteToCow, $fromBirthOrder, $actionUserId) {
+        return DB::transaction(function () use ($caravanId, $lossReasonId, $lossNotes, $lossDate, $promoteToCow, $fromBirthOrder, $actionUserId, $promotionCause) {
             $caravan = $this->caravanRepository->findById($caravanId);
             if ($caravan === null) {
                 throw new DomainException("La caravana con ID {$caravanId} no existe.");
@@ -79,15 +84,33 @@ final class RegisterGestationLossUseCase
 
             $caravan->recordFemaleDetails(new FemaleReproductiveDetails(true, $arrivalCategory));
 
-            if ($promoteToCow) {
-                $cowCategoryId = $this->animalCategoryRepository->findByCode('VACA')?->getId();
+            $saved = $this->caravanRepository->save($caravan);
 
-                if ($cowCategoryId !== null) {
-                    $caravan->setCategoryId($cowCategoryId);
+            if ($promoteToCow) {
+                $cowCategory = $this->animalCategoryRepository->findByCode('VACA');
+
+                if ($cowCategory !== null && $cowCategory->getId() !== null) {
+                    $rodeoGeneralSubcatId = null;
+                    $subcats = $this->animalCategoryRepository->getSubcategoriesByCategoryId($cowCategory->getId());
+                    foreach ($subcats as $subcat) {
+                        if (strtoupper((string) $subcat->getCode()) === 'RODEO_GENERAL') {
+                            $rodeoGeneralSubcatId = $subcat->getId();
+                            break;
+                        }
+                    }
+
+                    $this->recategorizer->change(
+                        caravan: $saved,
+                        toCategoryId: $cowCategory->getId(),
+                        toSubcategoryId: $rodeoGeneralSubcatId,
+                        cause: $promotionCause ?? CategoryChangeCause::STILLBIRTH,
+                        occurredOn: $lossDate,
+                        source: CategoryChangeSource::GESTATION,
+                        sourceId: $gestationId,
+                        userId: $actionUserId
+                    );
                 }
             }
-
-            $saved = $this->caravanRepository->save($caravan);
 
             // Lost before its service order was closed: the female needs a new verdict there.
             if ($gestationId !== null) {

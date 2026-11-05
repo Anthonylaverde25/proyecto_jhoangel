@@ -10,6 +10,8 @@ use App\Models\Company;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Models\Veterinarian;
+use Database\Seeders\FitTestBullsSeeder;
+use Database\Seeders\UnevaluatedTestBullsSeeder;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -60,6 +62,10 @@ abstract class VeterinaryTestCase extends TestCase
         ]);
 
         $this->linkUserToCompany($this->user, $this->company->id);
+
+        // The fit and the never evaluated test bulls are scenarios, not part of the base seed.
+        $this->seed(FitTestBullsSeeder::class);
+        $this->seed(UnevaluatedTestBullsSeeder::class);
     }
 
     protected function tearDown(): void

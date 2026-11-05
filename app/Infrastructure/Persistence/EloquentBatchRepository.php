@@ -16,11 +16,12 @@ class EloquentBatchRepository implements IBatchRepository
         'batchType',
         'activity',
         'activeServiceOrder',
+        'unclosedServiceOrder',
     ];
 
     public function findAll(?string $batchType = null, ?string $scope = null): array
     {
-        $query = Batch::with($this->relations)->withPendingIdentification()->withNursingCalves();
+        $query = Batch::with($this->relations)->withPendingIdentification()->withNursingCalves()->withBullsOnService();
         
         // Every farm is a provider's (D21): own batches have no farm, external ones do.
         if ($scope === 'own') {
@@ -43,7 +44,7 @@ class EloquentBatchRepository implements IBatchRepository
 
     public function findById(int $id): ?BatchEntity
     {
-        $model = Batch::with($this->relations)->withPendingIdentification()->withNursingCalves()->find($id);
+        $model = Batch::with($this->relations)->withPendingIdentification()->withNursingCalves()->withBullsOnService()->find($id);
         return $model ? BatchMapper::toEntity($model) : null;
     }
 
@@ -77,7 +78,7 @@ class EloquentBatchRepository implements IBatchRepository
 
     public function findByFarmId(int $farmId, ?string $batchType = null): array
     {
-        $query = Batch::with($this->relations)->withPendingIdentification()->withNursingCalves()->where('farm_id', $farmId);
+        $query = Batch::with($this->relations)->withPendingIdentification()->withNursingCalves()->withBullsOnService()->where('farm_id', $farmId);
 
         if ($batchType !== null) {
             $query->whereHas('batchType', function ($q) use ($batchType) {

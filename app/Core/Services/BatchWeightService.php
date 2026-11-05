@@ -15,6 +15,9 @@ use App\Core\Interfaces\ICaravanRepository;
  * The aggregate weight of a batch is a DERIVED value of the animals it currently holds:
  * it is never declared and left to age. When animals are transferred the aggregate moves
  * for logistical reasons, not biological ones, and the series has to be able to say so.
+ *
+ * Every measure describes the HERD of the batch. A bull of a running service is physically in it
+ * (caravans_count) but measures nothing: he neither bends the average nor opens a step in the curve.
  */
 class BatchWeightService
 {
@@ -42,12 +45,33 @@ class BatchWeightService
         ?WeighingTypeCode $weighingType = null,
         ?int $weighingOrderId = null
     ): void {
+        $this->recalculate($batchId, $cause, $date, $weighingType, $weighingOrderId, false);
+    }
+
+    /**
+     * A bull joined or left the service running on this batch. He is not part of its herd, so the
+     * batch is updated (it holds one more or one less) but its curve only gets a point if the herd
+     * did change: a bull that already lived here, or one that stays after the order stopped running.
+     */
+    public function recalculateServicedBatch(int $batchId, BatchWeightCause $cause): void
+    {
+        $this->recalculate($batchId, $cause, null, null, null, true);
+    }
+
+    private function recalculate(
+        int $batchId,
+        BatchWeightCause $cause,
+        ?\DateTimeInterface $date,
+        ?WeighingTypeCode $weighingType,
+        ?int $weighingOrderId,
+        bool $pointOnlyIfHerdChanged
+    ): void {
         $batch = $this->batchRepository->findById($batchId);
         if (!$batch) {
             return;
         }
 
-        $caravansCount = $this->caravanRepository->countByBatch($batchId);
+        $herdCount = $this->caravanRepository->countResidentByBatch($batchId);
         $weighedCount = $this->caravanRepository->countWeighedByBatch($batchId);
 
         // Mass is additive and survives a split: the kilos missing from the source are,
@@ -68,27 +92,41 @@ class BatchWeightService
 
         $batch->setCurrentWeight($newAvg);
         $batch->setTotalWeight($totalWeight);
-        $batch->setCaravansCount($caravansCount);
+        $batch->setCaravansCount($this->caravanRepository->countByBatch($batchId));
         $batch->setWeighedCount($weighedCount);
         $batch->setMinWeight($this->caravanRepository->getMinWeightByBatch($batchId));
         $batch->setMaxWeight($this->caravanRepository->getMaxWeightByBatch($batchId));
-        $this->batchRepository->save($batch);
 
         $effectiveDate = $date ?? new \DateTimeImmutable();
 
-        $this->batchRepository->addWeight(
-            $batchId,
-            $newAvg,
-            $cause->value,
-            $effectiveDate,
-            $batch->getActivityId(),
-            $totalWeight,
-            $caravansCount,
-            $weighedCount,
-            $weightsAsOf,
-            $cause === BatchWeightCause::CONTROL ? $weighingType : null,
-            $cause === BatchWeightCause::CONTROL ? $weighingOrderId : null
-        );
+        if (!$pointOnlyIfHerdChanged || $this->herdChanged($batchId, $herdCount, $weighedCount, $totalWeight)) {
+            $this->batchRepository->addWeight(
+                $batchId,
+                $newAvg,
+                $cause->value,
+                $effectiveDate,
+                $batch->getActivityId(),
+                $totalWeight,
+                $herdCount,
+                $weighedCount,
+                $weightsAsOf,
+                $cause === BatchWeightCause::CONTROL ? $weighingType : null,
+                $cause === BatchWeightCause::CONTROL ? $weighingOrderId : null
+            );
+        }
+
+        // Last: the series counts the herd, the batch counts everything it physically holds.
+        $this->batchRepository->save($batch);
+    }
+
+    private function herdChanged(int $batchId, int $herdCount, int $weighedCount, float $totalWeight): bool
+    {
+        $last = $this->batchRepository->findLatestWeight($batchId);
+
+        return $last === null
+            || $last->getCaravansCount() !== $herdCount
+            || $last->getWeighedCount() !== $weighedCount
+            || abs(($last->getTotalWeight() ?? 0.0) - $totalWeight) >= 0.01;
     }
 
     /**
@@ -102,7 +140,7 @@ class BatchWeightService
      */
     public function snapshotBeforeMovement(int $batchId, ?\DateTimeInterface $date = null): void
     {
-        $caravansCount = $this->caravanRepository->countByBatch($batchId);
+        $caravansCount = $this->caravanRepository->countResidentByBatch($batchId);
 
         // A batch that holds no animals has no composition to close.
         if ($caravansCount === 0) {

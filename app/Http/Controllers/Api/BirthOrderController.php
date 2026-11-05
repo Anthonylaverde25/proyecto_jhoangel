@@ -71,6 +71,20 @@ final class BirthOrderController extends Controller
         ));
     }
 
+    /**
+     * The pregnant females whose service order is not closed yet: no calving season for them.
+     */
+    public function mothersInOpenService(): JsonResponse
+    {
+        $mothers = ($this->useCases->mothersInOpenService)($this->companyId());
+
+        return response()->json(array_map(
+            fn (int $caravanId, array $order) => ['caravan_id' => $caravanId, 'order_id' => $order['order_id'], 'code' => $order['code']],
+            array_keys($mothers),
+            array_values($mothers)
+        ));
+    }
+
     public function store(EmitBirthOrderRequest $request): JsonResponse
     {
         try {
